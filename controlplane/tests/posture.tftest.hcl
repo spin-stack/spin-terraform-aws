@@ -53,6 +53,22 @@ override_resource {
   }
 }
 
+# What the machines' user data names, known here so it can be read at plan.
+override_resource {
+  target = aws_route53_zone.internal
+  values = { zone_id = "Z0SPININTERNAL", arn = "arn:aws:route53:::hostedzone/Z0SPININTERNAL" }
+}
+
+override_resource {
+  target = aws_s3_bucket.certificates
+  values = { arn = "arn:aws:s3:::spin-proxy-123456789012-us-east-2" }
+}
+
+override_resource {
+  target = aws_eip.proxy
+  values = { allocation_id = "eipalloc-0123456789abcdef0", public_ip = "203.0.113.10" }
+}
+
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
@@ -103,20 +119,53 @@ run "the_machines" {
   command = plan
 
   assert {
-    condition     = aws_instance.controlplane.metadata_options[0].http_tokens == "required" && aws_instance.proxy.metadata_options[0].http_tokens == "required"
-    error_message = "a machine answers IMDSv1"
+    condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
+    t.metadata_options[0].http_tokens == "required" && t.metadata_options[0].http_put_response_hop_limit == 1])
+    error_message = "a machine answers IMDSv1, or its role is reachable from further than the machine itself"
   }
   assert {
-    condition     = aws_instance.proxy.metadata_options[0].http_put_response_hop_limit == 1 && aws_instance.controlplane.metadata_options[0].http_put_response_hop_limit == 1
-    error_message = "the instance's role is reachable from further than the machine itself"
-  }
-  assert {
-    condition     = aws_instance.controlplane.root_block_device[0].encrypted && aws_instance.proxy.root_block_device[0].encrypted && aws_db_instance.catalog.storage_encrypted
+    condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
+    t.block_device_mappings[0].ebs[0].encrypted == "true"]) && aws_db_instance.catalog.storage_encrypted
     error_message = "a disk is not encrypted"
   }
+  # The proxy in subnets of its own, which are what the control plane trusts a browser's
+  # address from: a runner or the control plane itself is never among them.
   assert {
-    condition     = aws_instance.proxy.private_ip != aws_instance.controlplane.private_ip && aws_instance.proxy.private_ip == "10.42.0.11"
-    error_message = "the proxy is not a machine of its own, at the address the control plane trusts"
+    condition = length(setintersection(toset(aws_subnet.edge[*].cidr_block), toset(concat(aws_subnet.public[*].cidr_block, aws_subnet.database[*].cidr_block)))) == 0 && strcontains(local.controlplane_user_data,
+    "--trusted-proxy '10.42.136.0/24,10.42.137.0/24,10.42.138.0/24'")
+    error_message = "the control plane takes a browser's address from somewhere a proxy is not alone"
+  }
+}
+
+# One of each, replaced beside itself: an update starts the new machine before it retires the
+# old, and holds the old until the new one says it serves.
+run "an_update_stands_the_new_machine_beside_the_old" {
+  command = plan
+
+  assert {
+    condition = alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] :
+      g.desired_capacity == 1 && g.max_size == 2 && g.instance_refresh[0].preferences[0].min_healthy_percentage == 100 &&
+    g.instance_refresh[0].preferences[0].max_healthy_percentage == 200])
+    error_message = "an update retires a machine before its replacement is up"
+  }
+  assert {
+    condition = alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] :
+    anytrue([for h in g.initial_lifecycle_hook : h.lifecycle_transition == "autoscaling:EC2_INSTANCE_LAUNCHING" && h.default_result == "ABANDON"])])
+    error_message = "a machine that never comes up replaces the one that works"
+  }
+  # The new control plane takes its name before the term, and says it serves only once it
+  # leads; a proxy takes the address once Caddy answers.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "point 'cp.spin.internal'\nSPIN_CP_DATABASE_URL=") &&
+      strcontains(local.controlplane_user_data, "\nin_service\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal'\naws --region 'us-east-2' ec2 associate-address --allocation-id 'eipalloc-0123456789abcdef0'")
+    )
+    error_message = "a new machine takes the installation over in another order than name, then service"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "spin-proxy-certificates restore\n\nspin-install proxy")
+    error_message = "a new proxy starts Caddy before it has the certificates the last one had"
   }
 }
 
@@ -131,20 +180,16 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the installation's names are not a zone private to its VPC"
   }
   assert {
-    condition     = aws_route53_record.internal["cp.spin.internal"].records == toset(["10.42.0.10"]) && aws_route53_record.internal["proxy.spin.internal"].records == toset(["10.42.0.11"])
-    error_message = "a name does not hold its machine's address"
+    condition     = strcontains(local.controlplane_user_data, "\"TTL\":%d") && strcontains(local.controlplane_user_data, "'10'")
+    error_message = "a replaced machine's name is kept by clients longer than ten seconds"
   }
   assert {
-    condition     = alltrue([for r in aws_route53_record.internal : r.ttl <= 60])
-    error_message = "a replaced machine waits more than a minute for the others to follow it"
-  }
-  assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "--advertise 'cp.spin.internal'") && output.url == "https://cp.spin.internal:8080"
+    condition     = strcontains(local.controlplane_user_data, "--advertise 'cp.spin.internal'") && output.url == "https://cp.spin.internal:8080"
     error_message = "the control plane's certificate does not carry the name it is reached by"
   }
   assert {
-    condition     = strcontains(aws_instance.proxy.user_data, "--control-plane 'https://cp.spin.internal:8080'")
-    error_message = "the proxy dials the control plane by something other than its name"
+    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "--control-plane 'https://cp.spin.internal:8080'") && output.relay_dial == "proxy.spin.internal:443"
+    error_message = "the proxy, or the runners' relay, is dialled by something other than its name"
   }
 }
 
@@ -215,10 +260,31 @@ run "the_roles" {
     condition     = aws_iam_role.runner_scope.max_session_duration == 3600
     error_message = "a runner's credential can outlive its hour"
   }
+  # What a machine moves to itself is its own name and the proxy's one address, and no more: the
+  # role grants that alone, and the boundary refuses any other zone or address whatever is
+  # granted.
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.proxy.statement :
-    s.actions == toset(["ssm:GetParameter"])])
-    error_message = "the proxy's role may do more than read the CA"
+      !contains(s.actions, "route53:ChangeResourceRecordSets") || (length(s.condition) > 0 && alltrue([for c in s.condition :
+    toset(c.values) == toset(["proxy.spin.internal"])]))])
+    error_message = "the proxy may write a name other than its own"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      !contains(s.actions, "route53:ChangeResourceRecordSets") || (length(s.condition) > 0 && alltrue([for c in s.condition :
+    toset(c.values) == toset(["cp.spin.internal"])]))])
+    error_message = "the control plane may write a name other than its own"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "route53:*") && s.not_resources == toset(["arn:aws:route53:::hostedzone/Z0SPININTERNAL"])]) && anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+    s.effect == "Deny" && contains(s.actions, "ec2:*Address*") && contains(s.not_resources, "arn:aws:ec2:us-east-2:123456789012:elastic-ip/eipalloc-0123456789abcdef0")])
+    error_message = "the boundary lets a role write another zone, or take another address"
+  }
+  assert {
+    condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
+    anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2")])])
+    error_message = "the proxy's role reaches a bucket other than its certificates'"
   }
 }
 
@@ -230,7 +296,7 @@ run "no_collector_unless_asked" {
     error_message = "a collector's token or port exists on an installation that ships no telemetry"
   }
   assert {
-    condition     = !strcontains(aws_instance.controlplane.user_data, "alloy") && !strcontains(aws_instance.controlplane.user_data, "--otel-collector")
+    condition     = !strcontains(local.controlplane_user_data, "alloy") && !strcontains(local.controlplane_user_data, "--otel-collector")
     error_message = "the control plane installs a collector nobody asked for"
   }
 }
@@ -253,21 +319,21 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && strcontains(aws_instance.controlplane.user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
+    condition     = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && strcontains(local.controlplane_user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {
-    condition     = strcontains(aws_instance.proxy.user_data, "--otel-collector 'cp.spin.internal:4317'")
+    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "--otel-collector 'cp.spin.internal:4317'")
     error_message = "the proxy is not pointed at the collector"
   }
   assert {
-    condition     = !strcontains(aws_instance.controlplane.user_data, "glc_") && strcontains(aws_instance.controlplane.user_data, "/spin/grafana-cloud-token")
+    condition     = !strcontains(local.controlplane_user_data, "glc_") && strcontains(local.controlplane_user_data, "/spin/grafana-cloud-token")
     error_message = "the token is in the user data rather than read from SSM"
   }
   # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
   assert {
-    condition     = length(aws_instance.controlplane.user_data) < 16384
-    error_message = "the control plane's user data is over the 16 KiB EC2 takes"
+    condition     = startswith(aws_launch_template.controlplane.user_data, "H4sI") && length(aws_launch_template.controlplane.user_data) * 3 / 4 < 16384
+    error_message = "the control plane's user data is not gzipped, or is over the 16 KiB EC2 takes even so"
   }
 }
 
@@ -298,7 +364,7 @@ run "the_catalog" {
     error_message = "the control plane signs in to the catalog as something other than spin"
   }
   assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "--database-auth aws-iam") && strcontains(aws_instance.controlplane.user_data, "sslmode=verify-full")
+    condition     = strcontains(local.controlplane_user_data, "--database-auth aws-iam") && strcontains(local.controlplane_user_data, "sslmode=verify-full")
     error_message = "the control plane signs in with a password, or does not check the catalog's certificate"
   }
 }
@@ -309,19 +375,19 @@ run "the_machines_run_what_the_release_signed" {
   command = plan
 
   assert {
-    condition = alltrue([for u in [aws_instance.controlplane.user_data, aws_instance.proxy.user_data] :
+    condition = alltrue([for u in [local.controlplane_user_data, base64decode(aws_launch_template.proxy.user_data)] :
       strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/v20260921.02") &&
     strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")])
     error_message = "a machine runs what it has not checked against the release's signature, or runs a container"
   }
   assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "release spin-controlplane-linux-amd64.tar.gz") && strcontains(aws_instance.proxy.user_data, "release spin-proxy-linux-amd64.tar.gz")
+    condition     = strcontains(local.controlplane_user_data, "release spin-controlplane-linux-amd64.tar.gz") && strcontains(base64decode(aws_launch_template.proxy.user_data), "release spin-proxy-linux-amd64.tar.gz")
     error_message = "a machine unpacks another role's tarball"
   }
   # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
   assert {
-    condition     = length(aws_instance.controlplane.user_data) < 16384
-    error_message = "the control plane's user data is over the 16 KiB EC2 takes"
+    condition     = length(aws_launch_template.controlplane.user_data) * 3 / 4 < 16384 && length(base64decode(aws_launch_template.proxy.user_data)) < 16384
+    error_message = "a machine's user data is over the 16 KiB EC2 takes"
   }
 }
 

@@ -8,8 +8,9 @@ resource "aws_subnet" "database" {
   count             = length(local.zones)
   vpc_id            = aws_vpc.this.id
   availability_zone = local.zones[count.index]
-  # The top half of the VPC; the public subnets are the first sixteenths of the bottom half.
-  cidr_block = cidrsubnet(var.vpc_cidr, 4, 8 + count.index)
+  # /24s from the top half of the VPC, where the public /20s are the bottom half; the proxy's
+  # are beside them (proxy.tf).
+  cidr_block = cidrsubnet(var.vpc_cidr, 8, 128 + count.index)
   tags       = merge(local.tags, { Name = "${var.name}-database-${local.zones[count.index]}" })
 }
 

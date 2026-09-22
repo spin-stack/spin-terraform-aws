@@ -1,0 +1,9 @@
+[Unit]
+Description=Check the control plane every minute
+
+[Timer]
+OnActiveSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target

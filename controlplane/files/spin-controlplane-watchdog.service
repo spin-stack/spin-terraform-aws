@@ -1,0 +1,6 @@
+[Unit]
+Description=Ask the group to replace this machine when its control plane stays down
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/spin-controlplane-watchdog

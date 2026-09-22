@@ -172,8 +172,10 @@ resource "aws_launch_template" "runner" {
     ca_parameter    = var.controlplane.ca_parameter
     unpublished     = var.controlplane.unpublished
     data_on_ebs     = var.data_volume_gb > 0
-    relay_host      = "tunnel.app.${var.controlplane.domain}"
-    proxy_ip        = var.controlplane.proxy_private_ip
+    # The relay by the proxy's private name: its public address would take the relay out through
+    # the internet gateway and back in, from an address the proxy would have to let in. The
+    # certificate is checked as the relay's own name either way.
+    relay_dial      = var.controlplane.relay_dial
     collector       = var.controlplane.collector
     metric_interval = var.controlplane.metric_interval
   }))

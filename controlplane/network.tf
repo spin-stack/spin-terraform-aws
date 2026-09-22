@@ -89,7 +89,7 @@ resource "aws_vpc_security_group_ingress_rule" "controlplane_from_proxy" {
 }
 
 # Out, only the web: images, the machine release, GitHub, STS, SSM, Auto Scaling and the bucket
-# through its endpoint, all 443 (80 for apt). Postgres is on the machine.
+# through its endpoint, all 443 (80 for apt). The catalog is rds.tf's own rule.
 resource "aws_vpc_security_group_egress_rule" "controlplane" {
   for_each          = toset(["80", "443"])
   security_group_id = aws_security_group.controlplane.id
@@ -133,7 +133,7 @@ resource "aws_vpc_security_group_ingress_rule" "proxy_https" {
 }
 
 # And from inside the VPC, whatever the list says: the runners' relay, which reaches the proxy
-# by its private address (their /etc/hosts), and so never needs to be among the users' networks.
+# by its private name (proxy.<zone>), and so never needs to be among the users' networks.
 resource "aws_vpc_security_group_ingress_rule" "proxy_https_vpc" {
   security_group_id = aws_security_group.proxy.id
   cidr_ipv4         = var.vpc_cidr

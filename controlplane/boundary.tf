@@ -44,11 +44,30 @@ data "aws_iam_policy_document" "boundary" {
     effect = "Deny"
     actions = [
       "ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*Gateway*", "ec2:*NetworkAcl*",
-      "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:*NetworkInterface*", "ec2:*Dhcp*",
+      "ec2:*SecurityGroup*", "ec2:*NetworkInterface*", "ec2:*Dhcp*",
       "ec2:*Vpn*", "ec2:ModifyInstanceAttribute", "ec2:ModifyInstanceMetadataOptions",
-      "route53:*", "elasticloadbalancing:*",
+      "elasticloadbalancing:*",
     ]
     resources = ["*"]
+  }
+  # The two pieces of the network a machine moves to itself when it replaces another: its name
+  # in the installation's own zone, and the proxy's one address. Nothing of any other zone or
+  # address, whatever a role is given.
+  statement {
+    sid           = "OnlyTheInstallationsZone"
+    effect        = "Deny"
+    actions       = ["route53:*"]
+    not_resources = [aws_route53_zone.internal.arn]
+  }
+  statement {
+    sid     = "OnlyTheProxysAddress"
+    effect  = "Deny"
+    actions = ["ec2:*Address*"]
+    not_resources = [
+      "arn:aws:ec2:${local.region}:${local.account}:elastic-ip/${aws_eip.proxy.allocation_id}",
+      "arn:aws:ec2:${local.region}:${local.account}:instance/*",
+      "arn:aws:ec2:${local.region}:${local.account}:network-interface/*",
+    ]
   }
   # The machines are reached by a person through Session Manager; a role is never the one
   # starting a session or running a command on another.

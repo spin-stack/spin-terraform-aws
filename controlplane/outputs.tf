@@ -42,7 +42,7 @@ output "ca_parameter_arn" {
 }
 
 output "domain" {
-  description = "The base domain; the runners resolve its relay, tunnel.app.<domain>, to proxy_private_ip."
+  description = "The base domain; the runners' relay is tunnel.app.<domain>, dialled at relay_dial."
   value       = var.domain
 }
 
@@ -51,9 +51,9 @@ output "internal_zone_id" {
   value       = aws_route53_zone.internal.zone_id
 }
 
-output "proxy_private_ip" {
-  description = "The proxy inside the VPC: where the runners' relay goes, without leaving it."
-  value       = local.proxy_ip
+output "relay_dial" {
+  description = "Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself."
+  value       = "${local.proxy_host}:443"
 }
 
 output "collector" {
@@ -86,16 +86,16 @@ output "proxy_ip" {
   value       = aws_eip.proxy.public_ip
 }
 
-output "proxy_instance_id" {
-  description = "For `aws ssm start-session --target`: the proxy has no SSH either."
-  value       = aws_instance.proxy.id
+output "proxy_group" {
+  description = "The proxy's group of one. Its machine, for `aws ssm start-session --target` (it has no SSH): aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <this> --query 'AutoScalingGroups[0].Instances[0].InstanceId'."
+  value       = aws_autoscaling_group.proxy.name
 }
 
 output "bucket" {
   value = aws_s3_bucket.volumes.bucket
 }
 
-output "instance_id" {
-  description = "For `aws ssm start-session --target`, which is how the machine is reached: it has no SSH."
-  value       = aws_instance.controlplane.id
+output "controlplane_group" {
+  description = "The control plane's group of one. `aws autoscaling start-instance-refresh --auto-scaling-group-name <this>` replaces its machine beside itself; its machine is reached with `aws ssm start-session`, as the proxy's is."
+  value       = aws_autoscaling_group.controlplane.name
 }

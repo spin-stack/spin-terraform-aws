@@ -27,7 +27,7 @@ variable "controlplane" {
     unpublished         = string
     boundary_arn        = string
     domain              = string
-    proxy_private_ip    = string
+    relay_dial          = string
     collector           = string
     metric_interval     = string
     cosign = object({

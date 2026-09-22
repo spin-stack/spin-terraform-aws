@@ -91,6 +91,24 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["rds-db:connect"]
     resources = ["arn:aws:rds-db:${local.region}:${local.account}:dbuser:${aws_db_instance.catalog.resource_id}/spin"]
   }
+  # Its own name in the internal zone, and nothing else there: what a new machine takes when it
+  # takes the installation over.
+  statement {
+    sid       = "ItsName"
+    actions   = ["route53:ChangeResourceRecordSets"]
+    resources = [aws_route53_zone.internal.arn]
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      values   = [local.cp_host]
+    }
+  }
+  # Its group of one: in service once it leads, and to be replaced when it stays down.
+  statement {
+    sid       = "ItsGroup"
+    actions   = ["autoscaling:CompleteLifecycleAction", "autoscaling:SetInstanceHealth"]
+    resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.controlplane_group}"]
+  }
   # The master's password, which the first boot uses to make that user. RDS keeps it and the
   # machine reads it; nothing else of Secrets Manager.
   statement {

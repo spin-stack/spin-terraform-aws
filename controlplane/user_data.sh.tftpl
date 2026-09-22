@@ -1,9 +1,10 @@
 #!/bin/bash
-# The control plane's first boot: the release's tarball, checked and unpacked; the role it signs
-# in to the catalog as; spin-install; what runners join with, published; and the pool's token
-# rotated from then on. Everything here drives spin-install, systemd and the AWS CLI; what spin
-# does is spin-install's. Nothing on this machine is kept across a replacement: the catalog is
-# RDS, and the key that opens what it seals is in SSM.
+# A control plane machine's first boot: the release's tarball, checked and unpacked; the role it
+# signs in to the catalog as; its name, then spin-install, which takes the term; what runners
+# join with, published; and the group told it is in service. Everything here drives
+# spin-install, systemd and the AWS CLI; what spin does is spin-install's. Nothing on this
+# machine is kept across a replacement: the catalog is RDS, and the key that opens what it
+# seals is in SSM.
 set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 
@@ -50,11 +51,15 @@ PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id '${database_admin}'
   psql "host=${database_host} dbname=spin user=spin_admin sslmode=verify-full sslrootcert=/etc/spin-stack/database-ca.pem" \
   -v ON_ERROR_STOP=1 -q -f /etc/spin-stack/database-bootstrap.sql
 
+# The name, then the term. Pointed here first, so whoever the old machine drops when it is
+# superseded redials this one; then spin-install starts the control plane, which takes the term.
+. /usr/local/lib/spin/lifecycle.sh
+point '${cp_host}'
 SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
   --database-auth aws-iam --database-ca /etc/spin-stack/database-ca.pem \
   --advertise '${cp_host}' \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
-  --trusted-proxy '${proxy_ip}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
+  --trusted-proxy '${trusted_proxies}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
 spin-controlplane config apply /dev/stdin </etc/spin-stack/installation.yaml
@@ -82,4 +87,9 @@ systemctl enable --now spin-alloy-token.timer alloy.service
 %{ endif ~}
 systemctl enable spin-pool-token.timer
 systemctl start spin-pool-token.service spin-pool-token.timer
-echo "spin control plane is installed; runners join at https://${cp_host}:8080"
+
+# Leading, and published: the group may retire the machine this one replaced. From here a
+# control plane that stays down is a machine to replace.
+in_service
+systemctl enable --now spin-controlplane-watchdog.timer
+echo "spin control plane is installed and in service; runners join at https://${cp_host}:8080"

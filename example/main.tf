@@ -61,7 +61,7 @@ output "dashboard" {
   value = "https://app.${var.domain}"
 }
 
-output "controlplane_instance" {
-  description = "aws ssm start-session --target <this>, then: sudo spin-controlplane bootstrap-password"
-  value       = module.controlplane.instance_id
+output "controlplane_group" {
+  description = "The control plane's group of one: its machine is the one instance in it, reached with aws ssm start-session --target <instance>, then: sudo spin-controlplane bootstrap-password"
+  value       = module.controlplane.controlplane_group
 }

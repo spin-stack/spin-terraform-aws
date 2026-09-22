@@ -14,7 +14,9 @@ Two modules, and `example/` composing them into an installation.
 cd example
 tofu init
 tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123456789
-aws ssm start-session --target "$(tofu output -raw controlplane_instance)"
+aws ssm start-session --target "$(aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names "$(tofu output -raw controlplane_group)" \
+  --query 'AutoScalingGroups[0].Instances[0].InstanceId' --output text)"
 sudo spin-controlplane bootstrap-password   # then https://app.<domain>
 ```
 
@@ -32,17 +34,30 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   80 and 443, and nothing else. A runner has no ingress. None of them has SSH: Session Manager
   is the way in, and IMDSv2 is required everywhere.
 - **Inside the VPC the components are names.** A private zone, `internal_zone`
-  (`spin.internal`, $0.50 a month), holds `cp.` and `proxy.` with a minute's TTL: the control
-  plane's certificate carries `cp.spin.internal`, and the proxy, the runners and the collector's
-  clients dial it, so a machine replaced is a record changed rather than an address in every
-  runner's configuration. The relay is the exception, because its name is the control plane's
-  to hand out and the proxy's certificate's to carry: each runner resolves
-  `tunnel.app.<domain>` to the proxy's private address in its own `/etc/hosts`, so the relay
-  never leaves the VPC and the proxy's 443 need not be open to wherever runners happen to be:
-  `proxy_allowed_cidrs` can be the users' networks alone (80 stays open for the ACME
-  challenge). `route53_zone_id` only writes the public records where the installation keeps
-  its DNS there, and with it elsewhere they are the operator's, pointed at the `proxy_ip`
-  output.
+  (`spin.internal`, $0.50 a month), holds `cp.` and `proxy.` with a ten-second TTL, each
+  written by the machine it names: the control plane's certificate carries `cp.spin.internal`,
+  and the proxy, the runners and the collector's clients dial it, so a machine replaced is a
+  record changed rather than an address in every runner's configuration. The runners reach the
+  relay at `proxy.spin.internal` too (`spin-install runner --relay-dial`), checking its
+  certificate as `tunnel.app.<domain>`, so the relay never leaves the VPC and the proxy's 443
+  need not be open to wherever runners happen to be: `proxy_allowed_cidrs` can be the users'
+  networks alone (80 stays open for the ACME challenge). `route53_zone_id` only writes the
+  public records where the installation keeps its DNS there, and with it elsewhere they are the
+  operator's, pointed at the `proxy_ip` output.
+- **An update is a machine beside the old one, not a stop.** The control plane and the proxy
+  are each an autoscaling group of one, and a change to what a machine is — `spin_version`, the
+  image, the size — is a new launch template the group's instance refresh rolls out at 100%
+  healthy: the new machine starts before the old one is retired, and a launch hook holds the
+  refresh until it says it serves, abandoning it — and keeping the old — if it never does. A new
+  control plane points `cp.` at itself and starts, which takes the term: the old one,
+  superseded, closes and stays down, and runners and the proxy reconnect within seconds while
+  every workspace runs on. A control plane that stays down three minutes asks its group to
+  replace its machine. A new proxy restores the certificates the last one had from their own
+  bucket (versioned, no Object Lock), starts Caddy, points `proxy.` at itself and takes the
+  elastic IP. What is lost is seconds of API and open connections, never a workspace. Canonical
+  publishing a newer image is such a change too: an apply after it rolls both machines onto it.
+- **The proxy has subnets of its own**, and the control plane takes a browser's address only
+  from them (`--trusted-proxy`): a runner, elsewhere in the VPC, cannot pass as the proxy.
 - **No role can make itself more.** Every role both modules create carries one permissions
   boundary: none may write IAM or pass a role, assume any role but the runner scope, touch the
   VPC's network or a security group, run commands on another machine through SSM, or lift the

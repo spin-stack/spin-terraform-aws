@@ -27,16 +27,24 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  # The addresses the internal zone's records hold. The components dial the names — the control
-  # plane's certificate carries cp.<zone> and every runner is configured with it — so these are
-  # the records' business alone.
-  private_ip = cidrhost(aws_subnet.public[0].cidr_block, 10)
+  # The names the components dial each other by — the control plane's certificate carries
+  # cp.<zone>, and every runner and proxy is configured with it — which each machine points at
+  # itself (dns.tf). No address is fixed: an update stands a new machine beside the old.
   cp_host    = "cp.${var.internal_zone}"
   proxy_host = "proxy.${var.internal_zone}"
   url        = "https://${local.cp_host}:8080"
-  # The proxy's, fixed for the same reason: the control plane takes its word about a browser's
-  # address by it (--trusted-proxy).
-  proxy_ip = cidrhost(aws_subnet.public[0].cidr_block, 11)
+
+  # The groups of one each machine is in, by name, so a machine can speak for itself to its own.
+  controlplane_group = "${var.name}-controlplane"
+  proxy_group        = "${var.name}-proxy"
+  lifecycle_sh = { for role, group in { controlplane = local.controlplane_group, proxy = local.proxy_group } :
+    role => templatefile("${path.module}/files/lifecycle.sh.tftpl", {
+      region  = local.region
+      zone_id = aws_route53_zone.internal.zone_id
+      group   = group
+      ttl     = local.internal_record_ttl
+    })
+  }
 
   token_parameter = "/${var.name}/runner-registration-token"
   ca_parameter    = "/${var.name}/controlplane-ca"
@@ -69,37 +77,20 @@ locals {
   })
 }
 
-resource "aws_instance" "controlplane" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  subnet_id              = aws_subnet.public[0].id
-  private_ip             = local.private_ip
-  vpc_security_group_ids = [aws_security_group.controlplane.id]
-  iam_instance_profile   = aws_iam_instance_profile.controlplane.name
-
-  metadata_options {
-    http_tokens = "required"
-    # One hop: every process that asks for the role's credentials is on the machine itself.
-    http_put_response_hop_limit = 1
-  }
-
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = 20
-    encrypted   = true
-  }
-
-  user_data = templatefile("${path.module}/user_data.sh.tftpl", {
+locals {
+  controlplane_user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     name          = var.name
     region        = local.region
     fetch_release = local.fetch_release
-    write_files   = local.controlplane_write_files
+    write_files   = local.write_files["controlplane"]
     cp_host       = local.cp_host
-    proxy_ip      = local.proxy_ip
-    bucket        = aws_s3_bucket.volumes.bucket
-    role_arn      = aws_iam_role.runner_scope.arn
-    database_host = aws_db_instance.catalog.address
-    database_url  = local.database_url
+    # Whose word about a browser's address the control plane takes: the proxy's subnets, where
+    # nothing but a proxy runs.
+    trusted_proxies = join(",", aws_subnet.edge[*].cidr_block)
+    bucket          = aws_s3_bucket.volumes.bucket
+    role_arn        = aws_iam_role.runner_scope.arn
+    database_host   = aws_db_instance.catalog.address
+    database_url    = local.database_url
     # The secret's ARN, which is not the secret: the machine reads it with its role, once.
     database_admin  = aws_db_instance.catalog.master_user_secret[0].secret_arn
     key_parameter   = local.key_parameter
@@ -109,13 +100,92 @@ resource "aws_instance" "controlplane" {
     alloy_version   = local.telemetry ? var.grafana_cloud.alloy_version : ""
     alloy_sha256    = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
   })
+}
 
-  tags = merge(local.tags, { Name = "${var.name}-controlplane" })
+resource "aws_launch_template" "controlplane" {
+  name_prefix            = "${var.name}-controlplane-"
+  image_id               = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.controlplane.id]
+  # Gzipped, which cloud-init reads as it is: the script with the collector's configuration in it
+  # is over the 16 KiB EC2 takes, and a third of that compressed.
+  user_data = base64gzip(local.controlplane_user_data)
 
-  lifecycle {
-    # A new Ubuntu image is not a reason to replace the control plane; replacing it is a
-    # decision, taken with `-replace`.
-    ignore_changes = [ami, user_data]
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.controlplane.arn
+  }
+
+  metadata_options {
+    http_tokens = "required"
+    # One hop: every process that asks for the role's credentials is on the machine itself.
+    http_put_response_hop_limit = 1
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_type           = "gp3"
+      volume_size           = 20
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(local.tags, { Name = "${var.name}-controlplane", "spin:role" = "controlplane" })
+  }
+  tag_specifications {
+    resource_type = "volume"
+    tags          = merge(local.tags, { Name = "${var.name}-controlplane" })
+  }
+  tags = local.tags
+}
+
+# One control plane, replaced beside itself. A change to what a machine is — the release, the
+# image, the size — is a new launch template version, and the refresh starts a machine of it
+# before retiring the old one (100% healthy, up to 200%). The new machine points cp.<zone> at
+# itself and starts, which takes the term: the old one, superseded, closes and stays down, and
+# every runner and the proxy reconnect to the name within seconds. The workspaces never stop:
+# they are the runners'. The launch hook holds the refresh until the new machine leads, and
+# abandons it — leaving the old — if it never does.
+resource "aws_autoscaling_group" "controlplane" {
+  name                = local.controlplane_group
+  min_size            = 1
+  max_size            = 2
+  desired_capacity    = 1
+  vpc_zone_identifier = aws_subnet.public[*].id
+  health_check_type   = "EC2"
+
+  launch_template {
+    id      = aws_launch_template.controlplane.id
+    version = aws_launch_template.controlplane.latest_version
+  }
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 100
+      max_healthy_percentage = 200
+      instance_warmup        = 60
+    }
+  }
+
+  initial_lifecycle_hook {
+    name                 = "ready"
+    lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
+    # The release, the database and the base image's first look: twenty minutes on a t3.micro.
+    heartbeat_timeout = 1800
+    default_result    = "ABANDON"
+  }
+
+  dynamic "tag" {
+    for_each = merge(local.tags, { Name = "${var.name}-controlplane" })
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = false
+    }
   }
 
   depends_on = [
@@ -126,8 +196,6 @@ resource "aws_instance" "controlplane" {
     aws_iam_role_policy.controlplane,
     aws_iam_role_policy.runner_scope,
     aws_route.internet,
-    # Its own collector is dialled by name, and so is it by everything that waits for it.
-    aws_route53_record.internal,
     aws_vpc_endpoint.s3,
     aws_vpc_security_group_egress_rule.controlplane_to_database,
   ]

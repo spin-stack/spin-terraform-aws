@@ -1,30 +1,27 @@
 # The installation's own names, resolved only inside its VPC: what a component dials another
 # by, so a machine replaced — or, updating, one standing beside the other — is a record changed
 # and not an address baked into every runner's configuration and the control plane's
-# certificate. The runners' relay is the one exception: it is tunnel.app.<domain>, a name the
-# control plane hands out and the proxy's certificate carries, which each runner resolves to
-# the proxy's private address in its own /etc/hosts (the runners module), so the relay never
-# leaves the VPC.
+# certificate. The runners reach the relay by proxy.<zone> too, checking its certificate as the
+# name the control plane hands out (spin-install runner --relay-dial), so it never leaves the VPC.
+#
+# The records are the machines' own. Each writes its name when it is about to serve under it
+# (files/lifecycle.sh.tftpl) — a control plane just before it takes the term, a proxy once
+# Caddy answers — which is the moment an update moves the installation to it; Terraform, which
+# does not know the address of a machine an autoscaling group has not started, writes none.
+# force_destroy, because a destroy would otherwise refuse the records it did not make.
 resource "aws_route53_zone" "internal" {
-  name    = var.internal_zone
-  comment = "${var.name}: its components, to each other"
+  name          = var.internal_zone
+  comment       = "${var.name}: its components, to each other"
+  force_destroy = true
   vpc {
     vpc_id = aws_vpc.this.id
   }
   tags = local.tags
 }
 
-# A minute: what a replaced machine waits for the others to follow it.
-resource "aws_route53_record" "internal" {
-  for_each = {
-    (local.cp_host)    = local.private_ip
-    (local.proxy_host) = local.proxy_ip
-  }
-  zone_id = aws_route53_zone.internal.zone_id
-  name    = each.key
-  type    = "A"
-  ttl     = 60
-  records = [each.value]
+locals {
+  # Ten seconds: how long a client may keep dialling the machine an update just replaced.
+  internal_record_ttl = 10
 }
 
 # app.<domain> is the dashboard and *.app.<domain> every workspace and the relay runners dial;
