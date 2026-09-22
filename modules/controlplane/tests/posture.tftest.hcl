@@ -181,6 +181,12 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     )
     error_message = "a failed replacement leaves the installation's name at a machine that is not serving it"
   }
+  # The first machine asks where the name points before it exists: an answer of nothing, and not
+  # a failure that set -e and pipefail would end the boot on.
+  assert {
+    condition     = strcontains(local.controlplane_files["/usr/local/lib/spin/lifecycle.sh"].content, "{ getent ahostsv4 \"$1\" || true; } | awk")
+    error_message = "resolving a name that does not exist yet ends the first machine's boot"
+  }
   assert {
     condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "runuser -u spin-proxy -- /usr/local/sbin/spin-proxy-certificates restore\n\nspin-install proxy")
     error_message = "a new proxy starts Caddy before it has the certificates the last one had, or restores them as root"

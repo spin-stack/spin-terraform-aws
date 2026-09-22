@@ -18,9 +18,11 @@ point() {
   /snap/bin/aws route53 change-resource-record-sets --hosted-zone-id '${zone_id}' --change-batch "$change" >/dev/null
 }
 
-# resolve <name>: the address <name> points at now, or nothing.
+# resolve <name>: the address <name> points at now, or nothing — and success either way: on the
+# installation's first machine the name does not exist yet, and getent's "not found" is an exit
+# status that set -e and pipefail would take for a failure of the boot.
 resolve() {
-  getent ahostsv4 "$1" | awk 'NR == 1 { print $1 }'
+  { getent ahostsv4 "$1" || true; } | awk 'NR == 1 { print $1 }'
 }
 
 # in_service: the launch is complete, and the group may retire the machine this one replaces.
