@@ -26,6 +26,8 @@ variable "controlplane" {
     ca_parameter_arn    = string
     unpublished         = string
     boundary_arn        = string
+    domain              = string
+    proxy_private_ip    = string
   })
 }
 

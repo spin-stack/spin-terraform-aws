@@ -33,6 +33,8 @@ variables {
     ca_parameter_arn    = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
     unpublished         = "unpublished"
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
+    domain              = "example.com"
+    proxy_private_ip    = "10.42.0.11"
   }
 }
 
@@ -47,6 +49,11 @@ run "a_runner_is_reached_by_nothing" {
   assert {
     condition     = aws_launch_template.runner.metadata_options[0].http_tokens == "required" && aws_launch_template.runner.metadata_options[0].http_put_response_hop_limit == 1
     error_message = "a runner answers IMDSv1, or its guests' side of the host can reach the role"
+  }
+  # The relay by the proxy's private address, so it stays in the VPC and needs no private zone.
+  assert {
+    condition     = strcontains(base64decode(aws_launch_template.runner.user_data), "'10.42.0.11' 'tunnel.app.example.com' >>/etc/hosts")
+    error_message = "a runner reaches the relay by the proxy's public address"
   }
   assert {
     condition     = aws_launch_template.runner.cpu_options[0].nested_virtualization == "enabled"

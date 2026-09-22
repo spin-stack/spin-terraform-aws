@@ -133,7 +133,7 @@ resource "aws_vpc_security_group_ingress_rule" "proxy_https" {
 }
 
 # And from inside the VPC, whatever the list says: the runners' relay, which reaches the proxy
-# by its private address (dns.tf), and so never needs to be among the users' networks.
+# by its private address (their /etc/hosts), and so never needs to be among the users' networks.
 resource "aws_vpc_security_group_ingress_rule" "proxy_https_vpc" {
   security_group_id = aws_security_group.proxy.id
   cidr_ipv4         = var.vpc_cidr

@@ -31,17 +31,21 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
   proxy and the runners alone; the proxy may reach the control plane on 8080 and the web on
   80 and 443, and nothing else. A runner has no ingress. None of them has SSH: Session Manager
   is the way in, and IMDSv2 is required everywhere.
-- **Inside the VPC the proxy is its private address.** A private hosted zone answers
-  `app.<domain>` and `*.app.<domain>` there, so a runner's relay never leaves the VPC and the
-  proxy's 443 need not be open to wherever runners happen to be: `proxy_allowed_cidrs` can be
-  the users' networks alone (80 stays open for the ACME challenge).
+- **Inside the VPC the proxy is its private address.** Each runner resolves its relay,
+  `tunnel.app.<domain>`, to the proxy's private address in its own `/etc/hosts`, so the relay
+  never leaves the VPC and the proxy's 443 need not be open to wherever runners happen to be:
+  `proxy_allowed_cidrs` can be the users' networks alone (80 stays open for the ACME
+  challenge). No Route 53 is needed for any of it; `route53_zone_id` only writes the public
+  records where the installation keeps its DNS there, and with it elsewhere they are the
+  operator's, pointed at the `proxy_ip` output.
 - **No role can make itself more.** Every role both modules create carries one permissions
   boundary: none may write IAM or pass a role, assume any role but the runner scope, touch the
   VPC's network or a security group, run commands on another machine through SSM, or lift the
   bucket's lock or the logs. A policy attached later, by mistake or from a machine that was
   taken, cannot grant past it.
-- **What crossed the network is kept.** The VPC's flow log and the resolver's query log go to
-  CloudWatch for `log_retention_days` (30); `network_logs = false` turns both off.
+- **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
+  `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
+  Route 53 Resolver's, and `dns_query_logs = true` asks for it.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above — the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
   their boundary — and `task lint:terraform` runs it with the rest of `task lint`.

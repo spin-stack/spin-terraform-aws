@@ -7,6 +7,11 @@ exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 
 export PATH="/snap/bin:$PATH"
 
+# The relay by the proxy's private address: the public one would take the relay out through
+# the internet gateway and back in, from an address the proxy would have to let in. The
+# certificate names the host either way.
+printf '%s %s\n' '${proxy_ip}' '${relay_host}' >>/etc/hosts
+
 # KVM and vsock, which the runner opens: in the cloud kernel's extra modules where its base
 # package leaves them out. A machine without /dev/kvm here was started without nested
 # virtualization, and is refused now rather than by the runner.

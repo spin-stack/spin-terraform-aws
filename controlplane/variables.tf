@@ -52,10 +52,16 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
-variable "network_logs" {
-  description = "Keep the VPC's flow log and the resolver's query log in CloudWatch. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
+variable "flow_logs" {
+  description = "Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
   type        = bool
   default     = true
+}
+
+variable "dns_query_logs" {
+  description = "Keep the VPC resolver's query log in CloudWatch: every name looked up, a workspace's included. It is Route 53 Resolver's, and off unless asked for."
+  type        = bool
+  default     = false
 }
 
 variable "log_retention_days" {

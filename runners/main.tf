@@ -156,6 +156,8 @@ resource "aws_launch_template" "runner" {
     ca_parameter    = var.controlplane.ca_parameter
     unpublished     = var.controlplane.unpublished
     data_on_ebs     = var.data_volume_gb > 0
+    relay_host      = "tunnel.app.${var.controlplane.domain}"
+    proxy_ip        = var.controlplane.proxy_private_ip
   }))
 
   tag_specifications {

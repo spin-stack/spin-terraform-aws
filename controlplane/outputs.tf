@@ -36,6 +36,16 @@ output "ca_parameter_arn" {
   value = aws_ssm_parameter.ca.arn
 }
 
+output "domain" {
+  description = "The base domain; the runners resolve its relay, tunnel.app.<domain>, to proxy_private_ip."
+  value       = var.domain
+}
+
+output "proxy_private_ip" {
+  description = "The proxy inside the VPC: where the runners' relay goes, without leaving it."
+  value       = local.proxy_ip
+}
+
 output "boundary_arn" {
   description = "The permissions boundary every role of the installation carries; the runners module puts it on the runners' role."
   value       = aws_iam_policy.boundary.arn
