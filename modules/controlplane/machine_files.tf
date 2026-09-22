@@ -5,8 +5,10 @@
 
 locals {
   controlplane_files = merge({
-    "/usr/local/lib/spin/lifecycle.sh"           = { mode = "0644", content = local.lifecycle_sh["controlplane"] }
-    "/usr/local/sbin/spin-controlplane-watchdog" = { mode = "0755", content = file("${path.module}/files/spin-controlplane-watchdog") }
+    "/usr/local/lib/spin/lifecycle.sh" = { mode = "0644", content = local.lifecycle_sh["controlplane"] }
+    "/usr/local/sbin/spin-controlplane-watchdog" = {
+      mode = "0755", content = templatefile("${path.module}/files/spin-controlplane-watchdog.tftpl", { cp_host = local.cp_host })
+    }
     "/etc/systemd/system/spin-controlplane-watchdog.service" = {
       mode = "0644", content = file("${path.module}/files/spin-controlplane-watchdog.service")
     }

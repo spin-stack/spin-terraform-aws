@@ -1,0 +1,46 @@
+#!/bin/bash
+# Every minute, on a control plane's machine in service: whose the installation's name is says
+# what this machine's control plane should be doing.
+#
+#   the name is this machine's   it should be serving: a control plane that is down is started
+#                                — which takes the term, and is how a failed replacement hands
+#                                the installation back — and one that stays down ten minutes is
+#                                a machine for the group to replace;
+#   the name is another's, and   this machine was superseded, as an update means it to be, and
+#   that one is ready            stays down until the group retires it;
+#   the name is another's, and   the machine that took it is gone: after fifteen minutes —
+#   nothing answers there        longer than a new machine takes between pointing the name at
+#                                itself and serving — the name is taken back and served here.
+set -euo pipefail
+. /usr/local/lib/spin/lifecycle.sh
+name='${cp_host}'
+state=/run/spin-controlplane-watchdog
+mkdir -p "$state"
+tick() { n=$(($(cat "$state/$1" 2>/dev/null || echo 0) + 1)); echo "$n" >"$state/$1"; echo "$n"; }
+
+if systemctl is-active --quiet spin-controlplane.service; then
+  rm -f "$state"/*
+  exit 0
+fi
+self=$(imds local-ipv4)
+at=$(resolve "$name")
+if [ "$at" = "$self" ]; then
+  rm -f "$state/orphaned"
+  echo "$name is this machine's and its control plane is down: starting it"
+  systemctl start spin-controlplane.service || true
+  if [ "$(tick down)" -ge 10 ]; then
+    echo "the control plane has not come up in ten minutes: asking the group to replace this machine"
+    unhealthy
+  fi
+  exit 0
+fi
+if curl -fsS -o /dev/null --max-time 10 --cacert /var/lib/spin-stack/certs/ca.crt "https://$name:8080/ready"; then
+  rm -f "$state"/*
+  exit 0
+fi
+if [ "$(tick orphaned)" -ge 15 ]; then
+  echo "$name points at $at, which has not answered in fifteen minutes: taking it back"
+  point "$name"
+  systemctl start spin-controlplane.service || true
+  rm -f "$state"/*
+fi

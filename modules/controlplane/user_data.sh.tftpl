@@ -28,13 +28,27 @@ apt-get install -yq "/tmp/$deb"
 # --- this machine's files (files/, machine_files.tf) -----------------------------------------
 ${write_files}
 
-# --- the encryption key: the installation's, from SSM, where the first start put it ----------
+# --- the encryption key: SSM's, and nowhere first ---------------------------------------------
+# Everything the catalog seals is sealed under it, so it is kept before anything uses it: the
+# first machine makes one and puts it without --overwrite, and every machine — the first too —
+# then uses what SSM holds. A machine that dies here has lost nothing; two first machines
+# racing both end on the one that was stored.
+key() {
+  aws ssm get-parameter --name '${key_parameter}' --with-decryption --query Parameter.Value --output text
+}
 env=/etc/spin-stack/controlplane.env
-if [ ! -s "$env" ] && key=$(aws ssm get-parameter --name '${key_parameter}' --with-decryption \
-    --query Parameter.Value --output text 2>/dev/null); then
-  echo "the encryption key is ${key_parameter}'s: this is not the installation's first machine"
-  (umask 077; printf 'SPIN_CP_ENCRYPTION_KEY="%s"\n' "$key" >"$env")
+if ! stored=$(key 2>/dev/null); then
+  file=$(mktemp); chmod 600 "$file"
+  head -c 32 /dev/urandom | base64 -w0 >"$file"
+  aws ssm put-parameter --name '${key_parameter}' --type SecureString --value "file://$file" \
+    --description 'SPIN_CP_ENCRYPTION_KEY of ${name}: with the catalog, the installation' >/dev/null ||
+    echo "another machine stored the key first: that one is the installation's"
+  rm -f "$file"
+  stored=$(key)
 fi
+[ -n "$stored" ] || { echo "${key_parameter} holds no encryption key"; exit 1; }
+(umask 077; install -d -m 0700 /etc/spin-stack; printf 'SPIN_CP_ENCRYPTION_KEY="%s"\n' "$stored" >"$env")
+unset stored
 
 # --- the release -----------------------------------------------------------------------------
 ${fetch_release}
@@ -53,7 +67,22 @@ PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id '${database_admin}'
 
 # The name, then the term. Pointed here first, so whoever the old machine drops when it is
 # superseded redials this one; then spin-install starts the control plane, which takes the term.
+# Until this machine is in service, a failure hands both back: its control plane stopped, the
+# name pointed where it was, and the launch abandoned — the old machine's watchdog, seeing its
+# own name and no control plane, starts it and it takes the term again.
 . /usr/local/lib/spin/lifecycle.sh
+previous=$(resolve '${cp_host}')
+serving=
+hand_back() {
+  [ -z "$serving" ] || return 0
+  echo "this machine did not come into service: handing the installation back"
+  systemctl stop spin-controlplane.service || true
+  if [ -n "$previous" ] && [ "$previous" != "$(imds local-ipv4)" ]; then
+    point '${cp_host}' "$previous" || true
+  fi
+  abandon || true
+}
+trap hand_back EXIT
 point '${cp_host}'
 SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
   --database-auth aws-iam --database-ca /etc/spin-stack/database-ca.pem \
@@ -65,17 +94,6 @@ SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
 spin-controlplane config apply /dev/stdin </etc/spin-stack/installation.yaml
 
 # --- publish ---------------------------------------------------------------------------------
-# The key, once: SSM is where every later machine reads it, and an existing parameter is never
-# overwritten.
-if ! aws ssm get-parameter --name '${key_parameter}' >/dev/null 2>&1; then
-  key=$(sed -n 's/^SPIN_CP_ENCRYPTION_KEY="\(.*\)"$/\1/p' "$env")
-  [ -n "$key" ] || { echo "$env has no encryption key to back up"; exit 1; }
-  file=$(mktemp); chmod 600 "$file"
-  printf '%s' "$key" >"$file"
-  aws ssm put-parameter --name '${key_parameter}' --type SecureString --value "file://$file" \
-    --description 'SPIN_CP_ENCRYPTION_KEY of ${name}: with the catalog, the installation' >/dev/null
-  rm -f "$file"
-fi
 aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
   --value file:///var/lib/spin-stack/certs/ca.crt >/dev/null
 
@@ -91,5 +109,6 @@ systemctl start spin-pool-token.service spin-pool-token.timer
 # Leading, and published: the group may retire the machine this one replaced. From here a
 # control plane that stays down is a machine to replace.
 in_service
+serving=yes
 systemctl enable --now spin-controlplane-watchdog.timer
 echo "spin control plane is installed and in service; runners join at https://${cp_host}:8080"

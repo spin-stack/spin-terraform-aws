@@ -32,8 +32,11 @@ install -d -m 0755 /etc/spin-bootstrap
 printf '%s\n' "$ca" >/etc/spin-bootstrap/ca.crt
 
 # Before Caddy first starts: the names it serves are the ones the last proxy had certificates
-# for, and systemd gives the restored files to its user when the unit starts.
-spin-proxy-certificates restore
+# for. As Caddy's user, which is made here as spin-install would make it — it finds it there
+# and keeps it — so nothing the bucket holds is written with root's rights.
+useradd --system --user-group --no-create-home --home-dir /var/lib/spin-proxy --shell /usr/sbin/nologin spin-proxy
+install -d -o spin-proxy -g spin-proxy -m 0700 /var/lib/spin-proxy
+runuser -u spin-proxy -- /usr/local/sbin/spin-proxy-certificates restore
 
 spin-install proxy --control-plane '${controlplane}' --ca /etc/spin-bootstrap/ca.crt \
   --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif } \

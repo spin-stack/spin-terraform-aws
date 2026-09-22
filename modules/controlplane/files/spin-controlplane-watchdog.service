@@ -1,5 +1,5 @@
 [Unit]
-Description=Ask the group to replace this machine when its control plane stays down
+Description=Keep this machine's control plane to whose the installation's name is
 
 [Service]
 Type=oneshot

@@ -163,14 +163,61 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   assert {
     condition = (
       strcontains(local.controlplane_user_data, "point 'cp.spin.internal'\nSPIN_CP_DATABASE_URL=") &&
-      strcontains(local.controlplane_user_data, "\nin_service\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
+      strcontains(local.controlplane_user_data, "\nin_service\nserving=yes\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal'\naws --region 'us-east-2' ec2 associate-address --allocation-id 'eipalloc-0123456789abcdef0'")
     )
     error_message = "a new machine takes the installation over in another order than name, then service"
   }
+  # Until it is in service, a new control plane that fails hands the installation back: its own
+  # control plane stopped, the name where it was, the launch abandoned; and the old machine's
+  # watchdog serves the name it is given back, and takes back one nobody answers at.
   assert {
-    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "spin-proxy-certificates restore\n\nspin-install proxy")
-    error_message = "a new proxy starts Caddy before it has the certificates the last one had"
+    condition = (
+      strcontains(local.controlplane_user_data, "previous=$(resolve 'cp.spin.internal')\nserving=\nhand_back() {") &&
+      strcontains(local.controlplane_user_data, "point 'cp.spin.internal' \"$previous\" || true\n  fi\n  abandon || true") &&
+      strcontains(local.controlplane_user_data, "trap hand_back EXIT\npoint 'cp.spin.internal'\n") &&
+      strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "if [ \"$at\" = \"$self\" ]; then") &&
+      strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "point \"$name\"\n  systemctl start spin-controlplane.service")
+    )
+    error_message = "a failed replacement leaves the installation's name at a machine that is not serving it"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "runuser -u spin-proxy -- /usr/local/sbin/spin-proxy-certificates restore\n\nspin-install proxy")
+    error_message = "a new proxy starts Caddy before it has the certificates the last one had, or restores them as root"
+  }
+}
+
+# The encryption key is kept before anything uses it: stored in SSM without overwriting one that
+# is there, and then read back, so a first machine that dies has lost nothing and two racing end
+# on one key.
+run "the_encryption_key_is_kept_before_it_is_used" {
+  command = plan
+
+  assert {
+    condition = can(regex(
+      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*stored=\\$\\(key\\).*SPIN_CP_ENCRYPTION_KEY=.*spin-install control-plane",
+      local.controlplane_user_data,
+    ))
+    error_message = "the encryption key is used before it is stored, or is not the stored one"
+  }
+  assert {
+    condition     = !can(regex("put-parameter --name '/spin/controlplane-encryption-key'[^\n]*--overwrite", local.controlplane_user_data)) && length(regexall("put-parameter --name '/spin/controlplane-encryption-key'", local.controlplane_user_data)) == 1
+    error_message = "the encryption key can be overwritten, or is written more than once"
+  }
+}
+
+# Caddy's directory is copied as Caddy's user, and links in it are not followed: as root, a link
+# Caddy planted would have the copy read any file of the machine into the bucket.
+run "the_certificates_are_copied_with_caddys_rights" {
+  command = plan
+
+  assert {
+    condition = (
+      strcontains(local.proxy_files["/etc/systemd/system/spin-proxy-certificates.service"].content, "\nUser=spin-proxy\n") &&
+      strcontains(local.proxy_files["/usr/local/sbin/spin-proxy-certificates"].content, "--no-follow-symlinks") &&
+      strcontains(local.proxy_files["/usr/local/sbin/spin-proxy-certificates"].content, "if [ \"$(id -u)\" -eq 0 ]; then")
+    )
+    error_message = "the certificates are copied as root, or links in Caddy's directory are followed"
   }
 }
 

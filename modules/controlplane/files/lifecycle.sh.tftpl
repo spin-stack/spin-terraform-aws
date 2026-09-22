@@ -9,12 +9,18 @@ imds() {
   curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1"
 }
 
-# point <name>: the internal zone's <name> at this machine, from now on.
+# point <name> [address]: the internal zone's <name> at address — this machine, by default —
+# from now on.
 point() {
   local change
   change=$(printf '{"Changes":[{"Action":"UPSERT","ResourceRecordSet":{"Name":"%s","Type":"A","TTL":%d,"ResourceRecords":[{"Value":"%s"}]}}]}' \
-    "$1" '${ttl}' "$(imds local-ipv4)")
+    "$1" '${ttl}' "$${2:-$(imds local-ipv4)}")
   /snap/bin/aws route53 change-resource-record-sets --hosted-zone-id '${zone_id}' --change-batch "$change" >/dev/null
+}
+
+# resolve <name>: the address <name> points at now, or nothing.
+resolve() {
+  getent ahostsv4 "$1" | awk 'NR == 1 { print $1 }'
 }
 
 # in_service: the launch is complete, and the group may retire the machine this one replaces.
@@ -23,6 +29,13 @@ point() {
 in_service() {
   /snap/bin/aws --region '${region}' autoscaling complete-lifecycle-action --auto-scaling-group-name '${group}' \
     --lifecycle-hook-name ready --lifecycle-action-result CONTINUE --instance-id "$(imds instance-id)"
+}
+
+# abandon: the launch failed, and the group is to discard this machine now rather than when
+# the hook times out.
+abandon() {
+  /snap/bin/aws --region '${region}' autoscaling complete-lifecycle-action --auto-scaling-group-name '${group}' \
+    --lifecycle-hook-name ready --lifecycle-action-result ABANDON --instance-id "$(imds instance-id)"
 }
 
 # unhealthy: the group is to replace this machine.

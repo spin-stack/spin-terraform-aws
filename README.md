@@ -68,10 +68,15 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   refresh until it says it serves, abandoning it - and keeping the old - if it never does. A new
   control plane points `cp.` at itself and starts, which takes the term: the old one,
   superseded, closes and stays down, and runners and the proxy reconnect within seconds while
-  every workspace runs on. A control plane that stays down three minutes asks its group to
-  replace its machine. A new proxy restores the certificates the last one had from their own
-  bucket (versioned, no Object Lock), starts Caddy, points `proxy.` at itself and takes the
-  elastic IP. What is lost is seconds of API and open connections, never a workspace. Canonical
+  every workspace runs on. A new control plane that fails before it is in service hands the
+  installation back: its control plane stopped, `cp.` pointed where it was, the launch
+  abandoned. Each machine's watchdog keeps its control plane to whose the name is — serving it
+  when the name is its own, which is how the old one takes the term back; taking the name back
+  when the machine it points at has answered nothing for fifteen minutes; asking to be
+  replaced when it cannot serve for ten. A new proxy restores the certificates the last one had
+  from their own bucket (versioned, no Object Lock) as Caddy's user, starts Caddy, points
+  `proxy.` at itself and takes the elastic IP; the copy back runs as Caddy's user too, and
+  follows no link, so nothing Caddy plants in its directory is read with root's rights. What is lost is seconds of API and open connections, never a workspace. Canonical
   publishing a newer image is such a change too: an apply after it rolls both machines onto it.
 - **The proxy has subnets of its own**, and the control plane takes a browser's address only
   from them (`--trusted-proxy`): a runner, elsewhere in the VPC, cannot pass as the proxy.
@@ -143,9 +148,11 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   protection; beside it the control plane writes an hourly catalog backup into the bucket. No
   password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
   once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
-  role signs and owns the database. The encryption key that opens what the catalog seals is in
-  SSM from the first start on - not Terraform's, and it outlives any destroy - so a replaced
-  control plane reads it back and serves the same catalog.
+  role signs and owns the database. The encryption key that opens what the catalog seals is
+  stored in SSM before anything uses it — made by the first machine, put without overwriting,
+  and read back by every machine, that one included — so a first boot that dies has lost
+  nothing, and a replaced control plane serves the same catalog. It is not Terraform's, and it
+  outlives any destroy.
 - **Every machine runs what the release workflow signed.** Each downloads cosign by the SHA-256
   this module pins (`cosign`), then its tarball and that tarball's bundle, and unpacks nothing
   that is not signed by `release.yml` at the version's tag. Nothing is a container: each role
