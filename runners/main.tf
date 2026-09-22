@@ -5,8 +5,28 @@
 
 data "aws_region" "current" {}
 
-data "aws_ssm_parameter" "ubuntu" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+# The newest of Canonical's own images of the release: owned by Canonical's account, so a
+# public image named like one is not picked up. A new one reaches hosts the group starts after
+# it is published, since the template is re-applied with it.
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-*-${var.ubuntu_release}-amd64-server-*"]
+  }
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
 }
 
 locals {
@@ -82,7 +102,7 @@ resource "aws_iam_instance_profile" "runner" {
 
 resource "aws_launch_template" "runner" {
   name_prefix            = "${var.name}-runner-"
-  image_id               = data.aws_ssm_parameter.ubuntu.value
+  image_id               = data.aws_ami.ubuntu.id
   vpc_security_group_ids = [aws_security_group.runner.id]
   update_default_version = true
 

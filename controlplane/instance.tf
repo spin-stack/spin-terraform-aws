@@ -5,8 +5,27 @@
 # catalog backup in the bucket, a lost volume is `controlplane catalog restore`, not a new
 # installation.
 
-data "aws_ssm_parameter" "ubuntu" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+# The newest of Canonical's own images of the release: owned by Canonical's account, so a
+# public image named like one is not picked up.
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-*-${var.ubuntu_release}-amd64-server-*"]
+  }
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
 }
 
 locals {
@@ -39,7 +58,7 @@ resource "aws_eip" "controlplane" {
 }
 
 resource "aws_instance" "controlplane" {
-  ami                    = data.aws_ssm_parameter.ubuntu.value
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public[0].id
   private_ip             = local.private_ip

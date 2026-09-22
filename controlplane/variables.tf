@@ -91,3 +91,13 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "ubuntu_release" {
+  description = "The Ubuntu release the machines boot, as YY.MM; the newest image of it Canonical publishes is used. 26.04 is the LTS with a 7.x kernel."
+  type        = string
+  default     = "26.04"
+  validation {
+    condition     = can(regex("^[0-9]{2}\\.(04|10)$", var.ubuntu_release))
+    error_message = "ubuntu_release is a release number, e.g. 26.04."
+  }
+}
