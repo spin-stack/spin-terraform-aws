@@ -6,6 +6,18 @@ set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 
 export PATH="/snap/bin:$PATH"
+
+# KVM and vsock, which the runner opens: in the cloud kernel's extra modules where its base
+# package leaves them out. A machine without /dev/kvm here was started without nested
+# virtualization, and is refused now rather than by the runner.
+if ! modprobe -a kvm_intel vhost_vsock; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -q
+  apt-get install -yq "linux-modules-extra-$(uname -r)"
+  modprobe -a kvm_intel vhost_vsock
+fi
+[ -c /dev/kvm ] || { echo "no /dev/kvm: is nested virtualization enabled on this instance?"; exit 1; }
+
 snap install aws-cli --classic
 param() { aws --region '${region}' ssm get-parameter --name "$1" --with-decryption --query Parameter.Value --output text; }
 
