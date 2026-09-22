@@ -66,7 +66,11 @@ if ! stored=$(key 2>/dev/null); then
   stored=$(key)
 fi
 [ -n "$stored" ] || { echo "${key_parameter} holds no encryption key"; exit 1; }
-(umask 077; install -d -m 0700 /etc/spin-stack; printf 'SPIN_CP_ENCRYPTION_KEY="%s"\n' "$stored" >"$env")
+# The secret is the file, never the directory: spin-install puts the database's CA here as a
+# file anyone may read, and the control plane reads it as its own user - a directory only root
+# may enter is a control plane that cannot open the CA it verifies its catalog by.
+install -d -m 0755 /etc/spin-stack
+(umask 077; printf 'SPIN_CP_ENCRYPTION_KEY="%s"\n' "$stored" >"$env")
 unset stored
 
 # --- the release -----------------------------------------------------------------------------

@@ -231,6 +231,15 @@ run "the_encryption_key_is_kept_before_it_is_used" {
     condition     = !can(regex("put-parameter --name '/spin/controlplane-encryption-key'[^\n]*--overwrite", local.controlplane_user_data)) && length(regexall("put-parameter --name '/spin/controlplane-encryption-key'", local.controlplane_user_data)) == 1
     error_message = "the encryption key can be overwritten, or is written more than once"
   }
+  # The key is the file's secret, not the directory's: the control plane runs as its own user
+  # and opens the database's CA in that same directory, which spin-install writes 0644.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "install -d -m 0755 /etc/spin-stack\n(umask 077; printf 'SPIN_CP_ENCRYPTION_KEY=") &&
+      !strcontains(local.controlplane_user_data, "install -d -m 0700 /etc/spin-stack")
+    )
+    error_message = "/etc/spin-stack is a directory the control plane's user cannot enter, so it cannot read the CA its catalog is verified by"
+  }
 }
 
 # Caddy's directory is copied as Caddy's user, and links in it are not followed: as root, a link
