@@ -46,6 +46,16 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
   `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
   Route 53 Resolver's, and `dns_query_logs = true` asks for it.
+- **Telemetry, to Grafana Cloud, where `grafana_cloud` is given.** Grafana Alloy on the
+  control plane's machine is the one collector: the control plane, the proxy and every runner
+  push OTLP to it on 4317, which only they may reach, and only it holds the token and reaches
+  Grafana Cloud. The token is an access policy token with metrics:write, logs:write and
+  traces:write, written by the operator into the `grafana_token_parameter` SecureString: never
+  in Terraform's state or a machine's user data. Metrics are pushed every 60 seconds, a point a
+  minute per series. Which traces and metrics leave is the dashboard's (Admin → Settings →
+  Telemetry): every trace that failed anywhere, every one slower than a threshold, a percent of
+  the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and decides at
+  the end of each trace. Logs below `log_severity` (WARN) do not leave.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above — the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
   their boundary — and `task lint:terraform` runs it with the rest of `task lint`.

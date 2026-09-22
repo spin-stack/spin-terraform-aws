@@ -1,0 +1,178 @@
+// Grafana Alloy on the control plane's machine: the installation's one collector. The control
+// plane, the proxy and every runner push OTLP here, inside the VPC; only this machine holds the
+// Grafana Cloud token, and only this one reaches Grafana Cloud.
+//
+// What is kept is decided twice. Which traces and which metrics are an admin's, in the
+// dashboard (Admin -> Settings -> Telemetry), read from the control plane every 30 seconds: the
+// sampler and the metric filter follow it without a restart. Which logs is this file's: nothing
+// below ${log_severity}.
+
+logging {
+  level = "warn"
+}
+
+// What the admin decided (internal/domain/telemetrypolicy): {"traces_keep_percent": 0-100,
+// "traces_slow_ms": n, "drop_metrics": [OTTL conditions]}. Until the control plane has answered
+// once, nothing here evaluates and Alloy exits, which systemd restarts it from; after, a control
+// plane that does not answer leaves the last answer in force.
+remote.http "pipeline" {
+  url            = "https://127.0.0.1:8080/telemetry/pipeline"
+  poll_frequency = "30s"
+  client {
+    tls_config {
+      ca_file = "/etc/alloy/spin-ca.crt"
+    }
+  }
+}
+
+// The token, read from a file only alloy may read, refreshed from SSM at every start.
+local.file "token" {
+  filename  = "/etc/alloy/grafana-cloud-token"
+  is_secret = true
+}
+
+otelcol.receiver.otlp "spin" {
+  grpc {
+    endpoint = "${listen}:4317"
+  }
+  output {
+    metrics = [otelcol.processor.memory_limiter.default.input]
+    logs    = [otelcol.processor.memory_limiter.default.input]
+    traces  = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// A burst the backend cannot take is refused here rather than taking the machine the control
+// plane runs on.
+otelcol.processor.memory_limiter "default" {
+  check_interval = "1s"
+  limit          = "256MiB"
+  output {
+    metrics = [otelcol.processor.filter.spin.input]
+    logs    = [otelcol.processor.filter.spin.input]
+    traces  = [otelcol.processor.tail_sampling.spin.input]
+  }
+}
+
+// Decided once a trace is whole, which only a collector that sees all of it can do — this one,
+// the fleet's only: a trace that failed anywhere is kept, one slower than the admin's threshold
+// is kept, and of the rest the admin's percent. A policy that matches keeps the trace.
+otelcol.processor.tail_sampling "spin" {
+  decision_wait = "10s"
+  num_traces    = 20000
+
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  policy {
+    name = "slow"
+    type = "latency"
+    latency {
+      threshold_ms = encoding.from_json(remote.http.pipeline.content).traces_slow_ms
+    }
+  }
+
+  policy {
+    name = "the_rest"
+    type = "probabilistic"
+    probabilistic {
+      sampling_percentage = encoding.from_json(remote.http.pipeline.content).traces_keep_percent
+    }
+  }
+
+  output {
+    traces = [otelcol.processor.transform.prune.input]
+  }
+}
+
+otelcol.processor.filter "spin" {
+  error_mode = "ignore"
+  metrics {
+    metric = encoding.from_json(remote.http.pipeline.content).drop_metrics
+  }
+  logs {
+    log_record = ["severity_number < SEVERITY_NUMBER_${log_severity}"]
+  }
+  output {
+    metrics = [otelcol.processor.transform.prune.input]
+    logs    = [otelcol.processor.transform.prune.input]
+  }
+}
+
+// Resource attributes nothing is read by, which every series would otherwise carry.
+otelcol.processor.transform "prune" {
+  error_mode = "ignore"
+
+  trace_statements {
+    context    = "resource"
+    statements = [
+      "delete_key(attributes, \"os.description\")",
+      "delete_key(attributes, \"os.type\")",
+      "delete_key(attributes, \"process.command_args\")",
+      "delete_key(attributes, \"process.executable.path\")",
+      "delete_key(attributes, \"process.pid\")",
+      "delete_key(attributes, \"process.runtime.description\")",
+      "delete_key(attributes, \"process.runtime.name\")",
+      "delete_key(attributes, \"process.runtime.version\")",
+    ]
+  }
+
+  metric_statements {
+    context    = "resource"
+    statements = [
+      "delete_key(attributes, \"os.description\")",
+      "delete_key(attributes, \"os.type\")",
+      "delete_key(attributes, \"process.command_args\")",
+      "delete_key(attributes, \"process.executable.path\")",
+      "delete_key(attributes, \"process.pid\")",
+      "delete_key(attributes, \"process.runtime.description\")",
+      "delete_key(attributes, \"process.runtime.name\")",
+      "delete_key(attributes, \"process.runtime.version\")",
+    ]
+  }
+
+  log_statements {
+    context    = "resource"
+    statements = [
+      "delete_key(attributes, \"os.description\")",
+      "delete_key(attributes, \"os.type\")",
+      "delete_key(attributes, \"process.command_args\")",
+      "delete_key(attributes, \"process.executable.path\")",
+      "delete_key(attributes, \"process.pid\")",
+      "delete_key(attributes, \"process.runtime.description\")",
+      "delete_key(attributes, \"process.runtime.name\")",
+      "delete_key(attributes, \"process.runtime.version\")",
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    logs    = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    traces  = [otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = "${instance_id}"
+  password = local.file.token.content
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = "${otlp_endpoint}"
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}

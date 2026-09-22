@@ -74,6 +74,7 @@ install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 spin-install runner \
   --control-plane '${controlplane}' --ca /etc/spin-bootstrap/ca.crt \
   --token-file /etc/spin-bootstrap/token \
-  --uplink "$uplink" --data-device "$data"
+  --uplink "$uplink" --data-device "$data" \
+  %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 # Spent or not, the token has done its work here: the host has its own credential now.
 rm -f /etc/spin-bootstrap/token

@@ -46,6 +46,21 @@ output "proxy_private_ip" {
   value       = local.proxy_ip
 }
 
+output "collector" {
+  description = "Where every process of the installation pushes its telemetry, host:port; empty ships nothing."
+  value       = local.collector
+}
+
+output "metric_interval" {
+  description = "How often a process pushes its metrics to the collector; empty is the binary's default."
+  value       = local.metric_interval
+}
+
+output "grafana_token_parameter" {
+  description = "Where the Grafana Cloud access policy token goes: aws ssm put-parameter --overwrite --type SecureString --name <this> --value <token>. Empty without grafana_cloud."
+  value       = local.telemetry ? aws_ssm_parameter.grafana_token[0].name : ""
+}
+
 output "boundary_arn" {
   description = "The permissions boundary every role of the installation carries; the runners module puts it on the runners' role."
   value       = aws_iam_policy.boundary.arn

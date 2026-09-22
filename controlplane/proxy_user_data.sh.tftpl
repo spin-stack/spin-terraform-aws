@@ -32,4 +32,5 @@ sha256sum --check --ignore-missing checksums.txt
 install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 
 spin-install proxy --control-plane '${controlplane}' --ca /etc/spin-bootstrap/ca.crt \
-  --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif }
+  --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif } \
+  %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }

@@ -54,7 +54,7 @@ install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 spin-install control-plane \
   --advertise '${private_ip}' \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
-  --trusted-proxy '${proxy_ip}'
+  --trusted-proxy '${proxy_ip}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
 install -d -m 0700 /etc/spin-stack
@@ -77,6 +77,84 @@ if ! aws ssm get-parameter --name '${key_parameter}' >/dev/null 2>&1; then
 fi
 aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
   --value file:///var/lib/spin-stack/certs/ca.crt >/dev/null
+
+%{ if collector != "" ~}
+# --- the collector: Grafana Alloy, the installation's one ------------------------------------
+# The package is checked against the SHA-256 the module pins before it is installed.
+cd "$(mktemp -d)"
+deb='alloy-${alloy_version}-1.amd64.deb'
+curl -fsSLO "https://github.com/grafana/alloy/releases/download/v${alloy_version}/$deb"
+printf '%s  %s\n' '${alloy_sha256}' "$deb" | sha256sum --check --quiet
+apt-get install -yq "./$deb"
+install -d -m 0755 /etc/alloy
+# What it trusts the control plane by, when it reads what to sample and drop.
+install -m 0644 /var/lib/spin-stack/certs/ca.crt /etc/alloy/spin-ca.crt
+cat >/etc/alloy/config.alloy <<'EOF'
+${alloy_config}
+EOF
+cat >/etc/default/alloy <<'EOF'
+CONFIG_FILE="/etc/alloy/config.alloy"
+CUSTOM_ARGS="--server.http.listen-addr=127.0.0.1:12345 --disable-reporting"
+RESTART_ON_UPGRADE=true
+EOF
+
+# The token, from SSM into a file only alloy reads. Alloy reads the file again when it changes,
+# so a token rotated in SSM is in use within the timer's five minutes, with no restart.
+cat >/usr/local/sbin/spin-alloy-token <<'EOF'
+#!/bin/bash
+set -euo pipefail
+token=$(/snap/bin/aws --region '${region}' ssm get-parameter --name '${grafana_token_parameter}' \
+  --with-decryption --query Parameter.Value --output text)
+file=$(mktemp /etc/alloy/.token.XXXXXX)
+printf '%s' "$token" >"$file"
+chown root:alloy "$file"
+chmod 0640 "$file"
+mv -f "$file" /etc/alloy/grafana-cloud-token
+EOF
+chmod 0755 /usr/local/sbin/spin-alloy-token
+
+install -d /etc/systemd/system/alloy.service.d
+cat >/etc/systemd/system/alloy.service.d/spin.conf <<'EOF'
+[Service]
+# Privileged, before the sandbox below: it is what reads the token for the unprivileged rest.
+ExecStartPre=+/usr/local/sbin/spin-alloy-token
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/alloy
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+EOF
+cat >/etc/systemd/system/spin-alloy-token.service <<'EOF'
+[Unit]
+Description=Refresh the Grafana Cloud token Alloy ships with, from SSM
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/spin-alloy-token
+EOF
+cat >/etc/systemd/system/spin-alloy-token.timer <<'EOF'
+[Unit]
+Description=Refresh the Grafana Cloud token every five minutes
+
+[Timer]
+OnUnitActiveSec=5min
+OnBootSec=1min
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now spin-alloy-token.timer alloy.service
+%{ endif ~}
 
 # --- the pool's token, rotated ---------------------------------------------------------------
 # A file, not an argument: a token on a command line is in ps.

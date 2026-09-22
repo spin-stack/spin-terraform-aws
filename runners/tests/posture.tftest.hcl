@@ -35,6 +35,8 @@ variables {
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
     domain              = "example.com"
     proxy_private_ip    = "10.42.0.11"
+    collector           = ""
+    metric_interval     = ""
   }
 }
 
@@ -45,6 +47,10 @@ run "a_runner_is_reached_by_nothing" {
   assert {
     condition     = aws_vpc_security_group_ingress_rule.controlplane_from_runners.security_group_id == "sg-00000000000000000" && aws_vpc_security_group_ingress_rule.controlplane_from_runners.from_port == 8080 && aws_vpc_security_group_ingress_rule.controlplane_from_runners.cidr_ipv4 == null
     error_message = "the runners module opens something other than the control plane's 8080 to the runners"
+  }
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.collector_from_runners) == 0
+    error_message = "the collector's port is opened on an installation with no collector"
   }
   assert {
     condition     = aws_launch_template.runner.metadata_options[0].http_tokens == "required" && aws_launch_template.runner.metadata_options[0].http_put_response_hop_limit == 1
@@ -62,6 +68,36 @@ run "a_runner_is_reached_by_nothing" {
   assert {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"
+  }
+}
+
+run "a_runner_pushes_to_the_collector_where_there_is_one" {
+  command = plan
+  variables {
+    controlplane = {
+      vpc_id              = "vpc-00000000000000000"
+      subnet_ids          = ["subnet-00000000000000000"]
+      security_group_id   = "sg-00000000000000000"
+      url                 = "https://10.42.0.10:8080"
+      token_parameter     = "/spin/runner-registration-token"
+      token_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
+      ca_parameter        = "/spin/controlplane-ca"
+      ca_parameter_arn    = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
+      unpublished         = "unpublished"
+      boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
+      domain              = "example.com"
+      proxy_private_ip    = "10.42.0.11"
+      collector           = "10.42.0.10:4317"
+      metric_interval     = "60s"
+    }
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.collector_from_runners[0].from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_runners[0].security_group_id == "sg-00000000000000000"
+    error_message = "the collector's port is not opened to the runners"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_launch_template.runner.user_data), "--otel-collector '10.42.0.10:4317' --otel-metric-interval '60s'")
+    error_message = "a runner is not pointed at the collector"
   }
 }
 

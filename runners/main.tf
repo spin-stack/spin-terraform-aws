@@ -47,6 +47,17 @@ resource "aws_vpc_security_group_egress_rule" "runner" {
   description       = "the control plane, the relay, the bucket, and workspaces' egress, which spin filters"
 }
 
+# The collector's port, where the installation has one.
+resource "aws_vpc_security_group_ingress_rule" "collector_from_runners" {
+  count                        = var.controlplane.collector == "" ? 0 : 1
+  security_group_id            = var.controlplane.security_group_id
+  referenced_security_group_id = aws_security_group.runner.id
+  ip_protocol                  = "tcp"
+  from_port                    = 4317
+  to_port                      = 4317
+  description                  = "spin runners' telemetry"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "controlplane_from_runners" {
   security_group_id            = var.controlplane.security_group_id
   referenced_security_group_id = aws_security_group.runner.id
@@ -158,6 +169,8 @@ resource "aws_launch_template" "runner" {
     data_on_ebs     = var.data_volume_gb > 0
     relay_host      = "tunnel.app.${var.controlplane.domain}"
     proxy_ip        = var.controlplane.proxy_private_ip
+    collector       = var.controlplane.collector
+    metric_interval = var.controlplane.metric_interval
   }))
 
   tag_specifications {

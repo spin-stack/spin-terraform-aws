@@ -31,10 +31,21 @@ override_data {
   values = { id = "ami-0123456789abcdef0" }
 }
 
-# Known at plan, so what carries it can be asserted on.
+# Known at plan, so what carries them can be asserted on: the roles' boundary, and the user
+# data, which names the runner scope and the data volume.
 override_resource {
   target = aws_iam_policy.boundary
   values = { arn = "arn:aws:iam::123456789012:policy/spin-boundary" }
+}
+
+override_resource {
+  target = aws_iam_role.runner_scope
+  values = { arn = "arn:aws:iam::123456789012:role/spin-runner-scope" }
+}
+
+override_resource {
+  target = aws_ebs_volume.data
+  values = { id = "vol-0123456789abcdef0" }
 }
 
 variables {
@@ -175,6 +186,55 @@ run "the_roles" {
     condition = alltrue([for s in data.aws_iam_policy_document.proxy.statement :
     s.actions == toset(["ssm:GetParameter"])])
     error_message = "the proxy's role may do more than read the CA"
+  }
+}
+
+run "no_collector_unless_asked" {
+  command = plan
+
+  assert {
+    condition     = length(aws_ssm_parameter.grafana_token) == 0 && length(aws_vpc_security_group_ingress_rule.collector_from_proxy) == 0
+    error_message = "a collector's token or port exists on an installation that ships no telemetry"
+  }
+  assert {
+    condition     = !strcontains(aws_instance.controlplane.user_data, "alloy") && !strcontains(aws_instance.controlplane.user_data, "--otel-collector")
+    error_message = "the control plane installs a collector nobody asked for"
+  }
+}
+
+run "a_collector_when_asked" {
+  command = plan
+  variables {
+    grafana_cloud = {
+      otlp_endpoint = "https://otlp-gateway-prod-us-west-0.grafana.net/otlp"
+      instance_id   = "123456"
+    }
+  }
+
+  assert {
+    condition     = aws_ssm_parameter.grafana_token[0].type == "SecureString" && aws_ssm_parameter.grafana_token[0].value == "unpublished"
+    error_message = "the token's parameter is not a SecureString the operator fills"
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.collector_from_proxy[0].from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_proxy[0].cidr_ipv4 == null
+    error_message = "the collector's port is open to an address range rather than to the proxy"
+  }
+  assert {
+    condition     = strcontains(aws_instance.controlplane.user_data, "sha256sum --check") && strcontains(aws_instance.controlplane.user_data, "--otel-collector '10.42.0.10:4317' --otel-metric-interval '60s'")
+    error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
+  }
+  assert {
+    condition     = strcontains(aws_instance.proxy.user_data, "--otel-collector '10.42.0.10:4317'")
+    error_message = "the proxy is not pointed at the collector"
+  }
+  assert {
+    condition     = !strcontains(aws_instance.controlplane.user_data, "glc_") && strcontains(aws_instance.controlplane.user_data, "/spin/grafana-cloud-token")
+    error_message = "the token is in the user data rather than read from SSM"
+  }
+  # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
+  assert {
+    condition     = length(aws_instance.controlplane.user_data) < 16384
+    error_message = "the control plane's user data is over the 16 KiB EC2 takes"
   }
 }
 

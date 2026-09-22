@@ -28,6 +28,8 @@ variable "controlplane" {
     boundary_arn        = string
     domain              = string
     proxy_private_ip    = string
+    collector           = string
+    metric_interval     = string
   })
 }
 

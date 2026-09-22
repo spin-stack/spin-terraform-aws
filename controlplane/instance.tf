@@ -93,21 +93,32 @@ resource "aws_instance" "controlplane" {
   }
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    name            = var.name
-    region          = local.region
-    spin_version    = var.spin_version
-    private_ip      = local.private_ip
-    proxy_ip        = local.proxy_ip
-    bucket          = aws_s3_bucket.volumes.bucket
-    role_arn        = aws_iam_role.runner_scope.arn
-    data_volume     = aws_ebs_volume.data.id
-    token_parameter = local.token_parameter
-    ca_parameter    = local.ca_parameter
-    key_parameter   = local.key_parameter
-    pool_flags      = join(" ", var.pool_token_flags)
-    rotation        = var.pool_token_rotation
-    installation    = yamlencode(local.installation)
-    token_expiry    = "${tonumber(trimsuffix(var.pool_token_rotation, "h")) * 4}h"
+    name                    = var.name
+    region                  = local.region
+    spin_version            = var.spin_version
+    private_ip              = local.private_ip
+    proxy_ip                = local.proxy_ip
+    bucket                  = aws_s3_bucket.volumes.bucket
+    role_arn                = aws_iam_role.runner_scope.arn
+    data_volume             = aws_ebs_volume.data.id
+    token_parameter         = local.token_parameter
+    ca_parameter            = local.ca_parameter
+    key_parameter           = local.key_parameter
+    pool_flags              = join(" ", var.pool_token_flags)
+    rotation                = var.pool_token_rotation
+    installation            = yamlencode(local.installation)
+    collector               = local.collector
+    metric_interval         = local.metric_interval
+    alloy_version           = local.telemetry ? var.grafana_cloud.alloy_version : ""
+    alloy_sha256            = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
+    grafana_token_parameter = local.token_parameter_grafana
+    alloy_config = local.telemetry ? templatefile("${path.module}/alloy.alloy.tftpl", {
+      listen        = local.private_ip
+      otlp_endpoint = var.grafana_cloud.otlp_endpoint
+      instance_id   = var.grafana_cloud.instance_id
+      log_severity  = var.grafana_cloud.log_severity
+    }) : ""
+    token_expiry = "${tonumber(trimsuffix(var.pool_token_rotation, "h")) * 4}h"
   })
 
   tags = merge(local.tags, { Name = "${var.name}-controlplane" })

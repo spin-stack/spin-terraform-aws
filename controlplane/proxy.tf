@@ -62,13 +62,15 @@ resource "aws_instance" "proxy" {
   }
 
   user_data = templatefile("${path.module}/proxy_user_data.sh.tftpl", {
-    region       = local.region
-    spin_version = var.spin_version
-    domain       = var.domain
-    acme_email   = var.acme_email
-    controlplane = local.url
-    ca_parameter = local.ca_parameter
-    unpublished  = local.unpublished
+    region          = local.region
+    spin_version    = var.spin_version
+    domain          = var.domain
+    acme_email      = var.acme_email
+    controlplane    = local.url
+    ca_parameter    = local.ca_parameter
+    unpublished     = local.unpublished
+    collector       = local.collector
+    metric_interval = local.metric_interval
   })
 
   tags = merge(local.tags, { Name = "${var.name}-proxy" })
