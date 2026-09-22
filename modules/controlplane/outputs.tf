@@ -119,3 +119,13 @@ output "bootstrap_password_parameter" {
   description = "The SSM SecureString holding that administrator's one-time password, written by the control plane's first boot and gone from the catalog the moment they choose their own."
   value       = local.bootstrap_password_parameter
 }
+
+output "region" {
+  description = "The region everything here is in, read from the provider rather than asked for."
+  value       = local.region
+}
+
+output "runner_idle_minutes" {
+  description = "How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot."
+  value       = var.runner_idle_minutes
+}
