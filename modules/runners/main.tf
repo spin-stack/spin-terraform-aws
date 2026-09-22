@@ -30,14 +30,15 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  tags = merge({ "spin:installation" = var.name }, var.tags)
+  name = var.controlplane.name
+  tags = merge({ "spin:installation" = local.name }, var.tags)
 }
 
 resource "aws_security_group" "runner" {
-  name        = "${var.name}-runner"
+  name        = "${local.name}-runner"
   description = "spin runners: nothing in, everything out"
   vpc_id      = var.controlplane.vpc_id
-  tags        = merge(local.tags, { Name = "${var.name}-runner" })
+  tags        = merge(local.tags, { Name = "${local.name}-runner" })
 }
 
 resource "aws_vpc_security_group_egress_rule" "runner" {
@@ -78,7 +79,7 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "runner" {
-  name                 = "${var.name}-runner"
+  name                 = "${local.name}-runner"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = var.controlplane.boundary_arn
   tags                 = local.tags
@@ -107,13 +108,13 @@ resource "aws_iam_role_policy_attachment" "runner_ssm" {
 }
 
 resource "aws_iam_instance_profile" "runner" {
-  name = "${var.name}-runner"
+  name = "${local.name}-runner"
   role = aws_iam_role.runner.name
   tags = local.tags
 }
 
 resource "aws_launch_template" "runner" {
-  name_prefix            = "${var.name}-runner-"
+  name_prefix            = "${local.name}-runner-"
   image_id               = data.aws_ami.ubuntu.id
   vpc_security_group_ids = [aws_security_group.runner.id]
   update_default_version = true
@@ -178,19 +179,19 @@ resource "aws_launch_template" "runner" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.tags, { Name = "${var.name}-runner" })
+    tags          = merge(local.tags, { Name = "${local.name}-runner" })
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${var.name}-runner" })
+    tags          = merge(local.tags, { Name = "${local.name}-runner" })
   }
   tags = local.tags
 }
 
 resource "aws_autoscaling_group" "runner" {
-  name                = "${var.name}-runners"
+  name                = "${local.name}-runners"
   vpc_zone_identifier = var.controlplane.subnet_ids
-  # From none, and sized by the control plane (internal/domain/autoscale): it starts a host when
+  # From none, and sized by the control plane (spin's internal/domain/autoscale): it starts a host when
   # a workspace waits for one and empties the group when nothing runs. Terraform sets neither
   # the size nor the name's contract with the control plane module, ${name}-runners, can change.
   min_size = 0
@@ -233,7 +234,7 @@ resource "aws_autoscaling_group" "runner" {
   }
 
   dynamic "tag" {
-    for_each = merge(local.tags, { Name = "${var.name}-runner" })
+    for_each = merge(local.tags, { Name = "${local.name}-runner" })
     content {
       key                 = tag.key
       value               = tag.value

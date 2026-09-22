@@ -4,7 +4,11 @@
 #
 #   tofu init && tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123
 #
-# This is also what `task lint:terraform` validates the two modules through.
+# From elsewhere, the source is this repository at a tag:
+#
+#   source = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
+#
+# This is also what `task lint` validates the modules through.
 
 terraform {
   required_version = ">= 1.8"
@@ -39,8 +43,8 @@ provider "aws" {
   region = var.region
 }
 
-module "controlplane" {
-  source          = "../controlplane"
+module "spin" {
+  source          = "../.."
   spin_version    = var.spin_version
   domain          = var.domain
   route53_zone_id = var.zone
@@ -48,19 +52,14 @@ module "controlplane" {
   runner_idle_minutes = 60
   quiet_hours         = "20:00-07:00"
   time_zone           = "America/Argentina/Buenos_Aires"
-}
-
-module "runners" {
-  source       = "../runners"
-  controlplane = module.controlplane
-  max_hosts    = 1
+  max_runners         = 1
 }
 
 output "dashboard" {
-  value = "https://app.${var.domain}"
+  value = module.spin.dashboard
 }
 
 output "controlplane_group" {
   description = "The control plane's group of one: its machine is the one instance in it, reached with aws ssm start-session --target <instance>, then: sudo spin-controlplane bootstrap-password"
-  value       = module.controlplane.controlplane_group
+  value       = module.spin.controlplane_group
 }

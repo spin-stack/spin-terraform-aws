@@ -1,7 +1,7 @@
 # Public subnets and no NAT gateway. A NAT is $32 a month plus a charge per GB before anything
 # runs, and nothing here needs one: every machine has its own public address, and the bucket is
 # reached through the gateway endpoint, which is free and keeps volume traffic off the internet.
-# Nothing listens on a runner (docs/network/README.md), and the control plane answers nothing
+# Nothing listens on a runner (spin's docs/network/README.md), and the control plane answers nothing
 # from the internet either: its public address is a way out. The proxy, on a machine of its
 # own, is the one thing the internet reaches — 80 and 443 — and the control plane's 8080 is
 # the proxy's and the runners' alone.

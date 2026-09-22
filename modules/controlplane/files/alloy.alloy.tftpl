@@ -11,7 +11,7 @@ logging {
   level = "warn"
 }
 
-// What the admin decided (internal/domain/telemetrypolicy): {"traces_keep_percent": 0-100,
+// What the admin decided (spin's internal/domain/telemetrypolicy): {"traces_keep_percent": 0-100,
 // "traces_slow_ms": n, "drop_metrics": [OTTL conditions]}. Until the control plane has answered
 // once, nothing here evaluates and Alloy exits, which systemd restarts it from; after, a control
 // plane that does not answer leaves the last answer in force.

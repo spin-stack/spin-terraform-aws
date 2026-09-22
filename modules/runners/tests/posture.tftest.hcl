@@ -22,6 +22,7 @@ override_data {
 
 variables {
   controlplane = {
+    name                       = "spin"
     vpc_id                     = "vpc-00000000000000000"
     subnet_ids                 = ["subnet-00000000000000000"]
     security_group_id          = "sg-00000000000000000"
@@ -88,6 +89,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
   command = plan
   variables {
     controlplane = {
+      name                       = "spin"
       vpc_id                     = "vpc-00000000000000000"
       subnet_ids                 = ["subnet-00000000000000000"]
       security_group_id          = "sg-00000000000000000"

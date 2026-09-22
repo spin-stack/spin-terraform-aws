@@ -1,7 +1,7 @@
 # Two roles. The control plane's instance role opens the bucket and publishes to SSM. The
 # runner-scope role is what it assumes to mint each runner's credential (--s3-role-arn): for an
 # hour, narrowed by a session policy to the volumes that runner serves
-# (internal/server/volumeserver/storagecreds.go). Its own permissions are the widest that
+# (spin's internal/server/volumeserver/storagecreds.go). Its own permissions are the widest that
 # session policy ever asks for, so the narrowing is the control plane's and the ceiling is here.
 
 data "aws_iam_policy_document" "ec2_assume" {

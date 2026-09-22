@@ -1,0 +1,39 @@
+version: '3'
+
+vars:
+  TOOLS_BIN: '{{.ROOT_DIR}}/.tools/bin'
+  # OpenTofu, a release zip checked against this digest: the one in the release's
+  # tofu_<version>_SHA256SUMS.
+  TOFU_VERSION: 1.12.6
+  TOFU_SHA256: 5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
+
+tasks:
+  tools:tofu:
+    desc: Install the pinned OpenTofu.
+    status:
+      - test -x {{.TOOLS_BIN}}/tofu && {{.TOOLS_BIN}}/tofu version | grep -q 'v{{.TOFU_VERSION}}$'
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/tofu.zip https://github.com/opentofu/opentofu/releases/download/v{{.TOFU_VERSION}}/tofu_{{.TOFU_VERSION}}_linux_amd64.zip
+      - echo "{{.TOFU_SHA256}}  {{.TOOLS_BIN}}/tofu.zip" | sha256sum --check --quiet
+      - unzip -oq {{.TOOLS_BIN}}/tofu.zip tofu -d {{.TOOLS_BIN}}
+      - rm {{.TOOLS_BIN}}/tofu.zip
+
+  lint:
+    desc: Format-check and validate the module and the example, and hold each module to its tests.
+    deps: [tools:tofu]
+    # Nothing else parses these, and nothing runs them but an apply against an account — so a
+    # module that stopped validating is found by the operator it was written for. The provider
+    # is the one each lock file pins, cached under .tools so a second run downloads nothing.
+    env:
+      TF_PLUGIN_CACHE_DIR: "{{.ROOT_DIR}}/.tools/tofu-plugins"
+    cmds:
+      - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
+      - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
+      - for: ['.', examples/complete]
+        cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
+      # What each module promises about who reaches what — the proxy the only machine the
+      # internet reaches, no role able to write IAM or read another's secrets — asserted
+      # against its plan, with no account.
+      - for: [modules/controlplane, modules/runners]
+        cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"

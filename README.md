@@ -1,17 +1,34 @@
 # spin on AWS
 
-Two modules, and `example/` composing them into an installation.
+A [spin](https://github.com/spin-stack/spin) installation on AWS, as one module:
 
-- **`controlplane/`** — the VPC, the bucket, the control plane's machine, the proxy's on its
-  own, and where runners find what they join with. `spin-install control-plane` and
-  `spin-install proxy` do the installing; this module gives them machines, roles and a bucket
-  that already satisfy them.
-- **`runners/`** — an autoscaling group of runners that join by themselves, spot by default,
-  that the control plane sizes: none until a workspace waits for a host, and none again once
-  nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`).
+```hcl
+module "spin" {
+  source       = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
+  spin_version = "v20260921.02"
+  domain       = "example.com"
+}
+```
+
+The root composes two modules, and each can be used on its own
+(`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
+not expose what an installation needs to decide:
+
+- **`modules/controlplane`** — the VPC, the bucket, the catalog on RDS, the control plane's
+  machine, the proxy's on its own, and where runners find what they join with.
+  `spin-install control-plane` and `spin-install proxy` do the installing; this module gives
+  them machines, roles and a bucket that already satisfy them.
+- **`modules/runners`** — an autoscaling group of runners that join by themselves, spot by
+  default, that the control plane sizes: none until a workspace waits for a host, and none again
+  once nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`). It takes the
+  control plane module's outputs whole, its name among them.
+
+A variable of the root left unset is the module's own default: each defaults to null, which
+the modules read as their default, so a default is said once. `examples/complete` is an
+installation, and what `task lint` validates the modules through.
 
 ```bash
-cd example
+cd examples/complete
 tofu init
 tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123456789
 aws ssm start-session --target "$(aws autoscaling describe-auto-scaling-groups \
@@ -92,7 +109,7 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   the sidebar links to it and each host and workspace links to its traces and logs in Explore.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above — the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
-  their boundary — and `task lint:terraform` runs it with the rest of `task lint`.
+  their boundary — and `task lint` runs it with the format check and validation, in CI on every push.
 - **The bucket answers object requests only through that endpoint.** A runner's credential is
   minted by the control plane for an hour and scoped to its volumes; copied off the machine,
   it opens nothing. Bucket-level calls stay open to the account, so this module can still be

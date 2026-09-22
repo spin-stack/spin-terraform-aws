@@ -1,3 +1,8 @@
+output "name" {
+  description = "The installation's name, which the runners' group, role and SSM path are named for."
+  value       = var.name
+}
+
 output "vpc_id" {
   description = "The VPC the runners go in."
   value       = aws_vpc.this.id
