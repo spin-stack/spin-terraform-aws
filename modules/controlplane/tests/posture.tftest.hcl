@@ -171,6 +171,14 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     g.wait_for_capacity_timeout == "0"])
     error_message = "an apply waits for a machine, so a slow boot has the next one destroy the group"
   }
+  # A hook the provider gives at creation and never reads back reads as absent, and it answers
+  # that by replacing the group: taking the installation down to change nothing.
+  # lifecycle is not an attribute a plan can be asked about, so the files are.
+  assert {
+    condition = alltrue([for f in ["instance.tf", "proxy.tf"] :
+    strcontains(file("${path.module}/${f}"), "ignore_changes = [initial_lifecycle_hook]")])
+    error_message = "a hook nothing reads back can have the group replaced under the installation"
+  }
   # The new control plane takes its name before the term, and says it serves only once it
   # leads; a proxy takes the address once Caddy answers.
   assert {

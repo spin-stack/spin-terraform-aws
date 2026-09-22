@@ -184,6 +184,13 @@ resource "aws_autoscaling_group" "controlplane" {
     default_result    = "ABANDON"
   }
 
+  # The hook is given at creation and never read back, so a group that has one reads as a group
+  # with none - and the provider answers a hook it cannot see by replacing the group, which
+  # takes the installation down to change nothing. The group's own hook is the authority.
+  lifecycle {
+    ignore_changes = [initial_lifecycle_hook]
+  }
+
   dynamic "tag" {
     for_each = merge(local.tags, { Name = "${var.name}-controlplane" })
     content {

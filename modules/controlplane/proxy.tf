@@ -307,6 +307,12 @@ resource "aws_autoscaling_group" "proxy" {
     default_result       = "ABANDON"
   }
 
+  # As the control plane's: a hook nothing reads back is not a reason to replace the group
+  # (instance.tf).
+  lifecycle {
+    ignore_changes = [initial_lifecycle_hook]
+  }
+
   dynamic "tag" {
     for_each = merge(local.tags, { Name = "${var.name}-proxy" })
     content {
