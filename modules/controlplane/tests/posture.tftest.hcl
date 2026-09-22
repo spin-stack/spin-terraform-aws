@@ -197,6 +197,17 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     "autoscaling record-lifecycle-action-heartbeat")
     error_message = "there is nothing for a boot to beat with"
   }
+  # The installation's config is read by the control plane's own user, so it is given to that
+  # user and passed by name: a redirection hands the command root's descriptor, which it cannot
+  # open, and the file is 0600 because it is the operator's.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "chown --reference=/var/lib/spin-stack /etc/spin-stack/installation.yaml\nspin-controlplane config apply /etc/spin-stack/installation.yaml") &&
+      !strcontains(local.controlplane_user_data, "config apply /dev/stdin") &&
+      local.controlplane_files["/etc/spin-stack/installation.yaml"].mode == "0600"
+    )
+    error_message = "the installation's config is handed to the control plane as a descriptor it cannot open, or left readable by anyone"
+  }
   # The new control plane takes its name before the term, and says it serves only once it
   # leads; a proxy takes the address once Caddy answers.
   assert {

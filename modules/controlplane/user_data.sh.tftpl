@@ -100,7 +100,14 @@ SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
   --trusted-proxy '${trusted_proxies}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
-spin-controlplane config apply /dev/stdin </etc/spin-stack/installation.yaml
+# By name, and as the control plane's own user: the command runs as that user (spin-install
+# writes the wrapper that way), so a redirection hands it a descriptor of root's that it cannot
+# open. The file stays 0600 - it is the operator's, and may hold what the installation is
+# registered with - and belongs to the one account that reads it.
+# Whoever owns the state directory systemd made for the service is that user, named once by
+# spin-install and not again here.
+chown --reference=/var/lib/spin-stack /etc/spin-stack/installation.yaml
+spin-controlplane config apply /etc/spin-stack/installation.yaml
 
 # --- publish ---------------------------------------------------------------------------------
 aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
