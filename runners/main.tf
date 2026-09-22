@@ -160,8 +160,13 @@ resource "aws_launch_template" "runner" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh.tftpl", {
-    region          = data.aws_region.current.region
-    spin_version    = var.spin_version
+    region = data.aws_region.current.region
+    # The control plane module's, rendered with this group's release: one way a machine of the
+    # installation checks what it runs, the two modules being one installation's.
+    fetch_release = templatefile("${path.module}/../controlplane/files/fetch-release.sh.tftpl", {
+      spin_version = var.spin_version
+      cosign       = var.controlplane.cosign
+    })
     controlplane    = var.controlplane.url
     token_parameter = var.controlplane.token_parameter
     ca_parameter    = var.controlplane.ca_parameter

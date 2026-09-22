@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh the Grafana Cloud token every five minutes
+
+[Timer]
+OnUnitActiveSec=5min
+OnBootSec=1min
+
+[Install]
+WantedBy=timers.target

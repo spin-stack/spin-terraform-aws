@@ -62,6 +62,6 @@ output "dashboard" {
 }
 
 output "controlplane_instance" {
-  description = "aws ssm start-session --target <this>, then: sudo docker exec spin-controlplane controlplane bootstrap-password"
+  description = "aws ssm start-session --target <this>, then: sudo spin-controlplane bootstrap-password"
   value       = module.controlplane.instance_id
 }

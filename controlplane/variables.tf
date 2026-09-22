@@ -54,12 +54,50 @@ variable "availability_zones" {
   description = "How many zones to make subnets in. The control plane uses the first; runners spread across all, which is what gives a spot group somewhere to go when one zone runs out."
   type        = number
   default     = 3
+  validation {
+    condition     = var.availability_zones >= 2 && var.availability_zones <= 8
+    error_message = "availability_zones is 2 to 8: RDS takes a subnet in two zones at least, and the VPC's range has room for eight."
+  }
 }
 
 variable "instance_type" {
-  description = "The control plane's machine: Postgres and the control plane under Compose, and nothing the internet reaches or that runs a workspace."
+  description = "The control plane's machine: the control plane, and the collector where there is one. Its database is RDS, so it is small; t3.small where Alloy ships a busy fleet's telemetry."
   type        = string
-  default     = "t3.medium"
+  default     = "t3.micro"
+}
+
+variable "database" {
+  description = <<-EOT
+    The catalog's RDS instance. db.t4g.micro and 20 GB are the free tier's where the account has
+    one; the catalog is rows about workspaces and volumes, not their data, which is the bucket's.
+    deletion_protection keeps a destroy from taking it: turn it off, apply, then destroy.
+  EOT
+  type = object({
+    engine_version        = optional(string, "18")
+    instance_class        = optional(string, "db.t4g.micro")
+    storage_gb            = optional(number, 20)
+    max_storage_gb        = optional(number, 100)
+    multi_az              = optional(bool, false)
+    backup_retention_days = optional(number, 7)
+    deletion_protection   = optional(bool, true)
+  })
+  default = {}
+}
+
+variable "cosign" {
+  description = "The cosign every machine checks the release's tarballs with, pinned by the SHA-256 of its linux-amd64 binary: the one thing a machine runs before anything is verified."
+  type = object({
+    version = string
+    sha256  = string
+  })
+  default = {
+    version = "3.1.3"
+    sha256  = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+  }
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.cosign.sha256))
+    error_message = "cosign.sha256 is 64 hex digits."
+  }
 }
 
 variable "flow_logs" {
@@ -97,19 +135,7 @@ variable "proxy_allowed_cidrs" {
 variable "proxy_instance_type" {
   description = "The proxy's machine: Caddy and nothing else, the one address the internet reaches."
   type        = string
-  default     = "t3.small"
-}
-
-variable "data_volume_gb" {
-  description = "The volume /etc/spin-stack and /var/lib/spin-stack live on: the database, the encryption key and the CA. It outlives the instance."
-  type        = number
-  default     = 50
-}
-
-variable "snapshot_retention_days" {
-  description = "Daily snapshots of the data volume kept. Beside them the control plane writes a backup of the catalog into the bucket every hour."
-  type        = number
-  default     = 7
+  default     = "t3.micro"
 }
 
 variable "object_lock_days" {

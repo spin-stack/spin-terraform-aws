@@ -79,11 +79,24 @@ data "aws_iam_policy_document" "controlplane" {
     resources = [aws_iam_role.runner_scope.arn]
   }
   # The pool's token and the CA, which it publishes for runners, and the encryption key, which
-  # it backs up there on its first start and reads back on a volume that lost it.
+  # it backs up there on its first start and every later machine reads back.
   statement {
     sid       = "Publish"
     actions   = ["ssm:GetParameter", "ssm:PutParameter"]
     resources = ["${local.ssm_prefix}/*"]
+  }
+  # The catalog, as spin and as nobody else: an IAM token for that one database user.
+  statement {
+    sid       = "SignInToTheCatalog"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${local.region}:${local.account}:dbuser:${aws_db_instance.catalog.resource_id}/spin"]
+  }
+  # The master's password, which the first boot uses to make that user. RDS keeps it and the
+  # machine reads it; nothing else of Secrets Manager.
+  statement {
+    sid       = "MakeTheCatalogsUser"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.catalog.master_user_secret[0].secret_arn]
   }
 }
 

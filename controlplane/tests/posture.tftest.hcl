@@ -44,8 +44,13 @@ override_resource {
 }
 
 override_resource {
-  target = aws_ebs_volume.data
-  values = { id = "vol-0123456789abcdef0" }
+  target = aws_db_instance.catalog
+  values = {
+    address            = "spin-catalog.c1a2b3c4d5e6.us-east-2.rds.amazonaws.com"
+    port               = 5432
+    resource_id        = "db-ABCDEFGHIJKLMNOP"
+    master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc", kms_key_id = "", secret_status = "active" }]
+  }
 }
 
 variables {
@@ -102,11 +107,11 @@ run "the_machines" {
     error_message = "a machine answers IMDSv1"
   }
   assert {
-    condition     = aws_instance.proxy.metadata_options[0].http_put_response_hop_limit == 1
-    error_message = "the proxy's container can reach the instance's role"
+    condition     = aws_instance.proxy.metadata_options[0].http_put_response_hop_limit == 1 && aws_instance.controlplane.metadata_options[0].http_put_response_hop_limit == 1
+    error_message = "the instance's role is reachable from further than the machine itself"
   }
   assert {
-    condition     = aws_instance.controlplane.root_block_device[0].encrypted && aws_instance.proxy.root_block_device[0].encrypted && aws_ebs_volume.data.encrypted
+    condition     = aws_instance.controlplane.root_block_device[0].encrypted && aws_instance.proxy.root_block_device[0].encrypted && aws_db_instance.catalog.storage_encrypted
     error_message = "a disk is not encrypted"
   }
   assert {
@@ -181,7 +186,7 @@ run "the_roles" {
   assert {
     condition = alltrue([for arn in [
       aws_iam_role.controlplane.permissions_boundary, aws_iam_role.runner_scope.permissions_boundary,
-      aws_iam_role.proxy.permissions_boundary, aws_iam_role.dlm.permissions_boundary,
+      aws_iam_role.proxy.permissions_boundary,
       aws_iam_role.flow[0].permissions_boundary,
     ] : arn == "arn:aws:iam::123456789012:policy/spin-boundary"])
     error_message = "a role carries no boundary"
@@ -248,7 +253,7 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "sha256sum --check") && strcontains(aws_instance.controlplane.user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
+    condition     = strcontains(aws_instance.controlplane.user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && strcontains(aws_instance.controlplane.user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {
@@ -258,6 +263,60 @@ run "a_collector_when_asked" {
   assert {
     condition     = !strcontains(aws_instance.controlplane.user_data, "glc_") && strcontains(aws_instance.controlplane.user_data, "/spin/grafana-cloud-token")
     error_message = "the token is in the user data rather than read from SSM"
+  }
+  # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
+  assert {
+    condition     = length(aws_instance.controlplane.user_data) < 16384
+    error_message = "the control plane's user data is over the 16 KiB EC2 takes"
+  }
+}
+
+# The catalog is RDS where only the control plane reaches it, and no password of it is in the
+# plan: the master's is RDS's own in Secrets Manager, and the control plane signs in with a token.
+run "the_catalog" {
+  command = plan
+
+  assert {
+    condition     = !aws_db_instance.catalog.publicly_accessible && aws_db_instance.catalog.manage_master_user_password && aws_db_instance.catalog.iam_database_authentication_enabled && aws_db_instance.catalog.password == null
+    error_message = "the catalog is reachable from outside, or has a password this plan knows"
+  }
+  assert {
+    condition     = length(aws_subnet.database) >= 2 && alltrue([for s in aws_subnet.database : !s.map_public_ip_on_launch])
+    error_message = "the catalog's subnets give out public addresses, or are fewer than the two zones RDS takes"
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.database_from_controlplane.from_port == 5432 && aws_vpc_security_group_ingress_rule.database_from_controlplane.cidr_ipv4 == null
+    error_message = "the catalog takes connections from an address range rather than the control plane"
+  }
+  assert {
+    condition     = aws_db_instance.catalog.deletion_protection && !aws_db_instance.catalog.skip_final_snapshot && aws_db_instance.catalog.backup_retention_period >= 7
+    error_message = "the catalog can be destroyed without a snapshot, or keeps less than a week to restore to"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    contains(s.actions, "rds-db:connect") && s.resources == toset(["arn:aws:rds-db:us-east-2:123456789012:dbuser:db-ABCDEFGHIJKLMNOP/spin"])])
+    error_message = "the control plane signs in to the catalog as something other than spin"
+  }
+  assert {
+    condition     = strcontains(aws_instance.controlplane.user_data, "--database-auth aws-iam") && strcontains(aws_instance.controlplane.user_data, "sslmode=verify-full")
+    error_message = "the control plane signs in with a password, or does not check the catalog's certificate"
+  }
+}
+
+# Every machine runs what the release workflow signed, checked with a cosign pinned by its hash,
+# and nothing that is an image.
+run "the_machines_run_what_the_release_signed" {
+  command = plan
+
+  assert {
+    condition = alltrue([for u in [aws_instance.controlplane.user_data, aws_instance.proxy.user_data] :
+      strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/v20260921.02") &&
+    strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")])
+    error_message = "a machine runs what it has not checked against the release's signature, or runs a container"
+  }
+  assert {
+    condition     = strcontains(aws_instance.controlplane.user_data, "release spin-controlplane-linux-amd64.tar.gz") && strcontains(aws_instance.proxy.user_data, "release spin-proxy-linux-amd64.tar.gz")
+    error_message = "a machine unpacks another role's tarball"
   }
   # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
   assert {

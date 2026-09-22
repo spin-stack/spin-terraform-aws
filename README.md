@@ -15,7 +15,7 @@ cd example
 tofu init
 tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123456789
 aws ssm start-session --target "$(tofu output -raw controlplane_instance)"
-sudo docker exec spin-controlplane controlplane bootstrap-password   # then https://app.<domain>
+sudo spin-controlplane bootstrap-password   # then https://app.<domain>
 ```
 
 ## What it decides, and why
@@ -93,10 +93,23 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
   runner reads the lifecycle state from the metadata service and suspends its workspaces to
   the bucket, where they resume on the next host. A spot reclaim is the same with a two-minute
   notice, and capacity rebalancing starts the replacement first.
-- **The control plane's data outlives its machine.** `/etc/spin-stack` and `/var/lib/spin-stack`
-  are on their own volume, snapshotted daily, and the encryption key is copied to SSM on the
-  first start. The volume has `prevent_destroy`, so `tofu destroy` refuses until that line is
-  removed; the key's parameter is not Terraform's at all, and outlives any destroy.
+- **The catalog is RDS, and the control plane's machine holds nothing it cannot get back.**
+  PostgreSQL 18 on `db.t4g.micro` (`database`), in subnets of its own with no route out of the
+  VPC, taking 5432 from the control plane's group alone, with a week of backups and deletion
+  protection; beside it the control plane writes an hourly catalog backup into the bucket. No
+  password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
+  once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
+  role signs and owns the database. The encryption key that opens what the catalog seals is in
+  SSM from the first start on — not Terraform's, and it outlives any destroy — so a replaced
+  control plane reads it back and serves the same catalog.
+- **Every machine runs what the release workflow signed.** Each downloads cosign by the SHA-256
+  this module pins (`cosign`), then its tarball and that tarball's bundle, and unpacks nothing
+  that is not signed by `release.yml` at the version's tag. Nothing is a container: each role
+  is a binary under systemd, as its own user.
+- **Small machines.** The control plane and the proxy are `t3.micro` by default: with the
+  catalog on RDS, the control plane is the control plane alone (and Alloy, where there is a
+  collector — `t3.small` there for a busy fleet). Two of them and the database are the whole
+  standing cost when no runner is up.
 
 Hosts outside the group are still added the ordinary way — a one-time token from Admin → Hosts
 and `spin-install runner` — and are policed by the same control plane.

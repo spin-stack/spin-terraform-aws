@@ -30,6 +30,10 @@ variable "controlplane" {
     proxy_private_ip    = string
     collector           = string
     metric_interval     = string
+    cosign = object({
+      version = string
+      sha256  = string
+    })
   })
 }
 

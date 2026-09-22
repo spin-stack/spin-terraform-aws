@@ -37,6 +37,7 @@ variables {
     proxy_private_ip    = "10.42.0.11"
     collector           = ""
     metric_interval     = ""
+    cosign              = { version = "3.1.3", sha256 = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71" }
   }
 }
 
@@ -69,6 +70,14 @@ run "a_runner_is_reached_by_nothing" {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"
   }
+  # Its installer is what the release workflow signed at this group's release, checked before
+  # it runs.
+  assert {
+    condition = alltrue([for want in ["release spin-install-linux-amd64", "cosign verify-blob",
+      "release.yml@refs/tags/v20260921.02", "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"] :
+    strcontains(base64decode(aws_launch_template.runner.user_data), want)])
+    error_message = "a runner runs an installer it has not checked against the release's signature"
+  }
 }
 
 run "a_runner_pushes_to_the_collector_where_there_is_one" {
@@ -89,6 +98,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
       proxy_private_ip    = "10.42.0.11"
       collector           = "cp.spin.internal:4317"
       metric_interval     = "60s"
+      cosign              = { version = "3.1.3", sha256 = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71" }
     }
   }
   assert {

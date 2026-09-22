@@ -13,6 +13,11 @@ output "security_group_id" {
   value       = aws_security_group.controlplane.id
 }
 
+output "cosign" {
+  description = "The cosign every machine checks the release with, and its pinned SHA-256: the runners' too."
+  value       = var.cosign
+}
+
 output "url" {
   description = "The control plane as runners reach it, the address its certificate names."
   value       = local.url

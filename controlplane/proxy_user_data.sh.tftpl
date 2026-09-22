@@ -1,14 +1,16 @@
 #!/bin/bash
-# The proxy's first boot: wait for the CA the control plane publishes, then spin-install proxy.
+# The proxy's first boot: its tarball, checked and unpacked; the CA the control plane publishes;
+# then spin-install proxy.
 set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 
 export PATH="/snap/bin:$PATH"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -q
-apt-get install -yq docker.io docker-compose-v2
-systemctl enable --now docker
 snap install aws-cli --classic
+
+${fetch_release}
+cd "$(mktemp -d)"
+release spin-proxy-linux-amd64.tar.gz
+tar -xzf spin-proxy-linux-amd64.tar.gz -C /
 
 # The control plane's first start publishes it, and is serving by then.
 ca=''
@@ -23,13 +25,6 @@ if [ -z "$ca" ] || [ "$ca" = '${unpublished}' ]; then
 fi
 install -d -m 0755 /etc/spin-bootstrap
 printf '%s\n' "$ca" >/etc/spin-bootstrap/ca.crt
-
-cd "$(mktemp -d)"
-base='https://github.com/spin-stack/spin/releases/download/${spin_version}'
-curl -fsSLO "$base/spin-install-linux-amd64"
-curl -fsSLO "$base/checksums.txt"
-sha256sum --check --ignore-missing checksums.txt
-install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 
 spin-install proxy --control-plane '${controlplane}' --ca /etc/spin-bootstrap/ca.crt \
   --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif } \

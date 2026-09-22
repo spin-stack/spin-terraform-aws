@@ -67,6 +67,10 @@ data "aws_iam_policy_document" "boundary" {
       "s3:PutBucketObjectLockConfiguration", "s3:DeleteBucket",
       "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
       "cloudtrail:*", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "ec2:DeleteFlowLogs",
+      # The catalog, and what would bring it back: a taken machine signs in to the database as
+      # the control plane does, and no further.
+      "rds:Delete*", "rds:Modify*", "rds:Reboot*", "rds:Stop*", "rds:RestoreDB*", "rds:CopyDBSnapshot",
+      "rds:ModifyDBSnapshotAttribute",
     ]
     resources = ["*"]
   }

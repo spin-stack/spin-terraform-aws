@@ -1,0 +1,11 @@
+#!/bin/bash
+# The Grafana Cloud token, from SSM into a file only alloy reads. Alloy reads the file again when
+# it changes, so a token rotated in SSM is in use within the timer's five minutes, with no restart.
+set -euo pipefail
+token=$(/snap/bin/aws --region '${region}' ssm get-parameter --name '${grafana_token_parameter}' \
+  --with-decryption --query Parameter.Value --output text)
+file=$(mktemp /etc/alloy/.token.XXXXXX)
+printf '%s' "$token" >"$file"
+chown root:alloy "$file"
+chmod 0640 "$file"
+mv -f "$file" /etc/alloy/grafana-cloud-token

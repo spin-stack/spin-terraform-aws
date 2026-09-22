@@ -1,9 +1,7 @@
-# One machine, and a volume that outlives it. Everything the installation cannot lose is on the
-# volume — /etc/spin-stack (the encryption key, the database's password) and /var/lib/spin-stack
-# (Postgres, the CA) — so a replaced instance mounts it and the installer, run again, keeps what
-# is there. The encryption key is also copied to SSM on the first start: with it and the hourly
-# catalog backup in the bucket, a lost volume is `controlplane catalog restore`, not a new
-# installation.
+# One machine that holds nothing the installation cannot lose. The catalog is RDS (rds.tf), the
+# CA and the KEK are sealed in it, and the encryption key that opens them is in SSM from the
+# first start on: a replaced instance reads the key back, installs the same release and serves
+# the same catalog.
 
 # The newest of Canonical's own images of the release: owned by Canonical's account, so a
 # public image named like one is not picked up.
@@ -49,6 +47,14 @@ locals {
   # The group the runners module makes; its name is the contract between the two modules.
   runner_group = "${var.name}-runners"
 
+  # How every machine of the installation gets a release file: cosign by its pinned SHA-256,
+  # then the file and its bundle, verified against this repository's release workflow at the
+  # version's tag before anything in it runs. Defines `release <file>`.
+  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", {
+    spin_version = var.spin_version
+    cosign       = var.cosign
+  })
+
   # The operator's config file, with the settings the control plane sizes the runners by.
   operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
   installation = merge(local.operator, {
@@ -63,17 +69,6 @@ locals {
   })
 }
 
-resource "aws_ebs_volume" "data" {
-  availability_zone = local.zones[0]
-  size              = var.data_volume_gb
-  type              = "gp3"
-  encrypted         = true
-  tags              = merge(local.tags, { Name = "${var.name}-controlplane-data", "spin:snapshot" = var.name })
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 resource "aws_instance" "controlplane" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
@@ -84,44 +79,35 @@ resource "aws_instance" "controlplane" {
 
   metadata_options {
     http_tokens = "required"
-    # Two hops: the control plane runs in a container, and its SDK reaches the instance role
-    # through the bridge. One hop and it finds no credentials, and the store is refused.
-    http_put_response_hop_limit = 2
+    # One hop: every process that asks for the role's credentials is on the machine itself.
+    http_put_response_hop_limit = 1
   }
 
   root_block_device {
     volume_type = "gp3"
-    volume_size = 30
+    volume_size = 20
     encrypted   = true
   }
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    name                    = var.name
-    region                  = local.region
-    spin_version            = var.spin_version
-    cp_host                 = local.cp_host
-    proxy_ip                = local.proxy_ip
-    bucket                  = aws_s3_bucket.volumes.bucket
-    role_arn                = aws_iam_role.runner_scope.arn
-    data_volume             = aws_ebs_volume.data.id
-    token_parameter         = local.token_parameter
-    ca_parameter            = local.ca_parameter
-    key_parameter           = local.key_parameter
-    pool_flags              = join(" ", var.pool_token_flags)
-    rotation                = var.pool_token_rotation
-    installation            = yamlencode(local.installation)
-    collector               = local.collector
-    metric_interval         = local.metric_interval
-    alloy_version           = local.telemetry ? var.grafana_cloud.alloy_version : ""
-    alloy_sha256            = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
-    grafana_token_parameter = local.token_parameter_grafana
-    alloy_config = local.telemetry ? templatefile("${path.module}/alloy.alloy.tftpl", {
-      listen        = local.private_ip
-      otlp_endpoint = var.grafana_cloud.otlp_endpoint
-      instance_id   = var.grafana_cloud.instance_id
-      log_severity  = var.grafana_cloud.log_severity
-    }) : ""
-    token_expiry = "${tonumber(trimsuffix(var.pool_token_rotation, "h")) * 4}h"
+    name          = var.name
+    region        = local.region
+    fetch_release = local.fetch_release
+    write_files   = local.controlplane_write_files
+    cp_host       = local.cp_host
+    proxy_ip      = local.proxy_ip
+    bucket        = aws_s3_bucket.volumes.bucket
+    role_arn      = aws_iam_role.runner_scope.arn
+    database_host = aws_db_instance.catalog.address
+    database_url  = local.database_url
+    # The secret's ARN, which is not the secret: the machine reads it with its role, once.
+    database_admin  = aws_db_instance.catalog.master_user_secret[0].secret_arn
+    key_parameter   = local.key_parameter
+    ca_parameter    = local.ca_parameter
+    collector       = local.collector
+    metric_interval = local.metric_interval
+    alloy_version   = local.telemetry ? var.grafana_cloud.alloy_version : ""
+    alloy_sha256    = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
   })
 
   tags = merge(local.tags, { Name = "${var.name}-controlplane" })
@@ -143,13 +129,8 @@ resource "aws_instance" "controlplane" {
     # Its own collector is dialled by name, and so is it by everything that waits for it.
     aws_route53_record.internal,
     aws_vpc_endpoint.s3,
+    aws_vpc_security_group_egress_rule.controlplane_to_database,
   ]
-}
-
-resource "aws_volume_attachment" "data" {
-  device_name = "/dev/sdf"
-  volume_id   = aws_ebs_volume.data.id
-  instance_id = aws_instance.controlplane.id
 }
 
 # Where the control plane publishes what a runner needs to join, created here so the runners'
@@ -174,49 +155,4 @@ resource "aws_ssm_parameter" "ca" {
   lifecycle {
     ignore_changes = [value]
   }
-}
-
-data "aws_iam_policy_document" "dlm_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["dlm.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "dlm" {
-  name                 = "${var.name}-dlm"
-  assume_role_policy   = data.aws_iam_policy_document.dlm_assume.json
-  permissions_boundary = aws_iam_policy.boundary.arn
-  tags                 = local.tags
-}
-
-resource "aws_iam_role_policy_attachment" "dlm" {
-  role       = aws_iam_role.dlm.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole"
-}
-
-resource "aws_dlm_lifecycle_policy" "data" {
-  description        = "${var.name} control plane data volume"
-  execution_role_arn = aws_iam_role.dlm.arn
-  state              = "ENABLED"
-  policy_details {
-    resource_types = ["VOLUME"]
-    target_tags    = { "spin:snapshot" = var.name }
-    schedule {
-      name = "daily"
-      create_rule {
-        interval      = 24
-        interval_unit = "HOURS"
-        times         = ["05:00"]
-      }
-      retain_rule {
-        count = var.snapshot_retention_days
-      }
-      copy_tags = true
-    }
-  }
-  tags = local.tags
 }

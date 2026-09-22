@@ -64,11 +64,9 @@ done
 [ -n "$data" ] || { echo "no empty disk of model '$model' for the runner's data"; exit 1; }
 uplink=$(ip -o route show default | awk '{print $5; exit}')
 
+${fetch_release}
 cd "$(mktemp -d)"
-base='https://github.com/spin-stack/spin/releases/download/${spin_version}'
-curl -fsSLO "$base/spin-install-linux-amd64"
-curl -fsSLO "$base/checksums.txt"
-sha256sum --check --ignore-missing checksums.txt
+release spin-install-linux-amd64
 install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 
 spin-install runner \

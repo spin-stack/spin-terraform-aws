@@ -51,7 +51,7 @@ resource "aws_instance" "proxy" {
 
   metadata_options {
     http_tokens = "required"
-    # One hop: Caddy in its container has no business with the instance's role.
+    # One hop: nothing but the machine itself asks for the instance's role.
     http_put_response_hop_limit = 1
   }
 
@@ -63,7 +63,7 @@ resource "aws_instance" "proxy" {
 
   user_data = templatefile("${path.module}/proxy_user_data.sh.tftpl", {
     region          = local.region
-    spin_version    = var.spin_version
+    fetch_release   = local.fetch_release
     domain          = var.domain
     acme_email      = var.acme_email
     controlplane    = local.url
