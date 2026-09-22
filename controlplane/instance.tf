@@ -171,9 +171,10 @@ data "aws_iam_policy_document" "dlm_assume" {
 }
 
 resource "aws_iam_role" "dlm" {
-  name               = "${var.name}-dlm"
-  assume_role_policy = data.aws_iam_policy_document.dlm_assume.json
-  tags               = local.tags
+  name                 = "${var.name}-dlm"
+  assume_role_policy   = data.aws_iam_policy_document.dlm_assume.json
+  permissions_boundary = aws_iam_policy.boundary.arn
+  tags                 = local.tags
 }
 
 resource "aws_iam_role_policy_attachment" "dlm" {

@@ -1,0 +1,80 @@
+# The most any role of the installation may ever do, whatever is attached to it later: a
+# permissions boundary on every role both modules make. Each role's own policy is what it may
+# do; this is what nobody can grant it, by mistake or from a machine that was taken — a role
+# that writes IAM makes itself any role, one that edits the network opens the control plane to
+# the internet, and one that runs commands through SSM is on every other machine.
+
+data "aws_iam_policy_document" "boundary" {
+  # A boundary caps; the role's own policy grants. Without this, nothing would be allowed.
+  statement {
+    sid       = "WhatTheRoleItselfGrants"
+    actions   = ["*"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "NoIAM"
+    effect = "Deny"
+    actions = [
+      "iam:Add*", "iam:Attach*", "iam:Change*", "iam:Create*", "iam:Deactivate*", "iam:Delete*",
+      "iam:Detach*", "iam:Enable*", "iam:PassRole", "iam:Put*", "iam:Remove*", "iam:Reset*",
+      "iam:Resync*", "iam:Set*", "iam:Tag*", "iam:Untag*", "iam:Update*", "iam:Upload*",
+      "organizations:*", "account:*",
+    ]
+    resources = ["*"]
+  }
+  # One role is ever assumed from another: the one the control plane mints runners'
+  # credentials under. Nothing becomes anything else, or anyone federated.
+  statement {
+    sid           = "OnlyTheRunnerScope"
+    effect        = "Deny"
+    actions       = ["sts:AssumeRole"]
+    not_resources = [local.runner_scope_arn]
+  }
+  statement {
+    sid    = "NoOtherCredentials"
+    effect = "Deny"
+    actions = [
+      "sts:AssumeRoleWithSAML", "sts:AssumeRoleWithWebIdentity", "sts:GetFederationToken",
+      "sts:GetSessionToken",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "NotTheNetwork"
+    effect = "Deny"
+    actions = [
+      "ec2:*Vpc*", "ec2:*Subnet*", "ec2:*Route*", "ec2:*Gateway*", "ec2:*NetworkAcl*",
+      "ec2:*SecurityGroup*", "ec2:*Address*", "ec2:*NetworkInterface*", "ec2:*Dhcp*",
+      "ec2:*Vpn*", "ec2:ModifyInstanceAttribute", "ec2:ModifyInstanceMetadataOptions",
+      "route53:*", "elasticloadbalancing:*",
+    ]
+    resources = ["*"]
+  }
+  # The machines are reached by a person through Session Manager; a role is never the one
+  # starting a session or running a command on another.
+  statement {
+    sid       = "NoCommandsOnOtherMachines"
+    effect    = "Deny"
+    actions   = ["ssm:SendCommand", "ssm:StartSession", "ssm:StartAutomationExecution", "ec2-instance-connect:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "NotTheLocks"
+    effect = "Deny"
+    actions = [
+      "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock",
+      "s3:PutAccountPublicAccessBlock", "s3:BypassGovernanceRetention",
+      "s3:PutBucketObjectLockConfiguration", "s3:DeleteBucket",
+      "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
+      "cloudtrail:*", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "ec2:DeleteFlowLogs",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "boundary" {
+  name        = "${var.name}-boundary"
+  description = "The most any role of the ${var.name} installation may do"
+  policy      = data.aws_iam_policy_document.boundary.json
+  tags        = local.tags
+}

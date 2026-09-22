@@ -67,9 +67,10 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "runner" {
-  name               = "${var.name}-runner"
-  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
-  tags               = local.tags
+  name                 = "${var.name}-runner"
+  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
+  permissions_boundary = var.controlplane.boundary_arn
+  tags                 = local.tags
 }
 
 # The two parameters and nothing else: a runner's credential to the bucket is the control

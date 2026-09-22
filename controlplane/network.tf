@@ -110,14 +110,37 @@ resource "aws_security_group" "proxy" {
   tags        = merge(local.tags, { Name = "${var.name}-proxy" })
 }
 
-resource "aws_vpc_security_group_ingress_rule" "proxy" {
-  for_each          = toset(["80", "443"])
+# 80 from anywhere: Let's Encrypt's HTTP challenge comes from addresses it does not publish, and
+# the rest of 80 is a redirect.
+resource "aws_vpc_security_group_ingress_rule" "proxy_http" {
   security_group_id = aws_security_group.proxy.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
-  from_port         = tonumber(each.value)
-  to_port           = tonumber(each.value)
-  description       = "users, ACME and the runners' relay"
+  from_port         = 80
+  to_port           = 80
+  description       = "ACME and the redirect"
+}
+
+# 443 from the networks the installation's users are on — anywhere, unless it says otherwise.
+resource "aws_vpc_security_group_ingress_rule" "proxy_https" {
+  for_each          = toset(var.proxy_allowed_cidrs)
+  security_group_id = aws_security_group.proxy.id
+  cidr_ipv4         = each.value
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "users"
+}
+
+# And from inside the VPC, whatever the list says: the runners' relay, which reaches the proxy
+# by its private address (dns.tf), and so never needs to be among the users' networks.
+resource "aws_vpc_security_group_ingress_rule" "proxy_https_vpc" {
+  security_group_id = aws_security_group.proxy.id
+  cidr_ipv4         = var.vpc_cidr
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "the runners' relay"
 }
 
 resource "aws_vpc_security_group_egress_rule" "proxy_to_controlplane" {

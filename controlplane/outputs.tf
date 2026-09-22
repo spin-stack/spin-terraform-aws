@@ -36,6 +36,11 @@ output "ca_parameter_arn" {
   value = aws_ssm_parameter.ca.arn
 }
 
+output "boundary_arn" {
+  description = "The permissions boundary every role of the installation carries; the runners module puts it on the runners' role."
+  value       = aws_iam_policy.boundary.arn
+}
+
 output "unpublished" {
   description = "What the two parameters hold until the control plane has written them."
   value       = local.unpublished

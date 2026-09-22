@@ -25,6 +25,7 @@ variable "controlplane" {
     ca_parameter        = string
     ca_parameter_arn    = string
     unpublished         = string
+    boundary_arn        = string
   })
 }
 

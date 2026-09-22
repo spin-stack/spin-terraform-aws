@@ -15,9 +15,10 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "controlplane" {
-  name               = "${var.name}-controlplane"
-  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
-  tags               = local.tags
+  name                 = "${var.name}-controlplane"
+  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
+  permissions_boundary = aws_iam_policy.boundary.arn
+  tags                 = local.tags
 }
 
 resource "aws_iam_instance_profile" "controlplane" {
@@ -34,6 +35,9 @@ resource "aws_iam_role_policy_attachment" "controlplane_ssm" {
 
 locals {
   ssm_prefix = "arn:aws:ssm:${local.region}:${local.account}:parameter/${var.name}"
+  # Spelled out rather than read off the role: the boundary names it, and the role carries the
+  # boundary.
+  runner_scope_arn = "arn:aws:iam::${local.account}:role/${var.name}-runner-scope"
 }
 
 data "aws_iam_policy_document" "controlplane" {
@@ -100,8 +104,9 @@ data "aws_iam_policy_document" "runner_scope_trust" {
 }
 
 resource "aws_iam_role" "runner_scope" {
-  name               = "${var.name}-runner-scope"
-  assume_role_policy = data.aws_iam_policy_document.runner_scope_trust.json
+  name                 = "${var.name}-runner-scope"
+  assume_role_policy   = data.aws_iam_policy_document.runner_scope_trust.json
+  permissions_boundary = aws_iam_policy.boundary.arn
   # A runner's credential lasts an hour (StorageCredentialTTL), which is also the most a role
   # assumed from another role's session can be given.
   max_session_duration = 3600

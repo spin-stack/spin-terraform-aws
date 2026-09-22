@@ -4,9 +4,10 @@
 # with the catalog, the encryption key and Postgres.
 
 resource "aws_iam_role" "proxy" {
-  name               = "${var.name}-proxy"
-  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
-  tags               = local.tags
+  name                 = "${var.name}-proxy"
+  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
+  permissions_boundary = aws_iam_policy.boundary.arn
+  tags                 = local.tags
 }
 
 resource "aws_iam_role_policy_attachment" "proxy_ssm" {

@@ -52,6 +52,32 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
+variable "network_logs" {
+  description = "Keep the VPC's flow log and the resolver's query log in CloudWatch. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
+  type        = bool
+  default     = true
+}
+
+variable "log_retention_days" {
+  description = "How long the flow and query logs are kept."
+  type        = number
+  default     = 30
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.log_retention_days)
+    error_message = "log_retention_days is one of the retentions CloudWatch has: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, ..."
+  }
+}
+
+variable "proxy_allowed_cidrs" {
+  description = "Where users may reach the proxy on 443 from: the dashboard, workspaces and SSH. Anywhere by default; an office's or a VPN's ranges close the installation to everyone else. The runners reach it from inside the VPC whatever this says, and 80 stays open for the ACME challenge."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  validation {
+    condition     = length(var.proxy_allowed_cidrs) > 0 && alltrue([for c in var.proxy_allowed_cidrs : can(cidrnetmask(c))])
+    error_message = "proxy_allowed_cidrs is at least one IPv4 CIDR."
+  }
+}
+
 variable "proxy_instance_type" {
   description = "The proxy's machine: Caddy and nothing else, the one address the internet reaches."
   type        = string
