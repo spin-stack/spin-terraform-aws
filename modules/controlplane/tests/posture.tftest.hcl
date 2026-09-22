@@ -493,7 +493,8 @@ run "the_machines_run_what_the_release_signed" {
   # repository is private, and a download from its releases is a 404 to a machine.
   assert {
     condition = (
-      strcontains(local.fetch_release, "oras pull --no-tty \"ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}\"\n  cosign verify-blob") &&
+      # With a home: a first boot has no HOME, and oras refuses to start without one.
+      strcontains(local.fetch_release, "HOME=\"$${HOME:-/root}\" oras pull --no-tty \"ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}\"\n  cosign verify-blob") &&
       strcontains(local.fetch_release, "printf '%s  %s\\n' '${var.oras.sha256}' /tmp/oras.tar.gz | sha256sum --check") &&
       !strcontains(local.fetch_release, "spin-stack/spin/releases/download")
     )

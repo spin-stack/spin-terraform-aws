@@ -15,7 +15,9 @@ release() {
     printf '%s  %s\n' '${oras.sha256}' /tmp/oras.tar.gz | sha256sum --check --quiet
     tar -xzf /tmp/oras.tar.gz -C /usr/local/bin oras
   fi
-  oras pull --no-tty "ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}"
+  # With a home to look for credentials in, which a first boot has not got: cloud-init runs
+  # this with no HOME at all, and oras refuses to start rather than pull the package anonymously.
+  HOME="$${HOME:-/root}" oras pull --no-tty "ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}"
   cosign verify-blob "$2" --bundle "$2.sigstore.json" \
     --certificate-identity "https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/$1" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
