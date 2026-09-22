@@ -55,7 +55,9 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
   minute per series. Which traces and metrics leave is the dashboard's (Admin → Settings →
   Telemetry): every trace that failed anywhere, every one slower than a threshold, a percent of
   the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and decides at
-  the end of each trace. Logs below `log_severity` (WARN) do not leave.
+  the end of each trace. Logs below `log_severity` (WARN) do not leave. The dashboard shows one
+  monitoring: set Admin → Settings → Monitoring to Grafana Cloud with the stack's address, and
+  the sidebar links to it and each host and workspace links to its traces and logs in Explore.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above — the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
   their boundary — and `task lint:terraform` runs it with the rest of `task lint`.
