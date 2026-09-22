@@ -66,7 +66,7 @@ resource "aws_vpc_security_group_ingress_rule" "collector_from_proxy" {
   ip_protocol                  = "tcp"
   from_port                    = 4317
   to_port                      = 4317
-  description                  = "the proxy's telemetry"
+  description                  = "telemetry from the proxy"
 }
 
 resource "aws_vpc_security_group_egress_rule" "proxy_to_collector" {

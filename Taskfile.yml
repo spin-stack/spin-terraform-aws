@@ -30,6 +30,7 @@ tasks:
     cmds:
       - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
+      - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
       # What each module promises about who reaches what - the proxy the only machine the

@@ -140,7 +140,7 @@ resource "aws_vpc_security_group_ingress_rule" "proxy_https_vpc" {
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
-  description       = "the runners' relay"
+  description       = "the relay the runners dial"
 }
 
 resource "aws_vpc_security_group_egress_rule" "proxy_to_controlplane" {

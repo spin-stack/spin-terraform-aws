@@ -45,7 +45,7 @@ resource "aws_vpc_security_group_egress_rule" "runner" {
   security_group_id = aws_security_group.runner.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
-  description       = "the control plane, the relay, the bucket, and workspaces' egress, which spin filters"
+  description       = "the control plane, the relay, the bucket, and the egress of workspaces, which spin filters"
 }
 
 # The collector's port, where the installation has one.
@@ -56,7 +56,7 @@ resource "aws_vpc_security_group_ingress_rule" "collector_from_runners" {
   ip_protocol                  = "tcp"
   from_port                    = 4317
   to_port                      = 4317
-  description                  = "spin runners' telemetry"
+  description                  = "telemetry from spin runners"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "controlplane_from_runners" {
