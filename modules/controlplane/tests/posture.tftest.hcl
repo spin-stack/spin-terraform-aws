@@ -179,6 +179,24 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     strcontains(file("${path.module}/${f}"), "ignore_changes = [initial_lifecycle_hook]")])
     error_message = "a hook nothing reads back can have the group replaced under the installation"
   }
+  # The hook's timeout is how long a machine may say nothing, not how long a boot may take: a
+  # machine that dies - or that somebody terminated - is abandoned in minutes, and a first boot
+  # that needs half an hour beats its way through it.
+  assert {
+    condition = alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] :
+    anytrue([for h in g.initial_lifecycle_hook : h.heartbeat_timeout == 300])])
+    error_message = "the hook waits out a long silence, so a machine that is gone holds the group"
+  }
+  assert {
+    condition = alltrue([for u in [local.controlplane_user_data, base64decode(aws_launch_template.proxy.user_data)] :
+    strcontains(u, ". /usr/local/lib/spin/lifecycle.sh\nheartbeating\n")])
+    error_message = "a boot says nothing while it works, so its own silence is what abandons it"
+  }
+  assert {
+    condition = strcontains(local.controlplane_files["/usr/local/lib/spin/lifecycle.sh"].content,
+    "autoscaling record-lifecycle-action-heartbeat")
+    error_message = "there is nothing for a boot to beat with"
+  }
   # The new control plane takes its name before the term, and says it serves only once it
   # leads; a proxy takes the address once Caddy answers.
   assert {
@@ -196,7 +214,7 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   # abandons the launch at once rather than holding the group for the hook's half an hour.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, ". /usr/local/lib/spin/lifecycle.sh\nprevious=\nserving=\nhand_back() {") &&
+      strcontains(local.controlplane_user_data, "\nheartbeating\nprevious=\nserving=\nhand_back() {") &&
       strcontains(local.controlplane_user_data, "point 'cp.spin.internal' \"$previous\" || true\n  fi\n  abandon || true") &&
       strcontains(local.controlplane_user_data, "trap hand_back EXIT\n\n# --- the encryption key") &&
       strcontains(local.controlplane_user_data, "previous=$(resolve 'cp.spin.internal')\npoint 'cp.spin.internal'\n") &&
@@ -209,7 +227,7 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   # the address back on the proxy of this VPC that answers there, the launch abandoned.
   assert {
     condition = (
-      strcontains(base64decode(aws_launch_template.proxy.user_data), ". /usr/local/lib/spin/lifecycle.sh\n\n# Until this machine is in service") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "\nheartbeating\n\n# Until this machine is in service") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "trap hand_back EXIT\n\n# release <version> <file>") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal' \"$previous\" || true") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "'Name=vpc-id,Values=vpc-0spin' \"Name=private-ip-address,Values=$previous\"") &&

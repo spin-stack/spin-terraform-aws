@@ -129,8 +129,9 @@ data "aws_iam_policy_document" "controlplane" {
   }
   # Its group of one: in service once it leads, and to be replaced when it stays down.
   statement {
-    sid       = "ItsGroup"
-    actions   = ["autoscaling:CompleteLifecycleAction", "autoscaling:SetInstanceHealth"]
+    sid = "ItsGroup"
+    actions = ["autoscaling:CompleteLifecycleAction", "autoscaling:RecordLifecycleActionHeartbeat",
+    "autoscaling:SetInstanceHealth"]
     resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.controlplane_group}"]
   }
   # The master's password, which the first boot uses to make that user. RDS keeps it and the

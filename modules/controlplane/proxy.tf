@@ -87,7 +87,7 @@ data "aws_iam_policy_document" "proxy" {
   }
   statement {
     sid       = "InService"
-    actions   = ["autoscaling:CompleteLifecycleAction"]
+    actions   = ["autoscaling:CompleteLifecycleAction", "autoscaling:RecordLifecycleActionHeartbeat"]
     resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.proxy_group}"]
   }
 }
@@ -303,8 +303,10 @@ resource "aws_autoscaling_group" "proxy" {
   initial_lifecycle_hook {
     name                 = "ready"
     lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
-    heartbeat_timeout    = 2400
-    default_result       = "ABANDON"
+    # The boot beats while it works, this one through a half-hour wait for the control plane's
+    # CA as well (instance.tf).
+    heartbeat_timeout = local.heartbeat_timeout
+    default_result    = "ABANDON"
   }
 
   # As the control plane's: a hook nothing reads back is not a reason to replace the group

@@ -37,12 +37,19 @@ locals {
   # The groups of one each machine is in, by name, so a machine can speak for itself to its own.
   controlplane_group = "${var.name}-controlplane"
   proxy_group        = "${var.name}-proxy"
+
+  # How often a booting machine says it is still going, and how long the group waits without
+  # hearing it: five silent minutes is a machine to abandon, and the beats are what let a boot
+  # that takes half an hour be a boot rather than a timeout.
+  heartbeat_interval = 60
+  heartbeat_timeout  = 300
   lifecycle_sh = { for role, group in { controlplane = local.controlplane_group, proxy = local.proxy_group } :
     role => templatefile("${path.module}/files/lifecycle.sh.tftpl", {
-      region  = local.region
-      zone_id = aws_route53_zone.internal.zone_id
-      group   = group
-      ttl     = local.internal_record_ttl
+      region    = local.region
+      zone_id   = aws_route53_zone.internal.zone_id
+      group     = group
+      ttl       = local.internal_record_ttl
+      heartbeat = local.heartbeat_interval
     })
   }
 
@@ -179,8 +186,9 @@ resource "aws_autoscaling_group" "controlplane" {
   initial_lifecycle_hook {
     name                 = "ready"
     lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
-    # The release, the database and the base image's first look: twenty minutes on a t3.micro.
-    heartbeat_timeout = 1800
+    # The boot beats while it works (files/lifecycle.sh.tftpl), so this is how long it may be
+    # silent - not how long the release, the database and the base image's first look take.
+    heartbeat_timeout = local.heartbeat_timeout
     default_result    = "ABANDON"
   }
 

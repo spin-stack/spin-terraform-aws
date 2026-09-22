@@ -11,6 +11,7 @@ snap install aws-cli --classic
 # --- this machine's files (files/, proxy.tf) -------------------------------------------------
 ${write_files}
 . /usr/local/lib/spin/lifecycle.sh
+heartbeating
 
 # Until this machine is in service, a boot that stops - a release it cannot fetch, a CA never
 # published, a Caddy that does not answer - hands the installation back: the name and the
