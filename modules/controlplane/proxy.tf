@@ -1,5 +1,5 @@
 # The proxy on a machine of its own: the one address the internet is given, and nothing on it
-# but Caddy. Whatever reaches it — a flaw in Caddy, a request it mishandles — lands on a machine
+# but Caddy. Whatever reaches it - a flaw in Caddy, a request it mishandles - lands on a machine
 # that holds a CA certificate and its own TLS certificates, not on the one with the catalog and
 # the encryption key.
 #
@@ -102,7 +102,7 @@ resource "aws_eip" "proxy" {
   tags   = merge(local.tags, { Name = "${var.name}-proxy" })
 }
 
-# Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock —
+# Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock -
 # a certificate is replaced every sixty days and an old one is worth nothing. Reached, like the
 # volumes' bucket, only through the VPC's endpoint.
 resource "aws_s3_bucket" "certificates" {

@@ -1,6 +1,6 @@
 # An autoscaling group of runners that join by themselves: each reads the pool's token and the
 # CA the control plane publishes to SSM, and registers with the policy the token carries. Nothing
-# reaches a runner — its group has no ingress — and it reaches the control plane on 8080, the
+# reaches a runner - its group has no ingress - and it reaches the control plane on 8080, the
 # proxy's relay on 443 and the bucket through the gateway endpoint.
 
 data "aws_region" "current" {}

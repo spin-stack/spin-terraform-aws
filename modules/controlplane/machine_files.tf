@@ -1,5 +1,5 @@
-# What each machine is given as files — its timers, their scripts, the collector's configuration
-# and the installation's config — each a file under files/ and written where it goes by one
+# What each machine is given as files - its timers, their scripts, the collector's configuration
+# and the installation's config - each a file under files/ and written where it goes by one
 # generated block of the user data, so none of them is a heredoc to read inside a script. The
 # proxy's are beside its machine (proxy.tf).
 

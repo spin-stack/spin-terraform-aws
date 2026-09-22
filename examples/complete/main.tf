@@ -1,6 +1,6 @@
 # An installation: the control plane, and a spot runner while anybody is using one. The group
 # starts empty; the first workspace of the day waits a few minutes for its host, and the group is
-# emptied an hour after the last workspace stops — at once between 20:00 and 07:00.
+# emptied an hour after the last workspace stops - at once between 20:00 and 07:00.
 #
 #   tofu init && tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123
 #

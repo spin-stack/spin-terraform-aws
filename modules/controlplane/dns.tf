@@ -1,12 +1,12 @@
 # The installation's own names, resolved only inside its VPC: what a component dials another
-# by, so a machine replaced — or, updating, one standing beside the other — is a record changed
+# by, so a machine replaced - or, updating, one standing beside the other - is a record changed
 # and not an address baked into every runner's configuration and the control plane's
 # certificate. The runners reach the relay by proxy.<zone> too, checking its certificate as the
 # name the control plane hands out (spin-install runner --relay-dial), so it never leaves the VPC.
 #
 # The records are the machines' own. Each writes its name when it is about to serve under it
-# (files/lifecycle.sh.tftpl) — a control plane just before it takes the term, a proxy once
-# Caddy answers — which is the moment an update moves the installation to it; Terraform, which
+# (files/lifecycle.sh.tftpl) - a control plane just before it takes the term, a proxy once
+# Caddy answers - which is the moment an update moves the installation to it; Terraform, which
 # does not know the address of a machine an autoscaling group has not started, writes none.
 # force_destroy, because a destroy would otherwise refuse the records it did not make.
 resource "aws_route53_zone" "internal" {

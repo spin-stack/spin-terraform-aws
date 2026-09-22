@@ -1,6 +1,6 @@
 #!/bin/bash
 # A runner's first boot: wait for what the control plane publishes, then spin-install runner.
-# The policy it runs under — a spot host's reclaim source and grace — is the pool token's, given
+# The policy it runs under - a spot host's reclaim source and grace - is the pool token's, given
 # at its first registration; nothing about it is decided here.
 set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
@@ -62,7 +62,7 @@ uplink=$(ip -o route show default | awk '{print $5; exit}')
 
 # The release is the control plane's, asked of it: its spin-install installs a runner of its own
 # release and no other, and the control plane an update is replacing may be either release for
-# a while — or, its update abandoned, the old one for good. A host that joins the old one is
+# a while - or, its update abandoned, the old one for good. A host that joins the old one is
 # updated with the rest of the fleet when the new one leads. The token in a header file, not an
 # argument: it registers hosts.
 (umask 077; printf 'Authorization: Bearer %s\n' "$token" >/etc/spin-bootstrap/token.header)

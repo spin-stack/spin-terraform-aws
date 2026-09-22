@@ -2,7 +2,7 @@
 # spin-proxy-certificates restore|save: Caddy's certificates and ACME account, between this
 # machine and the bucket every proxy of the installation keeps them in. Restored before Caddy
 # first starts, so a replacement serves the names the last one had without asking Let's Encrypt
-# again — fifty certificates a week is the whole allowance — and saved every few minutes, so what
+# again - fifty certificates a week is the whole allowance - and saved every few minutes, so what
 # was issued since is there for the next.
 set -euo pipefail
 here=/var/lib/spin-proxy/data/caddy

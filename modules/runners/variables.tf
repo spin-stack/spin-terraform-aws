@@ -1,5 +1,5 @@
 # Every variable with a default is nullable = false: null is "the default", so a module that wraps
-# this one — the repository's root — passes what it was given without restating what it means.
+# this one - the repository's root - passes what it was given without restating what it means.
 #
 # No name of its own: the control plane module's, which its group, role and SSM path are named
 # for, and which its role and boundary name in turn. Two names were two things to keep equal.
@@ -31,7 +31,7 @@ variable "instance_types" {
   description = <<-EOT
     What the group may start, most preferred first. Keep them one CPU generation: a checkpoint
     records the processor and its flags as -cpu host showed them (MachineIdentity in spin's
-    internal/runner/vmm), and resumes only onto a host that shows the same — a workspace
+    internal/runner/vmm), and resumes only onto a host that shows the same - a workspace
     suspended at night on one family and brought back on another cold-boots. Nested
     virtualization is offered on C8i, M8i, R8i (and their d variants), C7i, M7i, R7i and I7i; a
     d variant brings the local NVMe the runner's data goes on.

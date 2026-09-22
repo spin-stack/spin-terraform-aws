@@ -54,7 +54,7 @@ otelcol.processor.memory_limiter "default" {
   }
 }
 
-// Decided once a trace is whole, which only a collector that sees all of it can do — this one,
+// Decided once a trace is whole, which only a collector that sees all of it can do - this one,
 // the fleet's only: a trace that failed anywhere is kept, one slower than the admin's threshold
 // is kept, and of the rest the admin's percent. A policy that matches keeps the trace.
 otelcol.processor.tail_sampling "spin" {

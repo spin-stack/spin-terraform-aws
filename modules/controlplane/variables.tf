@@ -1,5 +1,5 @@
 # Every variable with a default is nullable = false: null is "the default", so a module that wraps
-# this one — the repository's root — passes what it was given without restating what it means.
+# this one - the repository's root - passes what it was given without restating what it means.
 
 variable "name" {
   description = "Prefix for every resource, and the SSM path (/<name>/...) the runners read their token and CA from."

@@ -1,7 +1,7 @@
 # A spin installation on AWS: the control plane with its catalog, proxy and network
 # (modules/controlplane), and the runners' group it sizes (modules/runners). What an installation
 # usually decides is a variable here; everything else is each module's, used directly where it
-# matters — the two are this composed and nothing more.
+# matters - the two are this composed and nothing more.
 #
 # Every variable here but the three required ones defaults to null, which each module reads as
 # its own default: the defaults are said once, where they mean something.

@@ -1,6 +1,6 @@
 # What crossed the VPC and what it looked up: the two records an incident is reconstructed
 # from and nothing on the machines keeps. A flow log is every connection accepted or refused
-# at a security group — the proxy's public 443, a runner reaching somewhere — and the
+# at a security group - the proxy's public 443, a runner reaching somewhere - and the
 # resolver's log is every name the VPC resolved, a workspace's included, since each host's
 # resolver asks this one. Each goes to CloudWatch for log_retention_days and no longer, and
 # each is its own switch: the query log is Route 53 Resolver's, which an installation keeping

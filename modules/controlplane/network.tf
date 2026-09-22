@@ -3,7 +3,7 @@
 # reached through the gateway endpoint, which is free and keeps volume traffic off the internet.
 # Nothing listens on a runner (spin's docs/network/README.md), and the control plane answers nothing
 # from the internet either: its public address is a way out. The proxy, on a machine of its
-# own, is the one thing the internet reaches — 80 and 443 — and the control plane's 8080 is
+# own, is the one thing the internet reaches - 80 and 443 - and the control plane's 8080 is
 # the proxy's and the runners' alone.
 
 data "aws_availability_zones" "available" {
@@ -121,7 +121,7 @@ resource "aws_vpc_security_group_ingress_rule" "proxy_http" {
   description       = "ACME and the redirect"
 }
 
-# 443 from the networks the installation's users are on — anywhere, unless it says otherwise.
+# 443 from the networks the installation's users are on - anywhere, unless it says otherwise.
 resource "aws_vpc_security_group_ingress_rule" "proxy_https" {
   for_each          = toset(var.proxy_allowed_cidrs)
   security_group_id = aws_security_group.proxy.id

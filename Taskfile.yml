@@ -22,7 +22,7 @@ tasks:
   lint:
     desc: Format-check and validate the module and the example, and hold each module to its tests.
     deps: [tools:tofu]
-    # Nothing else parses these, and nothing runs them but an apply against an account — so a
+    # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
     env:
@@ -32,8 +32,8 @@ tasks:
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
       - for: ['.', examples/complete]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
-      # What each module promises about who reaches what — the proxy the only machine the
-      # internet reaches, no role able to write IAM or read another's secrets — asserted
+      # What each module promises about who reaches what - the proxy the only machine the
+      # internet reaches, no role able to write IAM or read another's secrets - asserted
       # against its plan, with no account.
       - for: [modules/controlplane, modules/runners]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"

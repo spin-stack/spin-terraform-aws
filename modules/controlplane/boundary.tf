@@ -1,6 +1,6 @@
 # The most any role of the installation may ever do, whatever is attached to it later: a
 # permissions boundary on every role both modules make. Each role's own policy is what it may
-# do; this is what nobody can grant it, by mistake or from a machine that was taken — a role
+# do; this is what nobody can grant it, by mistake or from a machine that was taken - a role
 # that writes IAM makes itself any role, one that edits the network opens the control plane to
 # the internet, and one that runs commands through SSM is on every other machine.
 

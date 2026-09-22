@@ -1,7 +1,7 @@
 #!/bin/bash
 # A proxy machine's first boot: its tarball, checked and unpacked; the CA the control plane
 # publishes; the certificates the last proxy had; spin-install proxy; and then the installation
-# moved to it — its name, the elastic IP, and the group told it is in service.
+# moved to it - its name, the elastic IP, and the group told it is in service.
 set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 

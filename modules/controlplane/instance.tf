@@ -27,8 +27,8 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  # The names the components dial each other by — the control plane's certificate carries
-  # cp.<zone>, and every runner and proxy is configured with it — which each machine points at
+  # The names the components dial each other by - the control plane's certificate carries
+  # cp.<zone>, and every runner and proxy is configured with it - which each machine points at
   # itself (dns.tf). No address is fixed: an update stands a new machine beside the old.
   cp_host    = "cp.${var.internal_zone}"
   proxy_host = "proxy.${var.internal_zone}"
@@ -141,13 +141,13 @@ resource "aws_launch_template" "controlplane" {
   tags = local.tags
 }
 
-# One control plane, replaced beside itself. A change to what a machine is — the release, the
-# image, the size — is a new launch template version, and the refresh starts a machine of it
+# One control plane, replaced beside itself. A change to what a machine is - the release, the
+# image, the size - is a new launch template version, and the refresh starts a machine of it
 # before retiring the old one (100% healthy, up to 200%). The new machine points cp.<zone> at
 # itself and starts, which takes the term: the old one, superseded, closes and stays down, and
 # every runner and the proxy reconnect to the name within seconds. The workspaces never stop:
 # they are the runners'. The launch hook holds the refresh until the new machine leads, and
-# abandons it — leaving the old — if it never does.
+# abandons it - leaving the old - if it never does.
 resource "aws_autoscaling_group" "controlplane" {
   name                = local.controlplane_group
   min_size            = 1

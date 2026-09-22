@@ -27,7 +27,7 @@ resource "aws_iam_instance_profile" "controlplane" {
   tags = local.tags
 }
 
-# Session Manager instead of SSH: no port 22, no key pair to lose — and Session Manager alone,
+# Session Manager instead of SSH: no port 22, no key pair to lose - and Session Manager alone,
 # the agent's registration and its channels. AmazonSSMManagedInstanceCore, which is what it is
 # usually given, also grants ssm:GetParameter and GetParameters on every parameter in the
 # account, and the parameters here are read under the account's aws/ssm key: attached to the

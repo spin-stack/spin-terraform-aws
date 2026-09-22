@@ -1,7 +1,7 @@
 # The catalog: Postgres on RDS, in subnets of its own that have no route out of the VPC, reached
 # on 5432 from the control plane's group alone. No password of it is anywhere Terraform writes:
 # the master's is RDS's own, in Secrets Manager, and used once by the control plane's first boot
-# to make the role the control plane signs in as — spin, which authenticates with an IAM token
+# to make the role the control plane signs in as - spin, which authenticates with an IAM token
 # its machine's role signs (SPIN_CP_DATABASE_AUTH=aws-iam) and owns the database.
 
 resource "aws_subnet" "database" {

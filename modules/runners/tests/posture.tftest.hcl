@@ -71,8 +71,8 @@ run "a_runner_is_reached_by_nothing" {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"
   }
-  # Its installer is the release its control plane serves, asked of it — never a version this
-  # module was given, which an update of the control plane may not have reached yet — and it is
+  # Its installer is the release its control plane serves, asked of it - never a version this
+  # module was given, which an update of the control plane may not have reached yet - and it is
   # fetched with the control plane module's own checked download. The token is no argument.
   assert {
     condition = alltrue([for want in [

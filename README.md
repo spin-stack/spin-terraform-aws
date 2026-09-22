@@ -14,11 +14,11 @@ The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
 not expose what an installation needs to decide:
 
-- **`modules/controlplane`** — the VPC, the bucket, the catalog on RDS, the control plane's
+- **`modules/controlplane`** - the VPC, the bucket, the catalog on RDS, the control plane's
   machine, the proxy's on its own, and where runners find what they join with.
   `spin-install control-plane` and `spin-install proxy` do the installing; this module gives
   them machines, roles and a bucket that already satisfy them.
-- **`modules/runners`** — an autoscaling group of runners that join by themselves, spot by
+- **`modules/runners`** - an autoscaling group of runners that join by themselves, spot by
   default, that the control plane sizes: none until a workspace waits for a host, and none again
   once nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`). It takes the
   control plane module's outputs whole, its name among them.
@@ -46,7 +46,7 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   what the internet may reach of it, and for all but one of them that is nothing.
 - **The proxy is the only machine the internet reaches**, on 80 and 443, and it holds nothing
   but its own certificates and the CA it trusts the control plane by. The control plane has no
-  rule for the internet at all — its public address is a way out — and its 8080 answers the
+  rule for the internet at all - its public address is a way out - and its 8080 answers the
   proxy and the runners alone; the proxy may reach the control plane on 8080 and the web on
   80 and 443, and nothing else. A runner has no ingress. None of them has SSH: Session Manager
   is the way in, and IMDSv2 is required everywhere.
@@ -62,10 +62,10 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   public records where the installation keeps its DNS there, and with it elsewhere they are the
   operator's, pointed at the `proxy_ip` output.
 - **An update is a machine beside the old one, not a stop.** The control plane and the proxy
-  are each an autoscaling group of one, and a change to what a machine is — `spin_version`, the
-  image, the size — is a new launch template the group's instance refresh rolls out at 100%
+  are each an autoscaling group of one, and a change to what a machine is - `spin_version`, the
+  image, the size - is a new launch template the group's instance refresh rolls out at 100%
   healthy: the new machine starts before the old one is retired, and a launch hook holds the
-  refresh until it says it serves, abandoning it — and keeping the old — if it never does. A new
+  refresh until it says it serves, abandoning it - and keeping the old - if it never does. A new
   control plane points `cp.` at itself and starts, which takes the term: the old one,
   superseded, closes and stays down, and runners and the proxy reconnect within seconds while
   every workspace runs on. A control plane that stays down three minutes asks its group to
@@ -81,7 +81,7 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   bucket's lock or the logs. A policy attached later, by mistake or from a machine that was
   taken, cannot grant past it.
 - **The control plane's secrets are its role's alone.** Session Manager is given as a policy of
-  this module's — the agent's registration and its channels — and not AWS's
+  this module's - the agent's registration and its channels - and not AWS's
   `AmazonSSMManagedInstanceCore`, which also reads every parameter in the account: the
   parameters are under the account's `aws/ssm` key, so on the proxy or a runner it opened the
   encryption key. The boundary backs this: no role but the control plane's reads the key or
@@ -89,7 +89,7 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   it writes a parameter.
 - **A runner installs its control plane's release**, asked of the control plane as it boots
   (the version header on its runner download), not one this module is given: while an update
-  replaces the control plane — or after one is abandoned — a runner of the new release would
+  replaces the control plane - or after one is abandoned - a runner of the new release would
   be refused by the old. A runner that joins the old one is updated with the fleet when the
   new one leads. `spin_version` is the control plane module's alone.
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
@@ -108,8 +108,8 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   monitoring: set Admin → Settings → Monitoring to Grafana Cloud with the stack's address, and
   the sidebar links to it and each host and workspace links to its traces and logs in Explore.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
-  the above — the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
-  their boundary — and `task lint` runs it with the format check and validation, in CI on every push.
+  the above - the ingress rules, IMDSv2, encryption, the bucket's lock and policy, the roles and
+  their boundary - and `task lint` runs it with the format check and validation, in CI on every push.
 - **The bucket answers object requests only through that endpoint.** A runner's credential is
   minted by the control plane for an hour and scoped to its volumes; copied off the machine,
   it opens nothing. Bucket-level calls stay open to the account, so this module can still be
@@ -144,7 +144,7 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
   once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
   role signs and owns the database. The encryption key that opens what the catalog seals is in
-  SSM from the first start on — not Terraform's, and it outlives any destroy — so a replaced
+  SSM from the first start on - not Terraform's, and it outlives any destroy - so a replaced
   control plane reads it back and serves the same catalog.
 - **Every machine runs what the release workflow signed.** Each downloads cosign by the SHA-256
   this module pins (`cosign`), then its tarball and that tarball's bundle, and unpacks nothing
@@ -152,8 +152,8 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   is a binary under systemd, as its own user.
 - **Small machines.** The control plane and the proxy are `t3.micro` by default: with the
   catalog on RDS, the control plane is the control plane alone (and Alloy, where there is a
-  collector — `t3.small` there for a busy fleet). Two of them and the database are the whole
+  collector - `t3.small` there for a busy fleet). Two of them and the database are the whole
   standing cost when no runner is up.
 
-Hosts outside the group are still added the ordinary way — a one-time token from Admin → Hosts
-and `spin-install runner` — and are policed by the same control plane.
+Hosts outside the group are still added the ordinary way - a one-time token from Admin → Hosts
+and `spin-install runner` - and are policed by the same control plane.

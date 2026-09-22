@@ -1,6 +1,6 @@
-# Every workspace's disk. Made here with what spin requires of it — versioning and Object Lock
+# Every workspace's disk. Made here with what spin requires of it - versioning and Object Lock
 # with a default retention, which `controlplane storage configure` checks and would otherwise
-# set — so the lock is declared rather than left to whichever process made the bucket first.
+# set - so the lock is declared rather than left to whichever process made the bucket first.
 #
 # Its lifecycle rules are not declared: spin writes them (its internal/storage/simio/real), merged
 # by name into whatever is there, and a lifecycle configuration here would replace them on
