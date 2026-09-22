@@ -33,5 +33,7 @@ module "runners" {
   instance_types = var.runner_instance_types
   spot           = var.runner_spot
   max_hosts      = var.max_runners
+  data_volume_gb = var.runner_data_volume_gb
+  root_volume_gb = var.runner_root_volume_gb
   tags           = var.tags
 }

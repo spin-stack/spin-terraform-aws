@@ -92,6 +92,18 @@ variable "runner_spot" {
   default     = null
 }
 
+variable "runner_data_volume_gb" {
+  description = "An EBS volume for each runner's data, for instance types with no local NVMe (none of sa-east-1's with nested virtualization have one). modules/runners' default, 0, uses the instance store."
+  type        = number
+  default     = null
+}
+
+variable "runner_root_volume_gb" {
+  description = "Each runner's root disk: the OS and the machine's files. modules/runners' default is 30."
+  type        = number
+  default     = null
+}
+
 variable "max_runners" {
   description = "The most runners the group may have; the control plane decides how many it has. modules/runners' default is 1."
   type        = number
