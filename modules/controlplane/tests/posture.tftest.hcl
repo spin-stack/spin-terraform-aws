@@ -451,6 +451,14 @@ run "the_catalog" {
     condition     = !aws_db_instance.catalog.publicly_accessible && aws_db_instance.catalog.manage_master_user_password && aws_db_instance.catalog.iam_database_authentication_enabled && aws_db_instance.catalog.password == null
     error_message = "the catalog is reachable from outside, or has a password this plan knows"
   }
+  # The master is a member of spin for the one statement that hands the database over, and not
+  # after it: rds_iam reaches the master through that membership, and RDS takes no password from
+  # a user it knows as an IAM one - the next boot could not sign in to run this file at all.
+  assert {
+    condition = strcontains(local.controlplane_files["/etc/spin-stack/database-bootstrap.sql"].content,
+    "GRANT spin TO CURRENT_USER;\nALTER DATABASE spin OWNER TO spin;\nREVOKE spin FROM CURRENT_USER;")
+    error_message = "the master keeps its membership of spin, and with it an rds_iam that stops its password working"
+  }
   assert {
     condition     = length(aws_subnet.database) >= 2 && alltrue([for s in aws_subnet.database : !s.map_public_ip_on_launch])
     error_message = "the catalog's subnets give out public addresses, or are fewer than the two zones RDS takes"

@@ -10,6 +10,10 @@ BEGIN
 END
 $$;
 GRANT rds_iam TO spin;
--- The master may hand the database over only to a role it is a member of.
+-- The master may hand the database over only to a role it is a member of, and is a member for
+-- that one statement: rds_iam reaches it through the membership, and a user RDS knows as an IAM
+-- one it will not take a password from at all - the master's own, from Secrets Manager, which
+-- is how every later boot runs this file.
 GRANT spin TO CURRENT_USER;
 ALTER DATABASE spin OWNER TO spin;
+REVOKE spin FROM CURRENT_USER;
