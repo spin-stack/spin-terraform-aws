@@ -33,6 +33,9 @@ locals {
   # configuration — is the same across a replaced instance.
   private_ip = cidrhost(aws_subnet.public[0].cidr_block, 10)
   url        = "https://${local.private_ip}:8080"
+  # The proxy's, fixed for the same reason: the control plane takes its word about a browser's
+  # address by it (--trusted-proxy).
+  proxy_ip = cidrhost(aws_subnet.public[0].cidr_block, 11)
 
   token_parameter = "/${var.name}/runner-registration-token"
   ca_parameter    = "/${var.name}/controlplane-ca"
@@ -68,11 +71,6 @@ resource "aws_ebs_volume" "data" {
   }
 }
 
-resource "aws_eip" "controlplane" {
-  domain = "vpc"
-  tags   = merge(local.tags, { Name = "${var.name}-controlplane" })
-}
-
 resource "aws_instance" "controlplane" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
@@ -98,9 +96,8 @@ resource "aws_instance" "controlplane" {
     name            = var.name
     region          = local.region
     spin_version    = var.spin_version
-    domain          = var.domain
-    acme_email      = var.acme_email
     private_ip      = local.private_ip
+    proxy_ip        = local.proxy_ip
     bucket          = aws_s3_bucket.volumes.bucket
     role_arn        = aws_iam_role.runner_scope.arn
     data_volume     = aws_ebs_volume.data.id
@@ -137,11 +134,6 @@ resource "aws_volume_attachment" "data" {
   device_name = "/dev/sdf"
   volume_id   = aws_ebs_volume.data.id
   instance_id = aws_instance.controlplane.id
-}
-
-resource "aws_eip_association" "controlplane" {
-  allocation_id = aws_eip.controlplane.id
-  instance_id   = aws_instance.controlplane.id
 }
 
 # Where the control plane publishes what a runner needs to join, created here so the runners'

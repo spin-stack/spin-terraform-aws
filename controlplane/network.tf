@@ -1,8 +1,10 @@
 # Public subnets and no NAT gateway. A NAT is $32 a month plus a charge per GB before anything
 # runs, and nothing here needs one: every machine has its own public address, and the bucket is
 # reached through the gateway endpoint, which is free and keeps volume traffic off the internet.
-# Nothing listens on a runner (docs/network/README.md), so a public address there reaches
-# nothing; the control plane answers 80 and 443 to the world and 8080 only to runners.
+# Nothing listens on a runner (docs/network/README.md), and the control plane answers nothing
+# from the internet either: its public address is a way out. The proxy, on a machine of its
+# own, is the one thing the internet reaches — 80 and 443 — and the control plane's 8080 is
+# the proxy's and the runners' alone.
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -69,26 +71,71 @@ resource "aws_vpc_endpoint" "s3" {
 
 resource "aws_security_group" "controlplane" {
   name        = "${var.name}-controlplane"
-  description = "spin control plane and proxy: 80 and 443 from anywhere, 8080 from runners only"
+  description = "spin control plane: 8080 from the proxy and runners only, nothing from the internet"
   vpc_id      = aws_vpc.this.id
   tags        = merge(local.tags, { Name = "${var.name}-controlplane" })
 }
 
-# 80 for the ACME HTTP challenge and the redirect; 443 for the dashboard, workspaces and the
-# relay runners dial out to (tunnel.app.<domain>).
-resource "aws_vpc_security_group_ingress_rule" "web" {
+# The control plane takes nothing from the internet: its public address is only a way out, and
+# a security group with no rule for it is a machine nothing out there reaches. 8080 is the
+# proxy's (below) and the runners' (the runners module adds theirs).
+resource "aws_vpc_security_group_ingress_rule" "controlplane_from_proxy" {
+  security_group_id            = aws_security_group.controlplane.id
+  referenced_security_group_id = aws_security_group.proxy.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8080
+  to_port                      = 8080
+  description                  = "the proxy"
+}
+
+# Out, only the web: images, the machine release, GitHub, STS, SSM, Auto Scaling and the bucket
+# through its endpoint, all 443 (80 for apt). Postgres is on the machine.
+resource "aws_vpc_security_group_egress_rule" "controlplane" {
   for_each          = toset(["80", "443"])
   security_group_id = aws_security_group.controlplane.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
   from_port         = tonumber(each.value)
   to_port           = tonumber(each.value)
-  description       = "the proxy"
+  description       = "the web"
 }
 
-resource "aws_vpc_security_group_egress_rule" "controlplane" {
-  security_group_id = aws_security_group.controlplane.id
+# The proxy is the only machine the internet reaches: 80 for the ACME HTTP challenge and the
+# redirect, 443 for the dashboard, workspaces and the relay runners dial out to
+# (tunnel.app.<domain>).
+resource "aws_security_group" "proxy" {
+  name        = "${var.name}-proxy"
+  description = "spin proxy: 80 and 443 from anywhere; out to the control plane and the web"
+  vpc_id      = aws_vpc.this.id
+  tags        = merge(local.tags, { Name = "${var.name}-proxy" })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "proxy" {
+  for_each          = toset(["80", "443"])
+  security_group_id = aws_security_group.proxy.id
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-  description       = "images, the machine release, ACME, STS and SSM"
+  ip_protocol       = "tcp"
+  from_port         = tonumber(each.value)
+  to_port           = tonumber(each.value)
+  description       = "users, ACME and the runners' relay"
+}
+
+resource "aws_vpc_security_group_egress_rule" "proxy_to_controlplane" {
+  security_group_id            = aws_security_group.proxy.id
+  referenced_security_group_id = aws_security_group.controlplane.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8080
+  to_port                      = 8080
+  description                  = "the control plane"
+}
+
+# ACME, the proxy's image and SSM; 80 for apt.
+resource "aws_vpc_security_group_egress_rule" "proxy_web" {
+  for_each          = toset(["80", "443"])
+  security_group_id = aws_security_group.proxy.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = tonumber(each.value)
+  to_port           = tonumber(each.value)
+  description       = "the web"
 }

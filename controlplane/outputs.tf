@@ -41,9 +41,14 @@ output "unpublished" {
   value       = local.unpublished
 }
 
-output "elastic_ip" {
-  description = "Where app.<domain> and *.app.<domain> point."
-  value       = aws_eip.controlplane.public_ip
+output "proxy_ip" {
+  description = "The proxy's elastic IP, where app.<domain> and *.app.<domain> point: the one address of the installation the internet reaches."
+  value       = aws_eip.proxy.public_ip
+}
+
+output "proxy_instance_id" {
+  description = "For `aws ssm start-session --target`: the proxy has no SSH either."
+  value       = aws_instance.proxy.id
 }
 
 output "bucket" {

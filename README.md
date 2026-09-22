@@ -2,10 +2,10 @@
 
 Two modules, and `example/` composing them into an installation.
 
-- **`controlplane/`** — the VPC, the bucket, the control plane's machine with the proxy
-  beside it, and where runners find what they join with. `spin-install control-plane
-  --with-proxy` does the installing; this module gives it a machine, a role and a bucket that
-  already satisfy it.
+- **`controlplane/`** — the VPC, the bucket, the control plane's machine, the proxy's on its
+  own, and where runners find what they join with. `spin-install control-plane` and
+  `spin-install proxy` do the installing; this module gives them machines, roles and a bucket
+  that already satisfy them.
 - **`runners/`** — an autoscaling group of runners that join by themselves, spot by default,
   that the control plane sizes: none until a workspace waits for a host, and none again once
   nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`).
@@ -23,8 +23,14 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
 - **No NAT gateway, no interface endpoints.** Every machine has a public address in a public
   subnet, and the bucket is reached through the S3 gateway endpoint, which is free. A NAT is
   $32 a month and a charge per GB before a workspace runs; an interface endpoint is $7 a
-  month per zone each. Nothing listens on a runner, so its public address reaches nothing, and
-  its security group has no ingress at all.
+  month per zone each. A public address is not an open door: each machine's security group is
+  what the internet may reach of it, and for all but one of them that is nothing.
+- **The proxy is the only machine the internet reaches**, on 80 and 443, and it holds nothing
+  but its own certificates and the CA it trusts the control plane by. The control plane has no
+  rule for the internet at all — its public address is a way out — and its 8080 answers the
+  proxy and the runners alone; the proxy may reach the control plane on 8080 and the web on
+  80 and 443, and nothing else. A runner has no ingress. None of them has SSH: Session Manager
+  is the way in, and IMDSv2 is required everywhere.
 - **The bucket answers object requests only through that endpoint.** A runner's credential is
   minted by the control plane for an hour and scoped to its volumes; copied off the machine,
   it opens nothing. Bucket-level calls stay open to the account, so this module can still be

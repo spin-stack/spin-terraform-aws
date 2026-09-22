@@ -54,7 +54,7 @@ install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 spin-install control-plane \
   --advertise '${private_ip}' \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
-  --with-proxy --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif }
+  --trusted-proxy '${proxy_ip}'
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
 install -d -m 0700 /etc/spin-stack

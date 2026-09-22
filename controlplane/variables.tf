@@ -29,7 +29,7 @@ variable "acme_email" {
 }
 
 variable "route53_zone_id" {
-  description = "A hosted zone to write app.<domain> and *.app.<domain> into. Empty writes nothing, and the records are yours to point at the elastic_ip output."
+  description = "A hosted zone to write app.<domain> and *.app.<domain> into. Empty writes nothing, and the records are yours to point at the proxy_ip output."
   type        = string
   default     = ""
 }
@@ -47,9 +47,15 @@ variable "availability_zones" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine. It is Postgres, the control plane and the proxy under Compose, and nothing that runs a workspace."
+  description = "The control plane's machine: Postgres and the control plane under Compose, and nothing the internet reaches or that runs a workspace."
   type        = string
   default     = "t3.medium"
+}
+
+variable "proxy_instance_type" {
+  description = "The proxy's machine: Caddy and nothing else, the one address the internet reaches."
+  type        = string
+  default     = "t3.small"
 }
 
 variable "data_volume_gb" {
