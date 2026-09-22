@@ -1,0 +1,225 @@
+# An autoscaling group of runners that join by themselves: each reads the pool's token and the
+# CA the control plane publishes to SSM, and registers with the policy the token carries. Nothing
+# reaches a runner — its group has no ingress — and it reaches the control plane on 8080, the
+# proxy's relay on 443 and the bucket through the gateway endpoint.
+
+data "aws_region" "current" {}
+
+data "aws_ssm_parameter" "ubuntu" {
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+}
+
+locals {
+  tags = merge({ "spin:installation" = var.name }, var.tags)
+}
+
+resource "aws_security_group" "runner" {
+  name        = "${var.name}-runner"
+  description = "spin runners: nothing in, everything out"
+  vpc_id      = var.controlplane.vpc_id
+  tags        = merge(local.tags, { Name = "${var.name}-runner" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "runner" {
+  security_group_id = aws_security_group.runner.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "the control plane, the relay, the bucket, and workspaces' egress, which spin filters"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "controlplane_from_runners" {
+  security_group_id            = var.controlplane.security_group_id
+  referenced_security_group_id = aws_security_group.runner.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8080
+  to_port                      = 8080
+  description                  = "spin runners"
+}
+
+data "aws_iam_policy_document" "ec2_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "runner" {
+  name               = "${var.name}-runner"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
+  tags               = local.tags
+}
+
+# The two parameters and nothing else: a runner's credential to the bucket is the control
+# plane's to mint, an hour at a time and for its own volumes. Its instance role opens nothing a
+# tenant who escaped a machine could use against another tenant.
+data "aws_iam_policy_document" "runner" {
+  statement {
+    actions   = ["ssm:GetParameter"]
+    resources = [var.controlplane.token_parameter_arn, var.controlplane.ca_parameter_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "runner" {
+  name   = "spin"
+  role   = aws_iam_role.runner.id
+  policy = data.aws_iam_policy_document.runner.json
+}
+
+resource "aws_iam_role_policy_attachment" "runner_ssm" {
+  count      = var.session_manager ? 1 : 0
+  role       = aws_iam_role.runner.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "runner" {
+  name = "${var.name}-runner"
+  role = aws_iam_role.runner.name
+  tags = local.tags
+}
+
+resource "aws_launch_template" "runner" {
+  name_prefix            = "${var.name}-runner-"
+  image_id               = data.aws_ssm_parameter.ubuntu.value
+  vpc_security_group_ids = [aws_security_group.runner.id]
+  update_default_version = true
+
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.runner.arn
+  }
+
+  metadata_options {
+    http_tokens = "required"
+    # One hop: the runner is on the host, and a guest must never reach the metadata service
+    # (netaddr.NodeNetworks drops 169.254.0.0/16 on top of this).
+    http_put_response_hop_limit = 1
+  }
+
+  dynamic "cpu_options" {
+    for_each = var.nested_virtualization ? [1] : []
+    content {
+      nested_virtualization = "enabled"
+    }
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_type           = "gp3"
+      volume_size           = var.root_volume_gb
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  dynamic "block_device_mappings" {
+    for_each = var.data_volume_gb > 0 ? [1] : []
+    content {
+      device_name = "/dev/sdf"
+      ebs {
+        volume_type           = "gp3"
+        volume_size           = var.data_volume_gb
+        encrypted             = true
+        delete_on_termination = true
+      }
+    }
+  }
+
+  user_data = base64encode(templatefile("${path.module}/user_data.sh.tftpl", {
+    region          = data.aws_region.current.region
+    spin_version    = var.spin_version
+    controlplane    = var.controlplane.url
+    token_parameter = var.controlplane.token_parameter
+    ca_parameter    = var.controlplane.ca_parameter
+    unpublished     = var.controlplane.unpublished
+    data_on_ebs     = var.data_volume_gb > 0
+  }))
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(local.tags, { Name = "${var.name}-runner" })
+  }
+  tag_specifications {
+    resource_type = "volume"
+    tags          = merge(local.tags, { Name = "${var.name}-runner" })
+  }
+  tags = local.tags
+}
+
+resource "aws_autoscaling_group" "runner" {
+  name                = "${var.name}-runners"
+  vpc_zone_identifier = var.controlplane.subnet_ids
+  min_size            = var.schedule == null ? var.size : 0
+  max_size            = var.size
+  # Left to the schedule when there is one: an apply resetting it would start the group at night.
+  desired_capacity = var.schedule == null ? var.size : null
+  # A spot recommendation to leave starts the replacement first; the host being replaced then
+  # leaves by the termination hook below, so its workspaces have somewhere to resume.
+  capacity_rebalance = var.spot
+  # Ten minutes to boot and install before the group asks: a runner is healthy when EC2 says it
+  # is, and whether spin takes it is the control plane's to say (Admin -> Hosts).
+  health_check_grace_period = 600
+
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = var.spot ? 0 : 100
+      spot_allocation_strategy                 = "capacity-optimized-prioritized"
+    }
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.runner.id
+        version            = "$Latest"
+      }
+      dynamic "override" {
+        for_each = var.instance_types
+        content {
+          instance_type = override.value
+        }
+      }
+    }
+  }
+
+  # On the group from its first instance, so no host the group ever takes away skips the drain.
+  initial_lifecycle_hook {
+    name                 = "drain"
+    lifecycle_transition = "autoscaling:EC2_INSTANCE_TERMINATING"
+    heartbeat_timeout    = var.drain_seconds
+    # Left to expire: the host empties itself on seeing the state and does not answer the hook,
+    # so it holds no permission to call the group.
+    default_result = "CONTINUE"
+  }
+
+  dynamic "tag" {
+    for_each = merge(local.tags, { Name = "${var.name}-runner" })
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = false
+    }
+  }
+}
+
+resource "aws_autoscaling_schedule" "up" {
+  count                  = var.schedule == null ? 0 : 1
+  scheduled_action_name  = "up"
+  autoscaling_group_name = aws_autoscaling_group.runner.name
+  recurrence             = var.schedule.up
+  time_zone              = var.schedule.time_zone
+  min_size               = 0
+  max_size               = var.size
+  desired_capacity       = var.size
+}
+
+resource "aws_autoscaling_schedule" "down" {
+  count                  = var.schedule == null ? 0 : 1
+  scheduled_action_name  = "down"
+  autoscaling_group_name = aws_autoscaling_group.runner.name
+  recurrence             = var.schedule.down
+  time_zone              = var.schedule.time_zone
+  min_size               = 0
+  max_size               = var.size
+  desired_capacity       = 0
+}

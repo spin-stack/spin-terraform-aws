@@ -1,0 +1,62 @@
+#!/bin/bash
+# A runner's first boot: wait for what the control plane publishes, then spin-install runner.
+# The policy it runs under — a spot host's reclaim source and grace — is the pool token's, given
+# at its first registration; nothing about it is decided here.
+set -euo pipefail
+exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
+
+export PATH="/snap/bin:$PATH"
+snap install aws-cli --classic
+param() { aws --region '${region}' ssm get-parameter --name "$1" --with-decryption --query Parameter.Value --output text; }
+
+# The control plane's first start publishes both; a group started beside it waits for that.
+published() { [ -n "$1" ] && [ "$1" != '${unpublished}' ]; }
+ca='' token=''
+for _ in $(seq 180); do
+  ca=$(param '${ca_parameter}') || ca=''
+  token=$(param '${token_parameter}') || token=''
+  published "$ca" && published "$token" && break
+  sleep 10
+done
+if ! published "$ca" || ! published "$token"; then
+  echo "the control plane published no token and CA in half an hour"
+  exit 1
+fi
+
+install -d -m 0700 /etc/spin-bootstrap
+printf '%s\n' "$ca" >/etc/spin-bootstrap/ca.crt
+# A file, not the environment of a process anyone can list: the token registers hosts.
+(umask 077; printf '%s' "$token" >/etc/spin-bootstrap/token)
+
+# The runner's data: the instance's own NVMe, or the EBS volume the template adds instead.
+%{ if data_on_ebs ~}
+model='Amazon Elastic Block Store'
+%{ else ~}
+model='Amazon EC2 NVMe Instance Storage'
+%{ endif ~}
+data=
+for disk in /sys/block/nvme*n1; do
+  name=$(basename "$disk")
+  [ "$(tr -d '\n' <"$disk/device/model" | sed 's/ *$//')" = "$model" ] || continue
+  # Not the root disk: the one with nothing on it.
+  [ -z "$(lsblk -no MOUNTPOINTS "/dev/$name" | tr -d '[:space:]')" ] || continue
+  [ "$(lsblk -no NAME "/dev/$name" | wc -l)" -eq 1 ] || continue
+  data="/dev/$name"
+  break
+done
+[ -n "$data" ] || { echo "no empty disk of model '$model' for the runner's data"; exit 1; }
+uplink=$(ip -o route show default | awk '{print $5; exit}')
+
+cd "$(mktemp -d)"
+base='https://github.com/spin-stack/spin/releases/download/${spin_version}'
+curl -fsSLO "$base/spin-install-linux-amd64"
+curl -fsSLO "$base/checksums.txt"
+sha256sum --check --ignore-missing checksums.txt
+install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
+
+spin-install runner \
+  --control-plane '${controlplane}' --ca /etc/spin-bootstrap/ca.crt \
+  --token-file /etc/spin-bootstrap/token \
+  --uplink "$uplink" --data-device "$data"
+# Spent or not, the token has done its work here: the host has its own credential now.
+rm -f /etc/spin-bootstrap/token

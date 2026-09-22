@@ -1,0 +1,117 @@
+#!/bin/bash
+# The control plane's first boot: mount the data volume, install spin, publish what runners
+# join with, and rotate the pool's token from then on. Everything here drives spin-install,
+# systemd and the AWS CLI; what spin does is spin-install's.
+set -euo pipefail
+exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
+
+export PATH="/snap/bin:$PATH"
+region='${region}'
+aws() { command aws --region "$region" "$@"; }
+
+# --- the data volume, which outlives this instance -------------------------------------------
+volume='${data_volume}'
+dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$${volume//-/}"
+for _ in $(seq 120); do [ -e "$dev" ] && break; sleep 5; done
+[ -e "$dev" ] || { echo "the data volume $volume never attached"; exit 1; }
+blkid "$dev" >/dev/null || mkfs.ext4 -q -L spin-data "$dev"
+mkdir -p /srv/spin /etc/spin-stack /var/lib/spin-stack
+cat >>/etc/fstab <<'EOF'
+LABEL=spin-data /srv/spin ext4 defaults,nofail 0 2
+/srv/spin/etc /etc/spin-stack none bind,nofail,x-systemd.requires-mounts-for=/srv/spin 0 0
+/srv/spin/lib /var/lib/spin-stack none bind,nofail,x-systemd.requires-mounts-for=/srv/spin 0 0
+EOF
+mount /srv/spin
+mkdir -p /srv/spin/etc /srv/spin/lib
+mount /etc/spin-stack
+mount /var/lib/spin-stack
+
+# --- what spin-install needs on the machine -------------------------------------------------
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -q
+apt-get install -yq docker.io docker-compose-v2
+systemctl enable --now docker
+snap install aws-cli --classic
+
+# --- the encryption key: kept if the volume has it, restored from SSM if only SSM does --------
+env=/etc/spin-stack/controlplane.env
+if [ ! -s "$env" ] && key=$(aws ssm get-parameter --name '${key_parameter}' --with-decryption \
+    --query Parameter.Value --output text 2>/dev/null); then
+  echo "restoring the encryption key from ${key_parameter}: this volume had none"
+  (umask 077; printf 'SPIN_CP_ENCRYPTION_KEY="%s"\n' "$key" >"$env")
+fi
+
+# --- spin ------------------------------------------------------------------------------------
+# checksums.txt is integrity, not authenticity: it comes from the same release. The images the
+# installer pulls are pinned by the digests it was built with (docs/releases.md).
+cd "$(mktemp -d)"
+base='https://github.com/spin-stack/spin/releases/download/${spin_version}'
+curl -fsSLO "$base/spin-install-linux-amd64"
+curl -fsSLO "$base/checksums.txt"
+sha256sum --check --ignore-missing checksums.txt
+install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
+
+spin-install control-plane \
+  --advertise '${private_ip}' \
+  --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
+  --with-proxy --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif }
+
+# --- publish ---------------------------------------------------------------------------------
+# The key, once: SSM is its backup, and an existing parameter is never overwritten by a volume
+# that may be the stranger.
+if ! aws ssm get-parameter --name '${key_parameter}' >/dev/null 2>&1; then
+  key=$(sed -n 's/^SPIN_CP_ENCRYPTION_KEY="\(.*\)"$/\1/p' "$env")
+  [ -n "$key" ] || { echo "$env has no encryption key to back up"; exit 1; }
+  file=$(mktemp); chmod 600 "$file"
+  printf '%s' "$key" >"$file"
+  aws ssm put-parameter --name '${key_parameter}' --type SecureString --value "file://$file" \
+    --description 'SPIN_CP_ENCRYPTION_KEY of ${name}: with the catalog backup, the installation' >/dev/null
+  rm -f "$file"
+fi
+aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
+  --value file:///var/lib/spin-stack/certs/ca.crt >/dev/null
+
+# --- the pool's token, rotated ---------------------------------------------------------------
+# A file, not an argument: a token on a command line is in ps.
+cat >/usr/local/sbin/spin-rotate-pool-token <<'EOF'
+#!/bin/bash
+set -euo pipefail
+file=$(mktemp); trap 'rm -f "$file"' EXIT; chmod 600 "$file"
+# An assignment, so a mint that fails stops here rather than publishing an empty token.
+token=$(docker exec spin-controlplane controlplane registration-token --reusable \
+  --expires '${token_expiry}' --description '${name} runners, rotated' ${pool_flags})
+[ -n "$token" ] || { echo "the control plane minted an empty token"; exit 1; }
+printf '%s' "$token" >"$file"
+aws --region '${region}' ssm put-parameter --name '${token_parameter}' --type SecureString \
+  --overwrite --value "file://$file" >/dev/null
+EOF
+chmod 0755 /usr/local/sbin/spin-rotate-pool-token
+
+cat >/etc/systemd/system/spin-pool-token.service <<'EOF'
+[Unit]
+Description=Mint a new pool token for spin's runners into SSM
+After=spin-controlplane.service
+Requires=spin-controlplane.service
+
+[Service]
+Type=oneshot
+Environment=PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/usr/local/sbin/spin-rotate-pool-token
+EOF
+cat >/etc/systemd/system/spin-pool-token.timer <<'EOF'
+[Unit]
+Description=Rotate spin's pool token every ${rotation}
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=${rotation}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable spin-pool-token.timer
+systemctl start spin-pool-token.service
+systemctl start spin-pool-token.timer
+echo "spin control plane ${spin_version} is installed; runners join at https://${private_ip}:8080"
