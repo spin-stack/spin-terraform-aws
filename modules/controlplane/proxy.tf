@@ -281,6 +281,9 @@ resource "aws_autoscaling_group" "proxy" {
   desired_capacity    = 1
   vpc_zone_identifier = aws_subnet.edge[*].id
   health_check_type   = "EC2"
+  # As the control plane's: the hook decides, and a wait that gave up would have the next
+  # apply destroy this group (instance.tf).
+  wait_for_capacity_timeout = "0"
 
   launch_template {
     id      = aws_launch_template.proxy.id

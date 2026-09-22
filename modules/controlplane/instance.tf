@@ -156,6 +156,11 @@ resource "aws_autoscaling_group" "controlplane" {
   desired_capacity    = 1
   vpc_zone_identifier = aws_subnet.public[*].id
   health_check_type   = "EC2"
+  # Terraform does not wait for the machine: whether one is in service is the launch hook's
+  # answer, which takes as long as a first boot takes and abandons the machine if it never
+  # leads. A wait that gives up would mark this group as half-created, and the next apply
+  # destroys and remakes a group whose only problem was a slow boot.
+  wait_for_capacity_timeout = "0"
 
   launch_template {
     id      = aws_launch_template.controlplane.id

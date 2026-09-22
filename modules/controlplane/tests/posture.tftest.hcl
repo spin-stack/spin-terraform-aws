@@ -163,6 +163,14 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     anytrue([for h in g.initial_lifecycle_hook : h.lifecycle_transition == "autoscaling:EC2_INSTANCE_LAUNCHING" && h.default_result == "ABANDON"])])
     error_message = "a machine that never comes up replaces the one that works"
   }
+  # Terraform waiting for a machine is Terraform giving up on a slow boot, marking the group as
+  # half-created, and destroying it on the next apply - a group whose only problem was that a
+  # first boot takes longer than the wait. The hook is what decides, and it abandons.
+  assert {
+    condition = alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] :
+    g.wait_for_capacity_timeout == "0"])
+    error_message = "an apply waits for a machine, so a slow boot has the next one destroy the group"
+  }
   # The new control plane takes its name before the term, and says it serves only once it
   # leads; a proxy takes the address once Caddy answers.
   assert {
