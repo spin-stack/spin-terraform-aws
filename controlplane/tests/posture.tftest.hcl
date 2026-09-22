@@ -39,6 +39,11 @@ override_resource {
 }
 
 override_resource {
+  target = aws_iam_policy.session_manager
+  values = { arn = "arn:aws:iam::123456789012:policy/spin-session-manager" }
+}
+
+override_resource {
   target = aws_iam_role.runner_scope
   values = { arn = "arn:aws:iam::123456789012:role/spin-runner-scope" }
 }
@@ -288,6 +293,32 @@ run "the_roles" {
   }
 }
 
+# No machine but the control plane's reads its secrets: Session Manager comes with nothing else
+# of SSM, and the boundary refuses the encryption key and the collector's token to any other
+# role, whatever policy it is given later.
+run "no_machine_reads_the_control_planes_secrets" {
+  command = plan
+
+  assert {
+    condition = alltrue([for a in [aws_iam_role_policy_attachment.controlplane_ssm, aws_iam_role_policy_attachment.proxy_ssm] :
+    !strcontains(a.policy_arn, "AmazonSSMManagedInstanceCore")])
+    error_message = "a machine is given the managed policy that reads every parameter"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.session_manager.statement :
+    alltrue([for a in s.actions : startswith(a, "ssmmessages:") || a == "ssm:UpdateInstanceInformation"])])
+    error_message = "Session Manager's policy grants more of SSM than a session"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") &&
+      contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-encryption-key") &&
+      anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
+    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
+    error_message = "a role other than the control plane's can read the encryption key"
+  }
+}
+
 run "no_collector_unless_asked" {
   command = plan
 
@@ -376,13 +407,13 @@ run "the_machines_run_what_the_release_signed" {
 
   assert {
     condition = alltrue([for u in [local.controlplane_user_data, base64decode(aws_launch_template.proxy.user_data)] :
-      strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/v20260921.02") &&
-    strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")])
+      strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/$1\"") &&
+    strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")]) && output.fetch_release == local.fetch_release
     error_message = "a machine runs what it has not checked against the release's signature, or runs a container"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "release spin-controlplane-linux-amd64.tar.gz") && strcontains(base64decode(aws_launch_template.proxy.user_data), "release spin-proxy-linux-amd64.tar.gz")
-    error_message = "a machine unpacks another role's tarball"
+    condition     = strcontains(local.controlplane_user_data, "release 'v20260921.02' spin-controlplane-linux-amd64.tar.gz") && strcontains(base64decode(aws_launch_template.proxy.user_data), "release 'v20260921.02' spin-proxy-linux-amd64.tar.gz")
+    error_message = "a machine unpacks another role's tarball, or another release's"
   }
   # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
   assert {

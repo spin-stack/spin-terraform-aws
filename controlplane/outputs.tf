@@ -13,9 +13,14 @@ output "security_group_id" {
   value       = aws_security_group.controlplane.id
 }
 
-output "cosign" {
-  description = "The cosign every machine checks the release with, and its pinned SHA-256: the runners' too."
-  value       = var.cosign
+output "session_manager_policy_arn" {
+  description = "Session Manager into a machine, and nothing else of SSM: what the runners' role is given in place of AmazonSSMManagedInstanceCore, which reads every parameter."
+  value       = aws_iam_policy.session_manager.arn
+}
+
+output "fetch_release" {
+  description = "The shell function every machine of the installation fetches a release file with, `release <version> <file>`: cosign by its pinned SHA-256, and the file verified against the release workflow at that version's tag."
+  value       = local.fetch_release
 }
 
 output "url" {

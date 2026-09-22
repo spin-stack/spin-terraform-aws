@@ -27,17 +27,41 @@ resource "aws_iam_instance_profile" "controlplane" {
   tags = local.tags
 }
 
-# Session Manager instead of SSH: no port 22, no key pair to lose.
+# Session Manager instead of SSH: no port 22, no key pair to lose — and Session Manager alone,
+# the agent's registration and its channels. AmazonSSMManagedInstanceCore, which is what it is
+# usually given, also grants ssm:GetParameter and GetParameters on every parameter in the
+# account, and the parameters here are read under the account's aws/ssm key: attached to the
+# proxy and the runners, it gave either the control plane's encryption key.
+data "aws_iam_policy_document" "session_manager" {
+  statement {
+    actions = [
+      "ssm:UpdateInstanceInformation",
+      "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "session_manager" {
+  name        = "${var.name}-session-manager"
+  description = "Session Manager into a machine of the ${var.name} installation, and nothing else of SSM"
+  policy      = data.aws_iam_policy_document.session_manager.json
+  tags        = local.tags
+}
+
 resource "aws_iam_role_policy_attachment" "controlplane_ssm" {
   role       = aws_iam_role.controlplane.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  policy_arn = aws_iam_policy.session_manager.arn
 }
 
 locals {
   ssm_prefix = "arn:aws:ssm:${local.region}:${local.account}:parameter/${var.name}"
-  # Spelled out rather than read off the role: the boundary names it, and the role carries the
-  # boundary.
-  runner_scope_arn = "arn:aws:iam::${local.account}:role/${var.name}-runner-scope"
+  # Spelled out rather than read off the roles: the boundary names them, and the roles carry
+  # the boundary.
+  runner_scope_arn      = "arn:aws:iam::${local.account}:role/${var.name}-runner-scope"
+  controlplane_role_arn = "arn:aws:iam::${local.account}:role/${var.name}-controlplane"
+  runner_role_arn       = "arn:aws:iam::${local.account}:role/${var.name}-runner"
 }
 
 data "aws_iam_policy_document" "controlplane" {

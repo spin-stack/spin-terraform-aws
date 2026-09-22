@@ -14,7 +14,7 @@ ${write_files}
 
 ${fetch_release}
 cd "$(mktemp -d)"
-release spin-proxy-linux-amd64.tar.gz
+release '${spin_version}' spin-proxy-linux-amd64.tar.gz
 tar -xzf spin-proxy-linux-amd64.tar.gz -C /
 
 # The control plane's first start publishes it, and is serving by then.

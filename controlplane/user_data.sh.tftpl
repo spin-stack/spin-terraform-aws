@@ -39,7 +39,7 @@ fi
 # --- the release -----------------------------------------------------------------------------
 ${fetch_release}
 cd "$(mktemp -d)"
-release spin-controlplane-linux-amd64.tar.gz
+release '${spin_version}' spin-controlplane-linux-amd64.tar.gz
 tar -xzf spin-controlplane-linux-amd64.tar.gz -C /
 
 # --- the catalog: RDS, checked against its own CA, signed in to with this machine's role -------

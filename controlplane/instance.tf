@@ -57,11 +57,9 @@ locals {
 
   # How every machine of the installation gets a release file: cosign by its pinned SHA-256,
   # then the file and its bundle, verified against this repository's release workflow at the
-  # version's tag before anything in it runs. Defines `release <file>`.
-  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", {
-    spin_version = var.spin_version
-    cosign       = var.cosign
-  })
+  # version's tag before anything in it runs. Defines `release <version> <file>`; the runners
+  # module is given it, and names the version its control plane serves.
+  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", { cosign = var.cosign })
 
   # The operator's config file, with the settings the control plane sizes the runners by.
   operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
@@ -81,6 +79,7 @@ locals {
   controlplane_user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     name          = var.name
     region        = local.region
+    spin_version  = var.spin_version
     fetch_release = local.fetch_release
     write_files   = local.write_files["controlplane"]
     cp_host       = local.cp_host

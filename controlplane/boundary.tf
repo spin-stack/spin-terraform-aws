@@ -69,6 +69,44 @@ data "aws_iam_policy_document" "boundary" {
       "arn:aws:ec2:${local.region}:${local.account}:network-interface/*",
     ]
   }
+  # The control plane's secrets are its role's alone, whatever policy a role is given later: the
+  # encryption key that opens the catalog's seals, and the collector's token. The parameters are
+  # read under the account's aws/ssm key, which opens them to any principal SSM lets read them,
+  # so this is where the line is. The pool's token is the runners' to read as well, and every
+  # parameter here is the control plane's alone to write.
+  statement {
+    sid       = "TheControlPlanesSecrets"
+    effect    = "Deny"
+    actions   = ["ssm:GetParameter*", "ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
+    resources = [for p in [local.key_parameter, local.token_parameter_grafana] : "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.controlplane_role_arn]
+    }
+  }
+  statement {
+    sid       = "ThePoolsToken"
+    effect    = "Deny"
+    actions   = ["ssm:GetParameter*"]
+    resources = ["arn:aws:ssm:${local.region}:${local.account}:parameter${local.token_parameter}"]
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.controlplane_role_arn, local.runner_role_arn]
+    }
+  }
+  statement {
+    sid       = "OnlyTheControlPlaneWrites"
+    effect    = "Deny"
+    actions   = ["ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
+    resources = ["${local.ssm_prefix}/*"]
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.controlplane_role_arn]
+    }
+  }
   # The machines are reached by a person through Session Manager; a role is never the one
   # starting a session or running a command on another.
   statement {

@@ -4,36 +4,25 @@ variable "name" {
   default     = "spin"
 }
 
-variable "spin_version" {
-  description = "The release a new runner installs. Its spin-install fetches the runner from the control plane and refuses one of another release, so this is the control plane's; a host updates itself from there on."
-  type        = string
-  validation {
-    condition     = can(regex("^v[0-9]{8}\\.[0-9]+$", var.spin_version))
-    error_message = "spin_version is a dated release, v<YYYYMMDD>.<N>."
-  }
-}
-
 variable "controlplane" {
   description = "The control plane module's outputs, as they are: where the runners go, whom they dial, and where they read the token and CA."
   type = object({
-    vpc_id              = string
-    subnet_ids          = list(string)
-    security_group_id   = string
-    url                 = string
-    token_parameter     = string
-    token_parameter_arn = string
-    ca_parameter        = string
-    ca_parameter_arn    = string
-    unpublished         = string
-    boundary_arn        = string
-    domain              = string
-    relay_dial          = string
-    collector           = string
-    metric_interval     = string
-    cosign = object({
-      version = string
-      sha256  = string
-    })
+    vpc_id                     = string
+    subnet_ids                 = list(string)
+    security_group_id          = string
+    url                        = string
+    token_parameter            = string
+    token_parameter_arn        = string
+    ca_parameter               = string
+    ca_parameter_arn           = string
+    unpublished                = string
+    boundary_arn               = string
+    domain                     = string
+    relay_dial                 = string
+    collector                  = string
+    metric_interval            = string
+    fetch_release              = string
+    session_manager_policy_arn = string
   })
 }
 

@@ -21,23 +21,23 @@ override_data {
 }
 
 variables {
-  spin_version = "v20260921.02"
   controlplane = {
-    vpc_id              = "vpc-00000000000000000"
-    subnet_ids          = ["subnet-00000000000000000"]
-    security_group_id   = "sg-00000000000000000"
-    url                 = "https://10.42.0.10:8080"
-    token_parameter     = "/spin/runner-registration-token"
-    token_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
-    ca_parameter        = "/spin/controlplane-ca"
-    ca_parameter_arn    = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
-    unpublished         = "unpublished"
-    boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
-    domain              = "example.com"
-    relay_dial          = "proxy.spin.internal:443"
-    collector           = ""
-    metric_interval     = ""
-    cosign              = { version = "3.1.3", sha256 = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71" }
+    vpc_id                     = "vpc-00000000000000000"
+    subnet_ids                 = ["subnet-00000000000000000"]
+    security_group_id          = "sg-00000000000000000"
+    url                        = "https://10.42.0.10:8080"
+    token_parameter            = "/spin/runner-registration-token"
+    token_parameter_arn        = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
+    ca_parameter               = "/spin/controlplane-ca"
+    ca_parameter_arn           = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
+    unpublished                = "unpublished"
+    boundary_arn               = "arn:aws:iam::123456789012:policy/spin-boundary"
+    domain                     = "example.com"
+    relay_dial                 = "proxy.spin.internal:443"
+    collector                  = ""
+    metric_interval            = ""
+    fetch_release              = "release() { : the control plane module's; }"
+    session_manager_policy_arn = "arn:aws:iam::123456789012:policy/spin-session-manager"
   }
 }
 
@@ -70,13 +70,17 @@ run "a_runner_is_reached_by_nothing" {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"
   }
-  # Its installer is what the release workflow signed at this group's release, checked before
-  # it runs.
+  # Its installer is the release its control plane serves, asked of it — never a version this
+  # module was given, which an update of the control plane may not have reached yet — and it is
+  # fetched with the control plane module's own checked download. The token is no argument.
   assert {
-    condition = alltrue([for want in ["release spin-install-linux-amd64", "cosign verify-blob",
-      "release.yml@refs/tags/v20260921.02", "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"] :
-    strcontains(base64decode(aws_launch_template.runner.user_data), want)])
-    error_message = "a runner runs an installer it has not checked against the release's signature"
+    condition = alltrue([for want in [
+      "release() { : the control plane module's; }",
+      "-H @/etc/spin-bootstrap/token.header \\\n    'https://10.42.0.10:8080/platform-images/runner'",
+      "tolower($1) == \"x-spin-runner-version\"",
+      "release \"$version\" spin-install-linux-amd64",
+    ] : strcontains(base64decode(aws_launch_template.runner.user_data), want)]) && !strcontains(base64decode(aws_launch_template.runner.user_data), "Bearer $token\" ")
+    error_message = "a runner installs a release other than its control plane's, or fetches it unchecked"
   }
 }
 
@@ -84,21 +88,22 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
   command = plan
   variables {
     controlplane = {
-      vpc_id              = "vpc-00000000000000000"
-      subnet_ids          = ["subnet-00000000000000000"]
-      security_group_id   = "sg-00000000000000000"
-      url                 = "https://cp.spin.internal:8080"
-      token_parameter     = "/spin/runner-registration-token"
-      token_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
-      ca_parameter        = "/spin/controlplane-ca"
-      ca_parameter_arn    = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
-      unpublished         = "unpublished"
-      boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
-      domain              = "example.com"
-      relay_dial          = "proxy.spin.internal:443"
-      collector           = "cp.spin.internal:4317"
-      metric_interval     = "60s"
-      cosign              = { version = "3.1.3", sha256 = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71" }
+      vpc_id                     = "vpc-00000000000000000"
+      subnet_ids                 = ["subnet-00000000000000000"]
+      security_group_id          = "sg-00000000000000000"
+      url                        = "https://cp.spin.internal:8080"
+      token_parameter            = "/spin/runner-registration-token"
+      token_parameter_arn        = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
+      ca_parameter               = "/spin/controlplane-ca"
+      ca_parameter_arn           = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca"
+      unpublished                = "unpublished"
+      boundary_arn               = "arn:aws:iam::123456789012:policy/spin-boundary"
+      domain                     = "example.com"
+      relay_dial                 = "proxy.spin.internal:443"
+      collector                  = "cp.spin.internal:4317"
+      metric_interval            = "60s"
+      fetch_release              = "release() { : the control plane module's; }"
+      session_manager_policy_arn = "arn:aws:iam::123456789012:policy/spin-session-manager"
     }
   }
   assert {
@@ -122,6 +127,12 @@ run "a_runners_role_reads_two_parameters" {
     condition = length(data.aws_iam_policy_document.runner.statement) == 1 && alltrue([for s in data.aws_iam_policy_document.runner.statement :
     s.actions == toset(["ssm:GetParameter"]) && length(s.resources) == 2])
     error_message = "the runners' role may do more than read the token and the CA"
+  }
+  # Session Manager by the control plane module's own policy, which is a session and no more:
+  # the managed one reads every parameter in the account, the encryption key among them.
+  assert {
+    condition     = aws_iam_role_policy_attachment.runner_ssm[0].policy_arn == "arn:aws:iam::123456789012:policy/spin-session-manager"
+    error_message = "a runner is given more of SSM than a session"
   }
 }
 

@@ -103,7 +103,7 @@ resource "aws_iam_role_policy" "runner" {
 resource "aws_iam_role_policy_attachment" "runner_ssm" {
   count      = var.session_manager ? 1 : 0
   role       = aws_iam_role.runner.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  policy_arn = var.controlplane.session_manager_policy_arn
 }
 
 resource "aws_iam_instance_profile" "runner" {
@@ -161,12 +161,8 @@ resource "aws_launch_template" "runner" {
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh.tftpl", {
     region = data.aws_region.current.region
-    # The control plane module's, rendered with this group's release: one way a machine of the
-    # installation checks what it runs, the two modules being one installation's.
-    fetch_release = templatefile("${path.module}/../controlplane/files/fetch-release.sh.tftpl", {
-      spin_version = var.spin_version
-      cosign       = var.controlplane.cosign
-    })
+    # The control plane module's: one way a machine of the installation checks what it runs.
+    fetch_release   = var.controlplane.fetch_release
     controlplane    = var.controlplane.url
     token_parameter = var.controlplane.token_parameter
     ca_parameter    = var.controlplane.ca_parameter

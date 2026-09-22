@@ -60,9 +60,20 @@ done
 [ -n "$data" ] || { echo "no empty disk of model '$model' for the runner's data"; exit 1; }
 uplink=$(ip -o route show default | awk '{print $5; exit}')
 
+# The release is the control plane's, asked of it: its spin-install installs a runner of its own
+# release and no other, and the control plane an update is replacing may be either release for
+# a while — or, its update abandoned, the old one for good. A host that joins the old one is
+# updated with the rest of the fleet when the new one leads. The token in a header file, not an
+# argument: it registers hosts.
+(umask 077; printf 'Authorization: Bearer %s\n' "$token" >/etc/spin-bootstrap/token.header)
+version=$(curl -fsS --head --cacert /etc/spin-bootstrap/ca.crt -H @/etc/spin-bootstrap/token.header \
+    '${controlplane}/platform-images/runner' | tr -d '\r' | awk -F': ' 'tolower($1) == "x-spin-runner-version" { print $2 }')
+rm -f /etc/spin-bootstrap/token.header
+[ -n "$version" ] || { echo "the control plane did not say which release it is"; exit 1; }
+
 ${fetch_release}
 cd "$(mktemp -d)"
-release spin-install-linux-amd64
+release "$version" spin-install-linux-amd64
 install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 
 spin-install runner \

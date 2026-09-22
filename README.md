@@ -63,6 +63,18 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   VPC's network or a security group, run commands on another machine through SSM, or lift the
   bucket's lock or the logs. A policy attached later, by mistake or from a machine that was
   taken, cannot grant past it.
+- **The control plane's secrets are its role's alone.** Session Manager is given as a policy of
+  this module's — the agent's registration and its channels — and not AWS's
+  `AmazonSSMManagedInstanceCore`, which also reads every parameter in the account: the
+  parameters are under the account's `aws/ssm` key, so on the proxy or a runner it opened the
+  encryption key. The boundary backs this: no role but the control plane's reads the key or
+  the collector's token, no role but it and the runners' reads the pool's token, and none but
+  it writes a parameter.
+- **A runner installs its control plane's release**, asked of the control plane as it boots
+  (the version header on its runner download), not one this module is given: while an update
+  replaces the control plane — or after one is abandoned — a runner of the new release would
+  be refused by the old. A runner that joins the old one is updated with the fleet when the
+  new one leads. `spin_version` is the control plane module's alone.
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
   `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
   Route 53 Resolver's, and `dns_query_logs = true` asks for it.

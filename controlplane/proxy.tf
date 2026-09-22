@@ -35,7 +35,7 @@ resource "aws_iam_role" "proxy" {
 
 resource "aws_iam_role_policy_attachment" "proxy_ssm" {
   role       = aws_iam_role.proxy.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  policy_arn = aws_iam_policy.session_manager.arn
 }
 
 # The CA it trusts the control plane by; its own certificates' bucket; and, to take the
@@ -213,6 +213,7 @@ locals {
 
   proxy_user_data = templatefile("${path.module}/proxy_user_data.sh.tftpl", {
     region          = local.region
+    spin_version    = var.spin_version
     fetch_release   = local.fetch_release
     write_files     = local.write_files["proxy"]
     domain          = var.domain

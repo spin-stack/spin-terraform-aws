@@ -52,7 +52,6 @@ module "controlplane" {
 
 module "runners" {
   source       = "../runners"
-  spin_version = var.spin_version
   controlplane = module.controlplane
   max_hosts    = 1
 }

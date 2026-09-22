@@ -1,17 +1,17 @@
-# release <file>: the release's file into the working directory, checked before it is kept.
-# cosign by the SHA-256 this module pins, and the file by its bundle: signed by this repository's
-# release workflow at the version's tag, or refused. checksums.txt would be integrity alone, from
-# the same place as the file.
+# release <version> <file>: that release's file into the working directory, checked before it is
+# kept. cosign by the SHA-256 this module pins, and the file by its bundle: signed by this
+# repository's release workflow at the version's tag, or refused. checksums.txt would be
+# integrity alone, from the same place as the file.
 release() {
-  local base='https://github.com/spin-stack/spin/releases/download/${spin_version}'
+  local base="https://github.com/spin-stack/spin/releases/download/$1"
   if [ ! -x /usr/local/bin/cosign ]; then
     curl -fsSL -o /tmp/cosign 'https://github.com/sigstore/cosign/releases/download/v${cosign.version}/cosign-linux-amd64'
     printf '%s  %s\n' '${cosign.sha256}' /tmp/cosign | sha256sum --check --quiet
     install -m 0755 /tmp/cosign /usr/local/bin/cosign
   fi
-  curl -fsSLO "$base/$1"
-  curl -fsSLO "$base/$1.sigstore.json"
-  cosign verify-blob "$1" --bundle "$1.sigstore.json" \
-    --certificate-identity 'https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/${spin_version}' \
+  curl -fsSLO "$base/$2"
+  curl -fsSLO "$base/$2.sigstore.json"
+  cosign verify-blob "$2" --bundle "$2.sigstore.json" \
+    --certificate-identity "https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/$1" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 }
