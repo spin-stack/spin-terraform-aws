@@ -115,6 +115,34 @@ run "the_machines" {
   }
 }
 
+# The components dial each other by names only the VPC resolves, so a machine replaced is a
+# record changed: the control plane's certificate carries its name, and the proxy and every
+# runner are configured with it rather than an address.
+run "the_components_reach_each_other_by_name" {
+  command = plan
+
+  assert {
+    condition     = aws_route53_zone.internal.name == "spin.internal" && length(aws_route53_zone.internal.vpc) == 1
+    error_message = "the installation's names are not a zone private to its VPC"
+  }
+  assert {
+    condition     = aws_route53_record.internal["cp.spin.internal"].records == toset(["10.42.0.10"]) && aws_route53_record.internal["proxy.spin.internal"].records == toset(["10.42.0.11"])
+    error_message = "a name does not hold its machine's address"
+  }
+  assert {
+    condition     = alltrue([for r in aws_route53_record.internal : r.ttl <= 60])
+    error_message = "a replaced machine waits more than a minute for the others to follow it"
+  }
+  assert {
+    condition     = strcontains(aws_instance.controlplane.user_data, "--advertise 'cp.spin.internal'") && output.url == "https://cp.spin.internal:8080"
+    error_message = "the control plane's certificate does not carry the name it is reached by"
+  }
+  assert {
+    condition     = strcontains(aws_instance.proxy.user_data, "--control-plane 'https://cp.spin.internal:8080'")
+    error_message = "the proxy dials the control plane by something other than its name"
+  }
+}
+
 run "the_bucket" {
   command = plan
 
@@ -220,11 +248,11 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition     = strcontains(aws_instance.controlplane.user_data, "sha256sum --check") && strcontains(aws_instance.controlplane.user_data, "--otel-collector '10.42.0.10:4317' --otel-metric-interval '60s'")
+    condition     = strcontains(aws_instance.controlplane.user_data, "sha256sum --check") && strcontains(aws_instance.controlplane.user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {
-    condition     = strcontains(aws_instance.proxy.user_data, "--otel-collector '10.42.0.10:4317'")
+    condition     = strcontains(aws_instance.proxy.user_data, "--otel-collector 'cp.spin.internal:4317'")
     error_message = "the proxy is not pointed at the collector"
   }
   assert {

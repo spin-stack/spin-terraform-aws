@@ -78,6 +78,9 @@ resource "aws_instance" "proxy" {
   lifecycle {
     ignore_changes = [ami, user_data]
   }
+
+  # It dials the control plane by name.
+  depends_on = [aws_route53_record.internal]
 }
 
 resource "aws_eip_association" "proxy" {

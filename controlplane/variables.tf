@@ -22,6 +22,16 @@ variable "domain" {
   type        = string
 }
 
+variable "internal_zone" {
+  description = "The private zone the components reach each other by: cp.<this> and proxy.<this>, resolved only inside the VPC."
+  type        = string
+  default     = "spin.internal"
+  validation {
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,}$", var.internal_zone))
+    error_message = "internal_zone is a DNS name in lower case, e.g. spin.internal."
+  }
+}
+
 variable "acme_email" {
   description = "The address Let's Encrypt writes to; empty is admin@<domain>."
   type        = string

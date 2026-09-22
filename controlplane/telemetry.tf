@@ -40,7 +40,7 @@ variable "grafana_cloud" {
 locals {
   telemetry = var.grafana_cloud != null
   # Where every process of the installation pushes; empty ships nothing.
-  collector               = local.telemetry ? "${local.private_ip}:4317" : ""
+  collector               = local.telemetry ? "${local.cp_host}:4317" : ""
   metric_interval         = local.telemetry ? var.grafana_cloud.metric_interval : ""
   token_parameter_grafana = "/${var.name}/grafana-cloud-token"
 }

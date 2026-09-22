@@ -52,7 +52,7 @@ sha256sum --check --ignore-missing checksums.txt
 install -m 0755 spin-install-linux-amd64 /usr/local/bin/spin-install
 
 spin-install control-plane \
-  --advertise '${private_ip}' \
+  --advertise '${cp_host}' \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
   --trusted-proxy '${proxy_ip}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 
@@ -199,4 +199,4 @@ systemctl daemon-reload
 systemctl enable spin-pool-token.timer
 systemctl start spin-pool-token.service
 systemctl start spin-pool-token.timer
-echo "spin control plane ${spin_version} is installed; runners join at https://${private_ip}:8080"
+echo "spin control plane ${spin_version} is installed; runners join at https://${cp_host}:8080"

@@ -41,6 +41,11 @@ output "domain" {
   value       = var.domain
 }
 
+output "internal_zone_id" {
+  description = "The private zone the components reach each other by, cp.<internal_zone> and proxy.<internal_zone>."
+  value       = aws_route53_zone.internal.zone_id
+}
+
 output "proxy_private_ip" {
   description = "The proxy inside the VPC: where the runners' relay goes, without leaving it."
   value       = local.proxy_ip

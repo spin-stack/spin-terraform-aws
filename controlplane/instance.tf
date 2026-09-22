@@ -29,10 +29,13 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  # Fixed, so the address in the control plane's certificate — and in every runner's
-  # configuration — is the same across a replaced instance.
+  # The addresses the internal zone's records hold. The components dial the names — the control
+  # plane's certificate carries cp.<zone> and every runner is configured with it — so these are
+  # the records' business alone.
   private_ip = cidrhost(aws_subnet.public[0].cidr_block, 10)
-  url        = "https://${local.private_ip}:8080"
+  cp_host    = "cp.${var.internal_zone}"
+  proxy_host = "proxy.${var.internal_zone}"
+  url        = "https://${local.cp_host}:8080"
   # The proxy's, fixed for the same reason: the control plane takes its word about a browser's
   # address by it (--trusted-proxy).
   proxy_ip = cidrhost(aws_subnet.public[0].cidr_block, 11)
@@ -96,7 +99,7 @@ resource "aws_instance" "controlplane" {
     name                    = var.name
     region                  = local.region
     spin_version            = var.spin_version
-    private_ip              = local.private_ip
+    cp_host                 = local.cp_host
     proxy_ip                = local.proxy_ip
     bucket                  = aws_s3_bucket.volumes.bucket
     role_arn                = aws_iam_role.runner_scope.arn
@@ -137,6 +140,8 @@ resource "aws_instance" "controlplane" {
     aws_iam_role_policy.controlplane,
     aws_iam_role_policy.runner_scope,
     aws_route.internet,
+    # Its own collector is dialled by name, and so is it by everything that waits for it.
+    aws_route53_record.internal,
     aws_vpc_endpoint.s3,
   ]
 }

@@ -78,7 +78,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
       vpc_id              = "vpc-00000000000000000"
       subnet_ids          = ["subnet-00000000000000000"]
       security_group_id   = "sg-00000000000000000"
-      url                 = "https://10.42.0.10:8080"
+      url                 = "https://cp.spin.internal:8080"
       token_parameter     = "/spin/runner-registration-token"
       token_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-registration-token"
       ca_parameter        = "/spin/controlplane-ca"
@@ -87,7 +87,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
       boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
       domain              = "example.com"
       proxy_private_ip    = "10.42.0.11"
-      collector           = "10.42.0.10:4317"
+      collector           = "cp.spin.internal:4317"
       metric_interval     = "60s"
     }
   }
@@ -96,7 +96,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
     error_message = "the collector's port is not opened to the runners"
   }
   assert {
-    condition     = strcontains(base64decode(aws_launch_template.runner.user_data), "--otel-collector '10.42.0.10:4317' --otel-metric-interval '60s'")
+    condition     = strcontains(base64decode(aws_launch_template.runner.user_data), "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
     error_message = "a runner is not pointed at the collector"
   }
 }
