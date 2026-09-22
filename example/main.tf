@@ -1,4 +1,6 @@
-# An installation: the control plane, and one spot runner during working hours.
+# An installation: the control plane, and a spot runner while anybody is using one. The group
+# starts empty; the first workspace of the day waits a few minutes for its host, and the group is
+# emptied an hour after the last workspace stops — at once between 20:00 and 07:00.
 #
 #   tofu init && tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123
 #
@@ -42,18 +44,17 @@ module "controlplane" {
   spin_version    = var.spin_version
   domain          = var.domain
   route53_zone_id = var.zone
+
+  runner_idle_minutes = 60
+  quiet_hours         = "20:00-07:00"
+  time_zone           = "America/Argentina/Buenos_Aires"
 }
 
 module "runners" {
   source       = "../runners"
   spin_version = var.spin_version
   controlplane = module.controlplane
-  size         = 1
-  schedule = {
-    up        = "0 8 * * MON-FRI"
-    down      = "0 18 * * MON-FRI"
-    time_zone = "America/Argentina/Buenos_Aires"
-  }
+  max_hosts    = 1
 }
 
 output "dashboard" {

@@ -56,6 +56,19 @@ data "aws_iam_policy_document" "controlplane" {
     ]
     resources = [aws_s3_bucket.volumes.arn, "${aws_s3_bucket.volumes.arn}/*"]
   }
+  # The runners' group, which the runners module names ${name}-runners: the control plane
+  # starts a host when a workspace waits for one and empties the group when nothing runs.
+  # Describe has no resource-level permission; the resize is held to that one group.
+  statement {
+    sid       = "SizeTheRunners"
+    actions   = ["autoscaling:SetDesiredCapacity"]
+    resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.runner_group}"]
+  }
+  statement {
+    sid       = "SeeTheRunners"
+    actions   = ["autoscaling:DescribeAutoScalingGroups"]
+    resources = ["*"]
+  }
   statement {
     sid       = "MintRunnerCredentials"
     actions   = ["sts:AssumeRole"]

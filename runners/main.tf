@@ -171,10 +171,11 @@ resource "aws_launch_template" "runner" {
 resource "aws_autoscaling_group" "runner" {
   name                = "${var.name}-runners"
   vpc_zone_identifier = var.controlplane.subnet_ids
-  min_size            = var.schedule == null ? var.size : 0
-  max_size            = var.size
-  # Left to the schedule when there is one: an apply resetting it would start the group at night.
-  desired_capacity = var.schedule == null ? var.size : null
+  # From none, and sized by the control plane (internal/domain/autoscale): it starts a host when
+  # a workspace waits for one and empties the group when nothing runs. Terraform sets neither
+  # the size nor the name's contract with the control plane module, ${name}-runners, can change.
+  min_size = 0
+  max_size = var.max_hosts
   # A spot recommendation to leave starts the replacement first; the host being replaced then
   # leaves by the termination hook below, so its workspaces have somewhere to resume.
   capacity_rebalance = var.spot
@@ -222,24 +223,3 @@ resource "aws_autoscaling_group" "runner" {
   }
 }
 
-resource "aws_autoscaling_schedule" "up" {
-  count                  = var.schedule == null ? 0 : 1
-  scheduled_action_name  = "up"
-  autoscaling_group_name = aws_autoscaling_group.runner.name
-  recurrence             = var.schedule.up
-  time_zone              = var.schedule.time_zone
-  min_size               = 0
-  max_size               = var.size
-  desired_capacity       = var.size
-}
-
-resource "aws_autoscaling_schedule" "down" {
-  count                  = var.schedule == null ? 0 : 1
-  scheduled_action_name  = "down"
-  autoscaling_group_name = aws_autoscaling_group.runner.name
-  recurrence             = var.schedule.down
-  time_zone              = var.schedule.time_zone
-  min_size               = 0
-  max_size               = var.size
-  desired_capacity       = 0
-}

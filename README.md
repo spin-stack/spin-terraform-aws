@@ -7,7 +7,8 @@ Two modules, and `example/` composing them into an installation.
   --with-proxy` does the installing; this module gives it a machine, a role and a bucket that
   already satisfy it.
 - **`runners/`** — an autoscaling group of runners that join by themselves, spot by default,
-  optionally on a schedule.
+  that the control plane sizes: none until a workspace waits for a host, and none again once
+  nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`).
 
 ```bash
 cd example
@@ -37,6 +38,16 @@ sudo docker exec spin-controlplane controlplane bootstrap-password   # then http
   beside it. The
   token carries the host policy each runner starts with: by default, a spot reclaim announced
   by AWS and 100 seconds to empty itself.
+- **The control plane sizes the group, not a schedule or a metric.** It is the one that knows a
+  workspace is waiting for a host, and that the last one stopped an hour ago. The first create
+  or start of the day waits in *Waiting for a host* for the few minutes a runner takes to boot
+  and install; the control plane has asked the group for one, and places the workspace on it
+  when it registers. It only ever goes from none to one, adds one while a workspace has waited
+  longer than a host takes to come, and goes back to none: it never picks one host of several
+  to take away, since the group would choose which. Its role may resize that one group and
+  nothing else, and the group's name, `<name>-runners`, is the contract between the modules.
+  `installation_config` is the installation's config file, which this module applies with those
+  settings added: it is then the file's one author.
 - **A scale-in is a drain.** The group's termination hook holds a host for `drain_seconds`; the
   runner reads the lifecycle state from the metadata service and suspends its workspaces to
   the bucket, where they resume on the next host. A spot reclaim is the same with a two-minute

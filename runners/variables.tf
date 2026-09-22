@@ -57,20 +57,14 @@ variable "spot" {
   default     = true
 }
 
-variable "size" {
-  description = "How many hosts run: always, or while the schedule has the group up."
+variable "max_hosts" {
+  description = "The most runners the group may have. How many it has is the control plane's to decide: none until a workspace waits for a host, and none again once nothing has run for the control plane module's runner_idle_minutes."
   type        = number
   default     = 1
-}
-
-variable "schedule" {
-  description = "When the group runs, as cron in time_zone. Null runs `size` hosts always. Scaling down is a drain: each host's workspaces are suspended to the bucket and resume when a host is back."
-  type = object({
-    up        = string
-    down      = string
-    time_zone = string
-  })
-  default = null
+  validation {
+    condition     = var.max_hosts >= 1
+    error_message = "max_hosts is at least one; a group that may have none is one no workspace can wait for."
+  }
 }
 
 variable "drain_seconds" {

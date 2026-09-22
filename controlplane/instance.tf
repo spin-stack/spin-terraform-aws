@@ -39,6 +39,22 @@ locals {
   key_parameter   = "/${var.name}/controlplane-encryption-key"
   # What the runners wait for: the control plane has not published anything yet.
   unpublished = "unpublished"
+
+  # The group the runners module makes; its name is the contract between the two modules.
+  runner_group = "${var.name}-runners"
+
+  # The operator's config file, with the settings the control plane sizes the runners by.
+  operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
+  installation = merge(local.operator, {
+    settings = merge(try(local.operator.settings, {}), merge({
+      autoscaling_group        = local.runner_group
+      autoscaling_region       = local.region
+      autoscaling_idle_minutes = var.runner_idle_minutes
+      }, var.quiet_hours == "" ? {} : {
+      autoscaling_quiet_hours = var.quiet_hours
+      autoscaling_time_zone   = var.time_zone
+    }))
+  })
 }
 
 resource "aws_ebs_volume" "data" {
@@ -93,6 +109,7 @@ resource "aws_instance" "controlplane" {
     key_parameter   = local.key_parameter
     pool_flags      = join(" ", var.pool_token_flags)
     rotation        = var.pool_token_rotation
+    installation    = yamlencode(local.installation)
     token_expiry    = "${tonumber(trimsuffix(var.pool_token_rotation, "h")) * 4}h"
   })
 

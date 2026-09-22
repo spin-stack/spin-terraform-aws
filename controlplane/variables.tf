@@ -86,6 +86,39 @@ variable "pool_token_rotation" {
   }
 }
 
+variable "installation_config" {
+  description = <<-EOT
+    The installation's config file (configs/spin-example.yaml), as YAML. This module applies it
+    on the control plane's first boot with the autoscaling settings below added to its settings
+    block, and is then its one author: a second file applied from elsewhere would remove what
+    this one declares, and this one what it does.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "runner_idle_minutes" {
+  description = "How long the fleet has no workspace running, starting or waiting before the runners' group is emptied."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.runner_idle_minutes >= 1
+    error_message = "runner_idle_minutes is at least one."
+  }
+}
+
+variable "quiet_hours" {
+  description = "HH:MM-HH:MM in time_zone when an idle fleet is emptied at once rather than after runner_idle_minutes. A workspace asked for then still brings a runner up. Empty is none."
+  type        = string
+  default     = ""
+}
+
+variable "time_zone" {
+  description = "The IANA zone quiet_hours are in."
+  type        = string
+  default     = "UTC"
+}
+
 variable "tags" {
   description = "Tags on everything this module creates."
   type        = map(string)

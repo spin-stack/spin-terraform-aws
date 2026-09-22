@@ -56,6 +56,13 @@ spin-install control-plane \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
   --with-proxy --domain '${domain}' %{ if acme_email != "" }--acme-email '${acme_email}'%{ endif }
 
+# --- the installation's config: the operator's, and how the runners are sized ----------------
+install -d -m 0700 /etc/spin-stack
+cat >/etc/spin-stack/installation.yaml <<'EOF'
+${installation}
+EOF
+docker exec -i spin-controlplane controlplane config apply /dev/stdin </etc/spin-stack/installation.yaml
+
 # --- publish ---------------------------------------------------------------------------------
 # The key, once: SSM is its backup, and an existing parameter is never overwritten by a volume
 # that may be the stranger.
