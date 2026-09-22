@@ -171,7 +171,11 @@ resource "aws_iam_role" "runner_scope" {
 
 data "aws_iam_policy_document" "runner_scope" {
   statement {
-    actions   = ["s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration", "s3:ListBucketVersions"]
+    # ListBucket is what makes S3 answer a key that is not there with 404 rather than 403, and a
+    # volume with nothing published yet has no HEAD: without it every host read that absence as a
+    # credential it could not use and refused to serve the volume.
+    actions = ["s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration", "s3:ListBucketVersions",
+    "s3:ListBucket"]
     resources = [aws_s3_bucket.volumes.arn]
   }
   statement {
