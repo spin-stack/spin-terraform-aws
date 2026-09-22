@@ -489,6 +489,16 @@ run "the_machines_run_what_the_release_signed" {
     condition     = strcontains(local.controlplane_user_data, "release 'v20260921.02' spin-controlplane-linux-amd64.tar.gz") && strcontains(base64decode(aws_launch_template.proxy.user_data), "release 'v20260921.02' spin-proxy-linux-amd64.tar.gz")
     error_message = "a machine unpacks another role's tarball, or another release's"
   }
+  # The files come from the release's public package, with an oras pinned like cosign: spin's
+  # repository is private, and a download from its releases is a 404 to a machine.
+  assert {
+    condition = (
+      strcontains(local.fetch_release, "oras pull --no-tty \"ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}\"\n  cosign verify-blob") &&
+      strcontains(local.fetch_release, "printf '%s  %s\\n' '${var.oras.sha256}' /tmp/oras.tar.gz | sha256sum --check") &&
+      !strcontains(local.fetch_release, "spin-stack/spin/releases/download")
+    )
+    error_message = "a machine fetches the release from somewhere it cannot read, or runs an oras it has not checked"
+  }
   # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
   assert {
     condition     = length(aws_launch_template.controlplane.user_data) * 3 / 4 < 16384 && length(base64decode(aws_launch_template.proxy.user_data)) < 16384

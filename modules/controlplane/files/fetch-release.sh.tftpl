@@ -1,16 +1,21 @@
 # release <version> <file>: that release's file into the working directory, checked before it is
-# kept. cosign by the SHA-256 this module pins, and the file by its bundle: signed by this
-# repository's release workflow at the version's tag, or refused. checksums.txt would be
-# integrity alone, from the same place as the file.
+# kept. cosign and oras by the SHA-256 this module pins; the file and its bundle from the
+# release's package, ghcr.io/spin-stack/spin-release, tagged <version>-<file> without .tar.gz,
+# which is public while spin's repository is not; and the file checked by its bundle: signed by
+# spin's release workflow at the version's tag, or refused. The package is transport and
+# nothing more - whoever could push to it still cannot sign as that workflow.
 release() {
-  local base="https://github.com/spin-stack/spin/releases/download/$1"
   if [ ! -x /usr/local/bin/cosign ]; then
     curl -fsSL -o /tmp/cosign 'https://github.com/sigstore/cosign/releases/download/v${cosign.version}/cosign-linux-amd64'
     printf '%s  %s\n' '${cosign.sha256}' /tmp/cosign | sha256sum --check --quiet
     install -m 0755 /tmp/cosign /usr/local/bin/cosign
   fi
-  curl -fsSLO "$base/$2"
-  curl -fsSLO "$base/$2.sigstore.json"
+  if [ ! -x /usr/local/bin/oras ]; then
+    curl -fsSL -o /tmp/oras.tar.gz 'https://github.com/oras-project/oras/releases/download/v${oras.version}/oras_${oras.version}_linux_amd64.tar.gz'
+    printf '%s  %s\n' '${oras.sha256}' /tmp/oras.tar.gz | sha256sum --check --quiet
+    tar -xzf /tmp/oras.tar.gz -C /usr/local/bin oras
+  fi
+  oras pull --no-tty "ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}"
   cosign verify-blob "$2" --bundle "$2.sigstore.json" \
     --certificate-identity "https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/$1" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com

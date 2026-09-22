@@ -55,11 +55,12 @@ locals {
   # The group the runners module makes; its name is the contract between the two modules.
   runner_group = "${var.name}-runners"
 
-  # How every machine of the installation gets a release file: cosign by its pinned SHA-256,
-  # then the file and its bundle, verified against this repository's release workflow at the
-  # version's tag before anything in it runs. Defines `release <version> <file>`; the runners
-  # module is given it, and names the version its control plane serves.
-  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", { cosign = var.cosign })
+  # How every machine of the installation gets a release file: cosign and oras by their pinned
+  # SHA-256, then the file and its bundle from the release's package, verified against spin's
+  # release workflow at the version's tag before anything in it runs. Defines
+  # `release <version> <file>`; the runners module is given it, and names the version its
+  # control plane serves.
+  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", { cosign = var.cosign, oras = var.oras })
 
   # The operator's config file, with the settings the control plane sizes the runners by.
   operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)

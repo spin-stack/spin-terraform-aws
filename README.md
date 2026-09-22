@@ -153,10 +153,11 @@ sudo spin-controlplane bootstrap-password   # then https://app.<domain>
   and read back by every machine, that one included — so a first boot that dies has lost
   nothing, and a replaced control plane serves the same catalog. It is not Terraform's, and it
   outlives any destroy.
-- **Every machine runs what the release workflow signed.** Each downloads cosign by the SHA-256
-  this module pins (`cosign`), then its tarball and that tarball's bundle, and unpacks nothing
-  that is not signed by `release.yml` at the version's tag. Nothing is a container: each role
-  is a binary under systemd, as its own user.
+- **Every machine runs what the release workflow signed.** Each downloads cosign and oras by
+  the SHA-256 this module pins (`cosign`, `oras`), pulls its tarball and that tarball's bundle
+  from the release's package, `ghcr.io/spin-stack/spin-release` (public; spin's repository is
+  not), and unpacks nothing that is not signed by `release.yml` at the version's tag. Nothing is
+  a container: each role is a binary under systemd, as its own user.
 - **Small machines.** The control plane and the proxy are `t3.micro` by default: with the
   catalog on RDS, the control plane is the control plane alone (and Alloy, where there is a
   collector - `t3.small` there for a busy fleet). Two of them and the database are the whole

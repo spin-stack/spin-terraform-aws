@@ -112,6 +112,23 @@ variable "cosign" {
   }
 }
 
+variable "oras" {
+  description = "The oras every machine pulls the release's files from its package with, pinned by the SHA-256 of its linux-amd64 tarball. It only carries them: what a file is trusted by is its bundle, which cosign checks."
+  type = object({
+    version = string
+    sha256  = string
+  })
+  default = {
+    version = "1.3.4"
+    sha256  = "f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454"
+  }
+  nullable = false
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.oras.sha256))
+    error_message = "oras.sha256 is 64 hex digits."
+  }
+}
+
 variable "flow_logs" {
   description = "Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
   type        = bool
