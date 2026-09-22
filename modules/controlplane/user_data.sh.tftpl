@@ -28,6 +28,25 @@ apt-get install -yq "/tmp/$deb"
 # --- this machine's files (files/, machine_files.tf) -----------------------------------------
 ${write_files}
 
+# Until this machine is in service, a boot that stops hands the installation back and abandons
+# the launch now rather than when the hook times out. Before the takeover there is nothing to
+# hand back; from it on, the control plane is stopped and the name pointed where it was, and the
+# old machine's watchdog, seeing its own name and no control plane, starts it and it takes the
+# term again.
+. /usr/local/lib/spin/lifecycle.sh
+previous=
+serving=
+hand_back() {
+  [ -z "$serving" ] || return 0
+  echo "this machine did not come into service: handing the installation back"
+  systemctl stop spin-controlplane.service || true
+  if [ -n "$previous" ] && [ "$previous" != "$(imds local-ipv4)" ]; then
+    point '${cp_host}' "$previous" || true
+  fi
+  abandon || true
+}
+trap hand_back EXIT
+
 # --- the encryption key: SSM's, and nowhere first ---------------------------------------------
 # Everything the catalog seals is sealed under it, so it is kept before anything uses it: the
 # first machine makes one and puts it without --overwrite, and every machine — the first too —
@@ -67,22 +86,7 @@ PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id '${database_admin}'
 
 # The name, then the term. Pointed here first, so whoever the old machine drops when it is
 # superseded redials this one; then spin-install starts the control plane, which takes the term.
-# Until this machine is in service, a failure hands both back: its control plane stopped, the
-# name pointed where it was, and the launch abandoned — the old machine's watchdog, seeing its
-# own name and no control plane, starts it and it takes the term again.
-. /usr/local/lib/spin/lifecycle.sh
 previous=$(resolve '${cp_host}')
-serving=
-hand_back() {
-  [ -z "$serving" ] || return 0
-  echo "this machine did not come into service: handing the installation back"
-  systemctl stop spin-controlplane.service || true
-  if [ -n "$previous" ] && [ "$previous" != "$(imds local-ipv4)" ]; then
-    point '${cp_host}' "$previous" || true
-  fi
-  abandon || true
-}
-trap hand_back EXIT
 point '${cp_host}'
 SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
   --database-auth aws-iam --database-ca /etc/spin-stack/database-ca.pem \

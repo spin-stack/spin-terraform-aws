@@ -12,6 +12,30 @@ snap install aws-cli --classic
 ${write_files}
 . /usr/local/lib/spin/lifecycle.sh
 
+# Until this machine is in service, a boot that stops - a release it cannot fetch, a CA never
+# published, a Caddy that does not answer - hands the installation back: the name and the
+# address on the proxy that had them, and the launch abandoned now rather than when the hook
+# times out, with the old proxy serving all along. That proxy is the machine the name points
+# at, in this VPC; the installation's first proxy has none.
+previous=$(resolve '${proxy_host}')
+serving=
+hand_back() {
+  [ -z "$serving" ] || return 0
+  echo "this machine did not come into service: handing the installation back"
+  if [ -n "$previous" ] && [ "$previous" != "$(imds local-ipv4)" ]; then
+    point '${proxy_host}' "$previous" || true
+    old=$(aws --region '${region}' ec2 describe-instances --query 'Reservations[].Instances[].InstanceId' --output text \
+      --filters 'Name=vpc-id,Values=${vpc_id}' "Name=private-ip-address,Values=$previous" \
+      'Name=tag:spin:role,Values=proxy' 'Name=instance-state-name,Values=running') || old=''
+    if [ -n "$old" ]; then
+      aws --region '${region}' ec2 associate-address --allocation-id '${allocation_id}' \
+        --instance-id "$old" --allow-reassociation >/dev/null || true
+    fi
+  fi
+  abandon || true
+}
+trap hand_back EXIT
+
 ${fetch_release}
 cd "$(mktemp -d)"
 release '${spin_version}' spin-proxy-linux-amd64.tar.gz
@@ -57,4 +81,5 @@ aws --region '${region}' ec2 associate-address --allocation-id '${allocation_id}
 systemctl daemon-reload
 systemctl enable --now spin-proxy-certificates.timer
 in_service
+serving=yes
 echo "spin proxy is installed and in service"

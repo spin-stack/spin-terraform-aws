@@ -78,6 +78,13 @@ data "aws_iam_policy_document" "proxy" {
       values   = ["proxy"]
     }
   }
+  # Which machine had the address, to give it back to when this one fails its launch. Describe
+  # has no resource to scope it to.
+  statement {
+    sid       = "ThePreviousProxy"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
   statement {
     sid       = "InService"
     actions   = ["autoscaling:CompleteLifecycleAction"]
@@ -221,6 +228,7 @@ locals {
     controlplane    = local.url
     proxy_host      = local.proxy_host
     allocation_id   = aws_eip.proxy.allocation_id
+    vpc_id          = aws_vpc.this.id
     ca_parameter    = local.ca_parameter
     unpublished     = local.unpublished
     collector       = local.collector

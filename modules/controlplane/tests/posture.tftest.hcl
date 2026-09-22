@@ -70,6 +70,11 @@ override_resource {
 }
 
 override_resource {
+  target = aws_vpc.this
+  values = { id = "vpc-0spin" }
+}
+
+override_resource {
   target = aws_eip.proxy
   values = { allocation_id = "eipalloc-0123456789abcdef0", public_ip = "203.0.113.10" }
 }
@@ -170,16 +175,32 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   }
   # Until it is in service, a new control plane that fails hands the installation back: its own
   # control plane stopped, the name where it was, the launch abandoned; and the old machine's
-  # watchdog serves the name it is given back, and takes back one nobody answers at.
+  # watchdog serves the name it is given back, and takes back one nobody answers at. The trap is
+  # set before anything that can fail but the machine's packages - a release it cannot fetch
+  # abandons the launch at once rather than holding the group for the hook's half an hour.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "previous=$(resolve 'cp.spin.internal')\nserving=\nhand_back() {") &&
+      strcontains(local.controlplane_user_data, ". /usr/local/lib/spin/lifecycle.sh\nprevious=\nserving=\nhand_back() {") &&
       strcontains(local.controlplane_user_data, "point 'cp.spin.internal' \"$previous\" || true\n  fi\n  abandon || true") &&
-      strcontains(local.controlplane_user_data, "trap hand_back EXIT\npoint 'cp.spin.internal'\n") &&
+      strcontains(local.controlplane_user_data, "trap hand_back EXIT\n\n# --- the encryption key") &&
+      strcontains(local.controlplane_user_data, "previous=$(resolve 'cp.spin.internal')\npoint 'cp.spin.internal'\n") &&
       strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "if [ \"$at\" = \"$self\" ]; then") &&
       strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "point \"$name\"\n  systemctl start spin-controlplane.service")
     )
     error_message = "a failed replacement leaves the installation's name at a machine that is not serving it"
+  }
+  # A new proxy that fails does the same from its first step: the name back where it pointed,
+  # the address back on the proxy of this VPC that answers there, the launch abandoned.
+  assert {
+    condition = (
+      strcontains(base64decode(aws_launch_template.proxy.user_data), ". /usr/local/lib/spin/lifecycle.sh\n\n# Until this machine is in service") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "trap hand_back EXIT\n\n# release <version> <file>") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal' \"$previous\" || true") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "'Name=vpc-id,Values=vpc-0spin' \"Name=private-ip-address,Values=$previous\"") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "--instance-id \"$old\" --allow-reassociation >/dev/null || true\n    fi\n  fi\n  abandon || true") &&
+      strcontains(base64decode(aws_launch_template.proxy.user_data), "\nin_service\nserving=yes\n")
+    )
+    error_message = "a failed proxy replacement leaves the name or the address at a machine that is not serving them"
   }
   # The first machine asks where the name points before it exists: an answer of nothing, and not
   # a failure that set -e and pipefail would end the boot on.
