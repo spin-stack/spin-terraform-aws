@@ -75,10 +75,11 @@ data "aws_iam_policy_document" "boundary" {
   # so this is where the line is. The pool's token is the runners' to read as well, and every
   # parameter here is the control plane's alone to write.
   statement {
-    sid       = "TheControlPlanesSecrets"
-    effect    = "Deny"
-    actions   = ["ssm:GetParameter*", "ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
-    resources = [for p in [local.key_parameter, local.token_parameter_grafana] : "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
+    sid     = "TheControlPlanesSecrets"
+    effect  = "Deny"
+    actions = ["ssm:GetParameter*", "ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
+    resources = [for p in [local.key_parameter, local.token_parameter_grafana, local.bootstrap_password_parameter] :
+    "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
     condition {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"

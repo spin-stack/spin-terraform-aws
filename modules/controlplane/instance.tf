@@ -56,6 +56,10 @@ locals {
   token_parameter = "/${var.name}/runner-registration-token"
   ca_parameter    = "/${var.name}/controlplane-ca"
   key_parameter   = "/${var.name}/controlplane-encryption-key"
+  # The first administrator, for an operator who has just applied and has nowhere else to read
+  # it: the password only exists until that administrator chooses their own.
+  bootstrap_password_parameter = "/${var.name}/bootstrap-password"
+  bootstrap_user_parameter     = "/${var.name}/bootstrap-user"
   # What the runners wait for: the control plane has not published anything yet.
   unpublished = "unpublished"
 
@@ -99,13 +103,15 @@ locals {
     database_host   = aws_db_instance.catalog.address
     database_url    = local.database_url
     # The secret's ARN, which is not the secret: the machine reads it with its role, once.
-    database_admin  = aws_db_instance.catalog.master_user_secret[0].secret_arn
-    key_parameter   = local.key_parameter
-    ca_parameter    = local.ca_parameter
-    collector       = local.collector
-    metric_interval = local.metric_interval
-    alloy_version   = local.telemetry ? var.grafana_cloud.alloy_version : ""
-    alloy_sha256    = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
+    database_admin               = aws_db_instance.catalog.master_user_secret[0].secret_arn
+    key_parameter                = local.key_parameter
+    ca_parameter                 = local.ca_parameter
+    bootstrap_password_parameter = local.bootstrap_password_parameter
+    bootstrap_user_parameter     = local.bootstrap_user_parameter
+    collector                    = local.collector
+    metric_interval              = local.metric_interval
+    alloy_version                = local.telemetry ? var.grafana_cloud.alloy_version : ""
+    alloy_sha256                 = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
   })
 }
 

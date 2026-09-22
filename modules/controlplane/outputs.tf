@@ -109,3 +109,13 @@ output "controlplane_group" {
   description = "The control plane's group of one. `aws autoscaling start-instance-refresh --auto-scaling-group-name <this>` replaces its machine beside itself; its machine is reached with `aws ssm start-session`, as the proxy's is."
   value       = aws_autoscaling_group.controlplane.name
 }
+
+output "bootstrap_user_parameter" {
+  description = "The SSM parameter naming the first administrator: the bootstrap admin, until an identity provider is configured and they are disabled."
+  value       = local.bootstrap_user_parameter
+}
+
+output "bootstrap_password_parameter" {
+  description = "The SSM SecureString holding that administrator's one-time password, written by the control plane's first boot and gone from the catalog the moment they choose their own."
+  value       = local.bootstrap_password_parameter
+}

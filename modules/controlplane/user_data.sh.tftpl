@@ -113,6 +113,24 @@ spin-controlplane config apply /etc/spin-stack/installation.yaml
 aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
   --value file:///var/lib/spin-stack/certs/ca.crt >/dev/null
 
+# The first administrator, where the operator reads it without a shell on a machine. The
+# password is the one-time one the catalog sealed and stops existing the moment that
+# administrator chooses their own, so this writes what there is and is quiet when there is
+# nothing: a replacement of this machine finds the installation already set up. The value goes in
+# a file, never an argument, and the parameter is the control plane's alone to read (boundary.tf).
+if password=$(spin-controlplane bootstrap-password 2>/dev/null); then
+  file=$(mktemp); chmod 600 "$file"
+  printf '%s' "$password" >"$file"
+  unset password
+  aws ssm put-parameter --name '${bootstrap_password_parameter}' --type SecureString --overwrite \
+    --value "file://$file" \
+    --description 'The one-time password of the first administrator of ${name}, until they choose their own' >/dev/null
+  rm -f "$file"
+  aws ssm put-parameter --name '${bootstrap_user_parameter}' --type String --overwrite \
+    --value "$(spin-controlplane bootstrap-password --user)" \
+    --description 'Whom that password is for' >/dev/null
+fi
+
 systemctl daemon-reload
 %{ if collector != "" ~}
 # What Alloy trusts the control plane by, when it reads what to sample and drop.

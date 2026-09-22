@@ -445,6 +445,23 @@ run "no_machine_reads_the_control_planes_secrets" {
     toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
     error_message = "a role other than the control plane's can read the encryption key"
   }
+  # The first administrator's one-time password is written where the operator reads it, and it is
+  # a credential: the same line as the encryption key, and nobody else's to read.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") &&
+    contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/bootstrap-password")])
+    error_message = "a role other than the control plane's can read the first administrator's password"
+  }
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "if password=$(spin-controlplane bootstrap-password 2>/dev/null); then") &&
+      strcontains(local.controlplane_user_data, "--name '/spin/bootstrap-password' --type SecureString --overwrite \\\n    --value \"file://$file\"") &&
+      strcontains(local.controlplane_user_data, "--name '/spin/bootstrap-user' --type String") &&
+      !can(regex("put-parameter[^\n]*--value \"\\$password\"", local.controlplane_user_data))
+    )
+    error_message = "the first administrator is nowhere an operator can read, or their password travels as an argument"
+  }
 }
 
 run "no_collector_unless_asked" {
