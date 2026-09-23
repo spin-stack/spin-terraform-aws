@@ -208,6 +208,14 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     )
     error_message = "the installation's config is handed to the control plane as a descriptor it cannot open, or left readable by anyone"
   }
+  # The domain is given to this module and then to the installation: an installation that has
+  # none takes every browser origin but localhost for another site, so the dashboard loads and a
+  # workspace's terminal is refused — with the operator asked, in the setup pages, for the one
+  # thing they had already said here.
+  assert {
+    condition     = strcontains(local.controlplane_user_data, "spin-controlplane base-domain 'example.com'")
+    error_message = "the installation is never told the domain it answers on"
+  }
   # The new control plane takes its name before the term, and says it serves only once it
   # leads; a proxy takes the address once Caddy answers.
   assert {

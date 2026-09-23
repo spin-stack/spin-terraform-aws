@@ -109,6 +109,13 @@ SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
 chown --reference=/var/lib/spin-stack /etc/spin-stack/installation.yaml
 spin-controlplane config apply /etc/spin-stack/installation.yaml
 
+# The domain this installation answers on, which it is otherwise asked for in the setup pages -
+# and this installation was given it before any of it existed. Until it is set the control plane
+# takes every browser origin but localhost for another site, so the dashboard loads and a
+# workspace's terminal is refused. Saying the domain it is already on changes nothing, which is
+# what a replaced machine does.
+spin-controlplane base-domain '${domain}'
+
 # --- publish ---------------------------------------------------------------------------------
 aws ssm put-parameter --name '${ca_parameter}' --type String --overwrite \
   --value file:///var/lib/spin-stack/certs/ca.crt >/dev/null

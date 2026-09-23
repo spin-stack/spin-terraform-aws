@@ -95,6 +95,7 @@ locals {
     fetch_release = local.fetch_release
     write_files   = local.write_files["controlplane"]
     cp_host       = local.cp_host
+    domain        = var.domain
     # Whose word about a browser's address the control plane takes: the proxy's subnets, where
     # nothing but a proxy runs.
     trusted_proxies = join(",", aws_subnet.edge[*].cidr_block)
