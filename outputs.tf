@@ -21,15 +21,13 @@ locals {
   boot_log = "${local.aws} logs tail ${module.controlplane.boot_log_group} --since 1h --follow"
 
   next_steps = join("\n", concat(
-    module.controlplane.writes_public_dns ? [
-      "1. DNS: app.${var.domain} and *.app.${var.domain} are written into the zone you gave.",
-      ] : [
-      "1. DNS, which is yours: add two A records, app.${var.domain} and *.app.${var.domain}, both",
-      "   pointing at ${module.controlplane.proxy_ip}. When this answers ${module.controlplane.proxy_ip}, they are there:",
+    [
+      "1. DNS: ${var.domain}'s zone is this installation's, in Route 53. Where the domain is",
+      "   registered - or in its parent's zone, for a subdomain - set its nameservers to:",
+      "     ${join(" ", module.controlplane.name_servers)}",
+      "   When this answers ${module.controlplane.proxy_ip}, they are there:",
       "     dig +short app.${var.domain}",
       "   The proxy gets its certificate a few minutes after that.",
-    ],
-    [
       "",
       "2. Wait for the installation to come up: about ten minutes the first time. Each machine",
       "   says InService when it is ready:",
@@ -73,6 +71,11 @@ output "dashboard" {
 output "first_sign_in" {
   description = "The setup page, the first administrator, and the command that reads their one-time password: an SSM SecureString this apply wrote without it ever being in the state."
   value       = local.sign_in
+}
+
+output "name_servers" {
+  description = "The domain's zone's nameservers: what its registrar, or its parent's zone, points at."
+  value       = module.controlplane.name_servers
 }
 
 output "proxy_ip" {

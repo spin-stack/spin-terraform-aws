@@ -5,7 +5,7 @@
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
 #   tofu apply -var spin_version=v20260921.02 -var spin_boot_sha256=<sha256> \
-#     -var domain=example.com -var zone=Z0123
+#     -var domain=spin.example.com
 #
 # From elsewhere, the source is this repository at a tag:
 #
@@ -73,12 +73,6 @@ variable "domain" {
   type = string
 }
 
-variable "zone" {
-  description = "The Route 53 zone for the domain; empty writes no records."
-  type        = string
-  default     = ""
-}
-
 provider "aws" {
   region = var.region
 }
@@ -89,7 +83,6 @@ module "spin" {
   spin_version     = var.spin_version
   spin_boot_sha256 = var.spin_boot_sha256
   domain           = var.domain
-  route53_zone_id  = var.zone
 
   runner_idle_minutes = 60
   quiet_hours         = "20:00-07:00"

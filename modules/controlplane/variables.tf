@@ -44,13 +44,6 @@ variable "acme_email" {
   nullable    = false
 }
 
-variable "route53_zone_id" {
-  description = "A hosted zone to write app.<domain> and *.app.<domain> into. Empty writes nothing, and the records are yours to point at the proxy_ip output."
-  type        = string
-  default     = ""
-  nullable    = false
-}
-
 variable "vpc_cidr" {
   description = "The VPC's range. One /20 public subnet per availability zone is carved from it."
   type        = string

@@ -24,12 +24,22 @@ locals {
   internal_record_ttl = 10
 }
 
+# The domain's public zone: whoever registered it points its nameservers here (the name_servers
+# output). A new zone is new nameservers, and the domain resolves nothing until the registrar is
+# changed again - so it is replaced only by a destroy. force_destroy, for the same reason as the
+# internal zone's.
+resource "aws_route53_zone" "public" {
+  name          = var.domain
+  comment       = "${var.name}: the installation, to the internet"
+  force_destroy = true
+  tags          = local.tags
+}
+
 # app.<domain> is the dashboard and *.app.<domain> every workspace and the relay runners dial;
-# both are the proxy, at its elastic IP. Only where the installation keeps its DNS in Route 53:
-# with DNS kept elsewhere, the two records are the operator's, pointed at the proxy_ip output.
+# both are the proxy, at its elastic IP.
 resource "aws_route53_record" "app" {
-  for_each = var.route53_zone_id == "" ? toset([]) : toset(["app.${var.domain}", "*.app.${var.domain}"])
-  zone_id  = var.route53_zone_id
+  for_each = toset(["app.${var.domain}", "*.app.${var.domain}"])
+  zone_id  = aws_route53_zone.public.zone_id
   name     = each.value
   type     = "A"
   ttl      = 300

@@ -24,12 +24,6 @@ variable "name" {
   default     = null
 }
 
-variable "route53_zone_id" {
-  description = "A public hosted zone to write app.<domain> and *.app.<domain> into; none writes nothing, and the records are yours to point at the proxy_ip output."
-  type        = string
-  default     = null
-}
-
 variable "acme_email" {
   description = "The address Let's Encrypt writes to; none is admin@<domain>."
   type        = string

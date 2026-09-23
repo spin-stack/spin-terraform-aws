@@ -58,9 +58,9 @@ output "standard_vcpus" {
   value       = 2 * (data.aws_ec2_instance_type.controlplane.default_vcpus + data.aws_ec2_instance_type.proxy.default_vcpus)
 }
 
-output "writes_public_dns" {
-  description = "Whether this module writes app.<domain> and *.app.<domain>, or they are the operator's to point at proxy_ip."
-  value       = var.route53_zone_id != ""
+output "name_servers" {
+  description = "The domain's public zone's nameservers, which its registrar points at."
+  value       = aws_route53_zone.public.name_servers
 }
 
 output "domain" {

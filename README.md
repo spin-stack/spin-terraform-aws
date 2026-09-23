@@ -34,8 +34,9 @@ installation, and what `task lint` validates the modules through.
   in to the account (`aws sts get-caller-identity` answers), and the
   [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
   for a shell on a machine.
-- A domain whose DNS you can change. If it is a Route 53 zone in this account, its id is
-  `aws route53 list-hosted-zones-by-name --dns-name <domain> --query 'HostedZones[0].Id'`.
+- A domain, or a subdomain of one, that is the installation's alone: its zone is made here, in
+  Route 53 ($0.50 a month), and whoever registered it points its nameservers at the
+  `name_servers` output.
 - Room for runners. Each is a spot machine of 32 or 48 vCPUs, from five types of one generation
   (`runner_instance_types`), and a new account's spot vCPU quota may be lower than one of them
   (Service Quotas → EC2 → "All Standard Spot Instance Requests"). How likely spot is to give and
@@ -170,8 +171,8 @@ What is left is the catalog's final snapshot. Install the next one under another
   relay at `proxy.spin.internal` too, checking its certificate as `tunnel.app.<domain>`, so the
   relay never leaves the VPC and the proxy's 443 need not be open to wherever runners happen to
   be: `proxy_allowed_cidrs` can be the users' networks alone (80 stays open for the ACME
-  challenge). `route53_zone_id` only writes the public records where the installation keeps its
-  DNS there, and with it elsewhere they are the operator's, pointed at the `proxy_ip` output.
+  challenge). The domain's public zone is the installation's too, and `app.` and `*.app.` in it
+  point at the proxy's elastic IP.
 - **An update is a machine beside the old one, not a stop.** The control plane and the proxy
   are each an autoscaling group of one, and a change to what a machine is - `spin_version`, the
   image, the size - is a new launch template the group's instance refresh rolls out at 100%

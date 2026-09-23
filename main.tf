@@ -13,7 +13,6 @@ module "controlplane" {
   spin_version        = var.spin_version
   spin_boot_sha256    = var.spin_boot_sha256
   domain              = var.domain
-  route53_zone_id     = var.route53_zone_id
   acme_email          = var.acme_email
   admin_email         = var.admin_email
   runner_policy       = var.runner_policy
