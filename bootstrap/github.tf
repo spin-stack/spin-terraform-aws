@@ -4,26 +4,34 @@
 #   <name>-plan   a pull request's plan: read everything, open the state, write nothing. Only a
 #                 pull_request run of that repository assumes it, and it plans with -lock=false,
 #                 since it may not take the state's lock.
-#   <name>-apply  the apply: anything an installation makes. Only a run in that repository's
-#                 `production` environment assumes it - which is where a reviewer approves the
-#                 apply before it runs.
+#   <name>-apply  the apply: anything an installation makes. Only a job of that repository's
+#                 `production` environment, running on main, assumes it.
 #
-# Both open the state, and the state holds the installation's CA key: whoever may open a pull
-# request in the repository may read it. Keep the repository to the people who administer the
-# installation.
+# Which branch a token was issued for is only in its subject once the repository says so - GitHub's
+# default subject names the environment and not the ref - so each repository sets its subject to
+# carry the ref, and gives this its prefix:
+#
+#   gh api -X PUT repos/<owner>/<name>/actions/oidc/customization/sub \
+#     -F use_default=false -f 'include_claim_keys[]=repo' -f 'include_claim_keys[]=context' -f 'include_claim_keys[]=ref'
+#   gh api repos/<owner>/<name>/actions/oidc/customization/sub --jq .sub_claim_prefix
+#
+# Both roles open the state, and the state holds the installation's CA key: whoever may open a
+# pull request in the repository may read it. Keep the repository to the people who administer
+# the installation.
 
 variable "github_repositories" {
-  description = "Repositories, as owner/name, that apply an installation from GitHub Actions: each gets a plan role and an apply role."
-  type        = list(string)
-  default     = []
+  description = "Repositories that apply an installation from GitHub Actions, as owner/name => the prefix of their OIDC subject (sub_claim_prefix, above): each gets a plan role and an apply role."
+  type        = map(string)
+  default     = {}
   validation {
-    condition     = alltrue([for r in var.github_repositories : can(regex("^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$", r))])
-    error_message = "Each of github_repositories is owner/name."
+    condition = alltrue([for r, prefix in var.github_repositories :
+    can(regex("^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$", r)) && startswith(prefix, "repo:")])
+    error_message = "Each of github_repositories is owner/name => the repository's sub_claim_prefix, which starts with repo:."
   }
 }
 
 locals {
-  github = { for r in var.github_repositories : replace(r, "/", "-") => r }
+  github = { for r, prefix in var.github_repositories : replace(r, "/", "-") => { repo = r, prefix = prefix } }
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -33,7 +41,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 data "aws_iam_policy_document" "github_trust" {
-  for_each = { for pair in setproduct(keys(local.github), ["plan", "apply"]) : "${pair[0]}-${pair[1]}" => { repo = local.github[pair[0]], role = pair[1] } }
+  for_each = { for pair in setproduct(keys(local.github), ["plan", "apply"]) : "${pair[0]}-${pair[1]}" => { prefix = local.github[pair[0]].prefix, role = pair[1] } }
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
@@ -46,9 +54,11 @@ data "aws_iam_policy_document" "github_trust" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [each.value.role == "plan" ? "repo:${each.value.repo}:pull_request" : "repo:${each.value.repo}:environment:production"]
+      values = [each.value.role == "plan" ?
+        "${each.value.prefix}:pull_request:ref:refs/pull/*/merge" :
+      "${each.value.prefix}:environment:production:ref:refs/heads/main"]
     }
   }
 }
@@ -96,7 +106,7 @@ resource "aws_iam_role_policy" "plan_opens" {
 
 output "github_roles" {
   description = "For each repository, the roles its workflow assumes: AWS_PLAN_ROLE and AWS_APPLY_ROLE."
-  value = { for k, r in local.github : r => {
+  value = { for k, r in local.github : r.repo => {
     plan  = aws_iam_role.github["${k}-plan"].arn
     apply = aws_iam_role.github["${k}-apply"].arn
   } }
