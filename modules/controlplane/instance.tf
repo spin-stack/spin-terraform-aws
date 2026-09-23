@@ -101,16 +101,16 @@ locals {
 
 locals {
   controlplane_user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    name          = var.name
-    region        = local.region
-    spin_version  = var.spin_version
-    fetch_release = local.fetch_release
-    write_files   = local.write_files["controlplane"]
-    cp_host       = local.cp_host
-    domain        = var.domain
-    bucket        = aws_s3_bucket.volumes.bucket
-    role_arn      = aws_iam_role.runner_scope.arn
-    database_host = aws_db_instance.catalog.address
+    name   = var.name
+    region = local.region
+    # The release, for the tag spin-boot is fetched under, and the digest that says it is
+    # spin-boot. Everything else about the release is in the document (config.tf).
+    spin_version     = var.spin_version
+    spin_boot_sha256 = var.spin_boot_sha256
+    write_files      = local.write_files["controlplane"]
+    cp_host          = local.cp_host
+    domain           = var.domain
+    database_host    = aws_db_instance.catalog.address
     # The secret's ARN, which is not the secret: the machine reads it with its role, once.
     database_admin = aws_db_instance.catalog.master_user_secret[0].secret_arn
     # Where the installation's own values are, which is all this machine is told about them.

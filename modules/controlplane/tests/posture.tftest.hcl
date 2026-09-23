@@ -82,6 +82,9 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
+  # The digest of that release's spin-boot: what a machine checks the one file it fetches
+  # against.
+  spin_boot_sha256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }
 
 run "the_internet_reaches_the_proxy_alone" {
@@ -229,7 +232,7 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   # leads; a proxy takes the address once Caddy answers.
   assert {
     condition = (
-      can(regex("(?s)\npoint 'cp.spin.internal'\n.*\nspin-install control-plane", local.controlplane_user_data)) &&
+      can(regex("(?s)\npoint 'cp.spin.internal'\n.*\n\"[$]boot\" control-plane", local.controlplane_user_data)) &&
       strcontains(local.controlplane_user_data, "\nin_service\nserving=yes\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal'\naws --region 'us-east-2' ec2 associate-address --allocation-id 'eipalloc-0123456789abcdef0'")
     )
@@ -284,7 +287,7 @@ run "the_encryption_key_is_kept_before_it_is_used" {
 
   assert {
     condition = can(regex(
-      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*spin-install control-plane",
+      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*\"[$]boot\" control-plane",
       local.controlplane_user_data,
     ))
     error_message = "the control plane is installed before the key everything its catalog seals is sealed under exists"
@@ -342,14 +345,26 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
     condition     = aws_ssm_parameter.controlplane_config.type == "String" && yamldecode(aws_ssm_parameter.controlplane_config.value) == local.controlplane_document
     error_message = "the document is not what the parameter holds"
   }
-  # The location, and where this machine put the database's bundle. Not the database, not the
-  # names the certificate covers: spin-install refuses both beside --config.
+  # What the release this machine installs and the store its volumes live in are: in the document,
+  # so that the user data holds neither. A machine told a release in its user data and another in
+  # its document would install whichever the script happened to use.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "spin-install control-plane --config 'ssm:///spin/controlplane-config'") &&
+      local.controlplane_document.install.release == "v20260921.02" &&
+      local.controlplane_document.install.store.bucket == "spin-volumes-123456789012-us-east-2" &&
+      startswith(local.controlplane_document.install.store.role_arn, "arn:aws:iam::123456789012:role/")
+    )
+    error_message = "the document does not say what this machine installs or where its volumes live"
+  }
+  # One location on the command line, and nothing else: no value the document holds, and no flag
+  # that would be a second answer to one of its keys.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "\"$boot\" control-plane --config 'ssm:///spin/controlplane-config'") &&
       !strcontains(local.controlplane_user_data, "SPIN_CP_DATABASE_URL") &&
       !strcontains(local.controlplane_user_data, "--advertise") &&
-      !strcontains(local.controlplane_user_data, "--database-auth")
+      !strcontains(local.controlplane_user_data, "--database-auth") &&
+      !strcontains(local.controlplane_user_data, "--s3-bucket")
     )
     error_message = "the machine is given values the document decides"
   }
@@ -628,19 +643,35 @@ run "the_catalog" {
   }
 }
 
-# Every machine runs what the release workflow signed, checked with a cosign pinned by its hash,
-# and nothing that is an image.
+# Every machine runs what the release workflow signed, and nothing that is an image.
+#
+# The control plane fetches one file with a digest this module pins and hands the rest to it:
+# spin-boot checks the release's signature itself, in Go, with tests (spin's internal/release).
+# The proxy still does it in shell with a pinned cosign and oras, which is what the control plane
+# did until spin-boot; the same identity, at the same tag, either way.
 run "the_machines_run_what_the_release_signed" {
   command = plan
 
   assert {
-    condition = alltrue([for u in [local.controlplane_user_data, base64decode(aws_launch_template.proxy.user_data)] :
+    condition = (
+      # The one file, by digest, and then nothing but spin-boot: no cosign, no oras, no tar.
+      strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.spin_boot_sha256}' \"$boot\" | sha256sum --check --quiet") &&
+      strcontains(local.controlplane_user_data, "/v2/$repo/manifests/v20260921.02-spin-boot-linux-amd64") &&
+      !strcontains(local.controlplane_user_data, "cosign") &&
+      !strcontains(local.controlplane_user_data, "oras") &&
+      !strcontains(local.controlplane_user_data, "tar -xzf") &&
+      !strcontains(local.controlplane_user_data, "docker")
+    )
+    error_message = "the control plane's boot runs something it did not check by digest, or is back to checking signatures in shell"
+  }
+  assert {
+    condition = alltrue([for u in [base64decode(aws_launch_template.proxy.user_data)] :
       strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/$1\"") &&
     strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")]) && output.fetch_release == local.fetch_release
     error_message = "a machine runs what it has not checked against the release's signature, or runs a container"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "release 'v20260921.02' spin-controlplane-linux-amd64.tar.gz") && strcontains(base64decode(aws_launch_template.proxy.user_data), "release 'v20260921.02' spin-proxy-linux-amd64.tar.gz")
+    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "release 'v20260921.02' spin-proxy-linux-amd64.tar.gz")
     error_message = "a machine unpacks another role's tarball, or another release's"
   }
   # The files come from the release's public package, with an oras pinned like cosign: spin's

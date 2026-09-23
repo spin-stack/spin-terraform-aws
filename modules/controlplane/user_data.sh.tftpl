@@ -1,10 +1,12 @@
 #!/bin/bash
-# A control plane machine's first boot: the release's tarball, checked and unpacked; the role it
-# signs in to the catalog as; its name, then spin-install, which takes the term; what runners
-# join with, published; and the group told it is in service. Everything here drives
-# spin-install, systemd and the AWS CLI; what spin does is spin-install's. Nothing on this
-# machine is kept across a replacement: the catalog is RDS, and the key that opens what it
-# seals is in SSM.
+# A control plane machine's first boot. What is still shell here is what has not moved into
+# spin-boot yet - the encryption key's parameter, the catalog's own bootstrap, what runners join
+# with, and the group told the machine is in service - and every line of it is a line to move,
+# never a place to add one (spin's CLAUDE.md, "Who installs an installation"). Installing the
+# control plane itself is now one command over one document.
+#
+# Nothing on this machine is kept across a replacement: the catalog is RDS, and the key that
+# opens what it seals is in SSM.
 set -euo pipefail
 exec > >(tee -a /var/log/spin-bootstrap.log) 2>&1
 
@@ -66,16 +68,27 @@ if ! aws ssm get-parameter --name '${key_parameter}' --query Parameter.Name --ou
   aws ssm get-parameter --name '${key_parameter}' --query Parameter.Name --output text >/dev/null ||
     { echo "${key_parameter} holds no encryption key"; exit 1; }
 fi
-# A file anyone may read in a directory anyone may enter: spin-install puts the database's CA
-# here, and the control plane reads it as its own user - a directory only root may enter is a
-# control plane that cannot open the CA it verifies its catalog by.
+# A file anyone may read in a directory anyone may enter: the database's CA is put here below, and
+# the control plane reads it as its own user - a directory only root may enter is a control plane
+# that cannot open the CA it verifies its catalog by.
 install -d -m 0755 /etc/spin-stack
 
-# --- the release -----------------------------------------------------------------------------
-${fetch_release}
-cd "$(mktemp -d)"
-release '${spin_version}' spin-controlplane-linux-amd64.tar.gz
-tar -xzf spin-controlplane-linux-amd64.tar.gz -C /
+# --- spin-boot, and after this nothing here is shell ------------------------------------------
+# The one file this script fetches, by the SHA-256 this module pins: everything after it — the
+# release's tarballs, their signatures, the units, the catalog — is spin-boot's, where it is Go
+# with tests (spin's cmd/boot and internal/release). The package is public and this asks it
+# anonymously; a registry that served anything else is refused by sha256sum, which is the whole
+# reason there is a digest here and not a version.
+boot=/usr/local/bin/spin-boot
+repo='spin-stack/spin-release'
+token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:$repo:pull" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+blob=$(curl -fsSL -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+    "https://ghcr.io/v2/$repo/manifests/${spin_version}-spin-boot-linux-amd64" |
+  python3 -c 'import json,sys; print(next(l["digest"] for l in json.load(sys.stdin)["layers"] if l.get("annotations", {}).get("org.opencontainers.image.title") == "spin-boot-linux-amd64"))')
+curl -fsSL -H "Authorization: Bearer $token" -o "$boot" "https://ghcr.io/v2/$repo/blobs/$blob"
+printf '%s  %s\n' '${spin_boot_sha256}' "$boot" | sha256sum --check --quiet
+chmod 0755 "$boot"
 
 # --- the catalog: RDS, checked against its own CA, signed in to with this machine's role -------
 curl -fsSL -o /etc/spin-stack/database-ca.pem "https://truststore.pki.rds.amazonaws.com/$region/$region-bundle.pem"
@@ -87,25 +100,21 @@ PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id '${database_admin}'
   -v ON_ERROR_STOP=1 -q -f /etc/spin-stack/database-bootstrap.sql
 
 # The name, then the term. Pointed here first, so whoever the old machine drops when it is
-# superseded redials this one; then spin-install starts the control plane, which takes the term.
+# superseded redials this one; then spin-boot starts the control plane, which takes the term.
 previous=$(resolve '${cp_host}')
 point '${cp_host}'
-# One location, and where this machine put the database's bundle: the catalog, the key, the
-# names the certificate covers and where telemetry goes are in the document (config.tf), which
-# the control plane reads itself at every start. Nothing of the installation is written onto
-# this disk, so a replaced machine starts on the same values without this script assembling
-# them again.
-spin-install control-plane --config 'ssm://${config_parameter}' \
-  --database-ca /etc/spin-stack/database-ca.pem \
-  --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}'
+# One location, and nothing else: which release this machine installs, the catalog it opens, the
+# key that opens what the catalog seals, the store the volumes live in and the names its
+# certificate covers are all in the document (config.tf). spin-boot fetches that release, checks
+# that spin's release workflow signed it, unpacks it and starts the control plane on its catalog.
+"$boot" control-plane --config 'ssm://${config_parameter}'
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
-# By name, and as the control plane's own user: the command runs as that user (spin-install
-# writes the wrapper that way), so a redirection hands it a descriptor of root's that it cannot
-# open. The file stays 0600 - it is the operator's, and may hold what the installation is
-# registered with - and belongs to the one account that reads it.
-# Whoever owns the state directory systemd made for the service is that user, named once by
-# spin-install and not again here.
+# By name, and as the control plane's own user: the command runs as that user (the install writes
+# the wrapper that way), so a redirection hands it a descriptor of root's that it cannot open. The
+# file stays 0600 - it is the operator's, and may hold what the installation is registered with -
+# and belongs to the one account that reads it. Whoever owns the state directory systemd made for
+# the service is that user, named once by the install and not again here.
 chown --reference=/var/lib/spin-stack /etc/spin-stack/installation.yaml
 spin-controlplane config apply /etc/spin-stack/installation.yaml
 # What this file decides that a process reads at its start — where the installation pushes what

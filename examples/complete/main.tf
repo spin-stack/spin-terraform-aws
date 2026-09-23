@@ -2,7 +2,8 @@
 # starts empty; the first workspace of the day waits a few minutes for its host, and the group is
 # emptied an hour after the last workspace stops - at once between 20:00 and 07:00.
 #
-#   tofu init && tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123
+#   tofu init && tofu apply -var spin_version=v20260921.02 -var spin_boot_sha256=<sha256> \
+#     -var domain=example.com -var zone=Z0123
 #
 # From elsewhere, the source is this repository at a tag:
 #
@@ -29,6 +30,11 @@ variable "spin_version" {
   type = string
 }
 
+variable "spin_boot_sha256" {
+  description = "The SHA-256 of that release's spin-boot-linux-amd64, from its checksums.txt."
+  type        = string
+}
+
 variable "domain" {
   type = string
 }
@@ -44,10 +50,11 @@ provider "aws" {
 }
 
 module "spin" {
-  source          = "../.."
-  spin_version    = var.spin_version
-  domain          = var.domain
-  route53_zone_id = var.zone
+  source           = "../.."
+  spin_version     = var.spin_version
+  spin_boot_sha256 = var.spin_boot_sha256
+  domain           = var.domain
+  route53_zone_id  = var.zone
 
   runner_idle_minutes = 60
   quiet_hours         = "20:00-07:00"

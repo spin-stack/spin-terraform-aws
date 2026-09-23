@@ -3,6 +3,16 @@ variable "spin_version" {
   type        = string
 }
 
+variable "spin_boot_sha256" {
+  description = <<-EOT
+    The SHA-256 of spin-boot-linux-amd64 of spin_version, from that release's checksums.txt: the
+    one file a machine fetches before anything is verified, and so the one thing to pin here.
+    Everything after it — the release's tarballs and their signatures — spin-boot checks itself
+    against the signature spin's release workflow published.
+  EOT
+  type        = string
+}
+
 variable "domain" {
   description = "The base domain: the dashboard is app.<domain>, workspaces are *.app.<domain>."
   type        = string

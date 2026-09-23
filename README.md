@@ -4,9 +4,10 @@ A [spin](https://github.com/spin-stack/spin) installation on AWS, as one module:
 
 ```hcl
 module "spin" {
-  source       = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
-  spin_version = "v20260921.02"
-  domain       = "example.com"
+  source           = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
+  spin_version     = "v20260921.02"
+  spin_boot_sha256 = "<from that release's checksums.txt>"
+  domain           = "example.com"
 }
 ```
 
@@ -16,8 +17,11 @@ not expose what an installation needs to decide:
 
 - **`modules/controlplane`** - the VPC, the bucket, the catalog on RDS, the control plane's
   machine, the proxy's on its own, and where runners find what they join with.
-  `spin-install control-plane` and `spin-install proxy` do the installing; this module gives
-  them machines, roles and a bucket that already satisfy them.
+  The control plane's machine fetches one file — `spin-boot`, by the digest pinned in
+  `spin_boot_sha256` — and everything else it does is that binary's: it reads the installation's
+  document from SSM, fetches the release, checks that spin's release workflow signed it, and
+  installs the control plane. The proxy's machine still installs itself in shell with
+  `spin-install proxy`.
 - **`modules/runners`** - an autoscaling group of runners that join by themselves, spot by
   default, that the control plane sizes: none until a workspace waits for a host, and none again
   once nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`). It takes the
@@ -30,7 +34,8 @@ installation, and what `task lint` validates the modules through.
 ```bash
 cd examples/complete
 tofu init
-tofu apply -var spin_version=v20260921.02 -var domain=example.com -var zone=Z0123456789
+tofu apply -var spin_version=v20260921.02 -var spin_boot_sha256=<sha256> \
+  -var domain=example.com -var zone=Z0123456789
 aws ssm start-session --target "$(aws autoscaling describe-auto-scaling-groups \
   --auto-scaling-group-names "$(tofu output -raw controlplane_group)" \
   --query 'AutoScalingGroups[0].Instances[0].InstanceId' --output text)"

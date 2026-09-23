@@ -47,6 +47,19 @@ locals {
     encryption_key_at = "ssm://${local.key_parameter}"
     tls               = { extra_sans = [local.cp_host] }
     production        = true
+
+    # What the machine's first boot does, and what the control plane never reads: the release it
+    # installs, and the store the catalog is told about once. It is in this document rather than
+    # in the user data because the user data is three lines that fetch spin-boot — everything a
+    # machine is, it reads from here (spin's internal/bootstrap, Install).
+    install = {
+      release = var.spin_version
+      store = {
+        bucket   = aws_s3_bucket.volumes.bucket
+        region   = local.region
+        role_arn = aws_iam_role.runner_scope.arn
+      }
+    }
   }
 }
 

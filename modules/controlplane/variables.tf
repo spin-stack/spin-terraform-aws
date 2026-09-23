@@ -251,3 +251,19 @@ variable "ubuntu_release" {
     error_message = "ubuntu_release is a release number, e.g. 26.04."
   }
 }
+
+variable "spin_boot_sha256" {
+  description = <<-EOT
+    The SHA-256 of spin-boot-linux-amd64 of spin_version: the one file a machine fetches before
+    anything is verified, and therefore the one thing this module has to pin. Everything after it
+    — the release's tarballs, their signatures — spin-boot checks itself against the signature
+    spin's release workflow published.
+
+    It is in that release's checksums.txt, beside the file on the release page.
+  EOT
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.spin_boot_sha256))
+    error_message = "spin_boot_sha256 is 64 hex digits: the SHA-256 of spin-boot-linux-amd64 of this release."
+  }
+}
