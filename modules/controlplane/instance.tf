@@ -88,6 +88,13 @@ locals {
       }, var.quiet_hours == "" ? {} : {
       autoscaling_quiet_hours = var.quiet_hours
       autoscaling_time_zone   = var.time_zone
+      }, !local.telemetry ? {} : {
+      # Where this installation pushes what it records. Declared, not installed: the collector
+      # is on the control plane's own machine, so an installation cannot be asked for its
+      # address before it exists - and one added later is this apply, not every machine
+      # rewritten and restarted.
+      telemetry_collector       = local.collector
+      telemetry_metric_interval = local.metric_interval
     }))
   })
 }

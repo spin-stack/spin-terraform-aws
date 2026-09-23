@@ -563,9 +563,14 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && local.controlplane_document.telemetry == {
-      enabled = true, endpoint = "cp.spin.internal:4317", metric_interval = "60s"
-    }
+    condition = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && (
+      # Declared in the installation's own configuration, not in what the machine starts on: an
+      # installation is not asked for a collector before it has one.
+      local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
+      local.installation.settings.telemetry_metric_interval == "60s" &&
+      !contains(keys(local.controlplane_document), "telemetry") &&
+      can(regex("(?s)config apply [^\n]*\n(#[^\n]*\n)*systemctl restart spin-controlplane.service", local.controlplane_user_data))
+    )
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {

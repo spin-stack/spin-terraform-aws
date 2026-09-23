@@ -33,7 +33,11 @@
 locals {
   config_parameter = "/${var.name}/controlplane-config"
 
-  controlplane_document = merge({
+  # Telemetry is not here: where this installation pushes is its own policy, declared in
+  # installation.yaml (instance.tf) and read once the catalog is open. An installation is not
+  # asked for a collector before it has one, and the one this module runs is on the machine this
+  # document is for.
+  controlplane_document = {
     database = {
       url = local.database_url
       # An RDS token signed per connection by this machine's role: the catalog has no password
@@ -43,13 +47,7 @@ locals {
     encryption_key_at = "ssm://${local.key_parameter}"
     tls               = { extra_sans = [local.cp_host] }
     production        = true
-    }, local.telemetry ? {
-    telemetry = {
-      enabled         = true
-      endpoint        = local.collector
-      metric_interval = local.metric_interval
-    }
-  } : {})
+  }
 }
 
 resource "aws_ssm_parameter" "controlplane_config" {
