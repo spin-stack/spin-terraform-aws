@@ -58,6 +58,14 @@ locals {
   runner_group = "${var.name}-runners"
 }
 
+data "aws_ec2_instance_type" "controlplane" {
+  instance_type = var.instance_type
+}
+
+data "aws_ec2_instance_type" "proxy" {
+  instance_type = var.proxy_instance_type
+}
+
 resource "aws_launch_template" "controlplane" {
   name_prefix            = "${var.name}-controlplane-"
   image_id               = local.image

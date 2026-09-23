@@ -17,6 +17,16 @@ override_data {
 }
 
 override_data {
+  target = data.aws_ec2_instance_type.controlplane
+  values = { default_vcpus = 2 }
+}
+
+override_data {
+  target = data.aws_ec2_instance_type.proxy
+  values = { default_vcpus = 2 }
+}
+
+override_data {
   target = data.aws_region.current
   values = { region = "us-east-2", name = "us-east-2" }
 }

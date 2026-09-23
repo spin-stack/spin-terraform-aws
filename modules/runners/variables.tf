@@ -14,6 +14,7 @@ variable "controlplane" {
     runner_config_parameter_arn = string
     runner_user_data            = string
     boot_log_policy_arn         = string
+    standard_vcpus              = number
     boundary_arn                = string
     collector                   = string
     session_manager_policy_arn  = string
@@ -22,15 +23,21 @@ variable "controlplane" {
 
 variable "instance_types" {
   description = <<-EOT
-    What the group may start, most preferred first. Keep them one CPU generation: a checkpoint
-    records the processor and its flags as -cpu host showed them (MachineIdentity in spin's
-    internal/runner/vmm), and resumes only onto a host that shows the same - a workspace
-    suspended at night on one family and brought back on another cold-boots. Nested
-    virtualization is offered on C8i, M8i, R8i (and their d variants), C7i, M7i, R7i and I7i; a
-    d variant brings the local NVMe the runner's data goes on.
+    What the group may start. Keep them one CPU generation: a checkpoint records the processor
+    and its flags as -cpu host showed them (MachineIdentity in spin's internal/runner/vmm), and
+    resumes only onto a host that shows the same - a workspace suspended at night on one family
+    and brought back on another cold-boots. Nested virtualization is offered on C8i, M8i, R8i
+    (and their d variants), C7i, M7i, R7i and I7i; a d variant brings the local NVMe the runner's
+    data goes on.
+
+    For spot, name several: AWS gives a spot machine from the pools a request can draw on, and
+    one type is one pool per zone. m8id.8xlarge alone scored 3 of 10 in us-west-2 and was reclaimed
+    within minutes; the five below score 9. How a list scores in a region, before installing:
+      aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \
+        --instance-types <the types>
   EOT
   type        = list(string)
-  default     = ["m8id.8xlarge", "m8id.12xlarge"]
+  default     = ["m8id.8xlarge", "c8id.8xlarge", "r8id.8xlarge", "m8id.12xlarge", "c8id.12xlarge"]
   nullable    = false
   validation {
     condition     = length(var.instance_types) > 0
@@ -47,6 +54,13 @@ variable "nested_virtualization" {
 
 variable "spot" {
   description = "Every host a spot instance. The policy a runner joins under (the control plane module's runner_policy) is what tells each one a stop is a reclaim."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "request_quota" {
+  description = "Ask AWS for the vCPU quota max_hosts runners need, when the account's is lower (quota.tf). A request costs nothing and lowers nothing when it is removed."
   type        = bool
   default     = true
   nullable    = false

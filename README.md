@@ -36,9 +36,16 @@ installation, and what `task lint` validates the modules through.
   for a shell on a machine.
 - A domain whose DNS you can change. If it is a Route 53 zone in this account, its id is
   `aws route53 list-hosted-zones-by-name --dns-name <domain> --query 'HostedZones[0].Id'`.
-- Room for runners: each is a spot `m8id.8xlarge` (32 vCPUs) by default, and a new account's spot
-  vCPU quota may be lower (Service Quotas → EC2 → "All Standard Spot Instance Requests").
-  `runner_spot = false` uses on-demand instead.
+- Room for runners. Each is a spot machine of 32 or 48 vCPUs, from five types of one generation
+  (`runner_instance_types`), and a new account's spot vCPU quota may be lower than one of them
+  (Service Quotas → EC2 → "All Standard Spot Instance Requests"). How likely spot is to give and
+  keep one in the region you chose, from 1 to 10 - below 7, name more types or use on-demand
+  (`runner_spot = false`):
+
+  ```bash
+  aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \
+    --instance-types m8id.8xlarge c8id.8xlarge r8id.8xlarge m8id.12xlarge c8id.12xlarge
+  ```
 
 ## Installing
 

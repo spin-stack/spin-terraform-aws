@@ -129,6 +129,12 @@ variable "runner_root_volume_gb" {
   default     = null
 }
 
+variable "request_quota" {
+  description = "Ask AWS for the vCPU quota max_runners runners need when the account's is lower; modules/runners' default is true."
+  type        = bool
+  default     = null
+}
+
 variable "max_runners" {
   description = "The most runners the group may have; the control plane decides how many it has. modules/runners' default is 1."
   type        = number

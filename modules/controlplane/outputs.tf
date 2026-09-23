@@ -53,6 +53,11 @@ output "boot_log_policy_arn" {
   value       = aws_iam_policy.boot_log.arn
 }
 
+output "standard_vcpus" {
+  description = "The on-demand standard vCPUs the control plane's and the proxy's machines take at most: two of each while an update replaces one. The runners module counts them against the quota on-demand runners share."
+  value       = 2 * (data.aws_ec2_instance_type.controlplane.default_vcpus + data.aws_ec2_instance_type.proxy.default_vcpus)
+}
+
 output "writes_public_dns" {
   description = "Whether this module writes app.<domain> and *.app.<domain>, or they are the operator's to point at proxy_ip."
   value       = var.route53_zone_id != ""

@@ -198,7 +198,9 @@ resource "aws_autoscaling_group" "runner" {
     instances_distribution {
       on_demand_base_capacity                  = 0
       on_demand_percentage_above_base_capacity = var.spot ? 0 : 100
-      spot_allocation_strategy                 = "capacity-optimized-prioritized"
+      # From the pools least likely to be reclaimed, and of those the cheapest: a runner reclaimed
+      # is every workspace on it suspended, which costs more than any difference in price.
+      spot_allocation_strategy = "price-capacity-optimized"
     }
     launch_template {
       launch_template_specification {

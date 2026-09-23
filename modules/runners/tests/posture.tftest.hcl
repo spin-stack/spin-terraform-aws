@@ -15,6 +15,17 @@ override_data {
   values = { id = "ami-0123456789abcdef0" }
 }
 
+# Every type 48 vCPUs, and an account with room; the quota's runs give it a new account's 32.
+override_data {
+  target = data.aws_ec2_instance_type.runner
+  values = { default_vcpus = 48 }
+}
+
+override_data {
+  target = data.aws_servicequotas_service_quota.runners
+  values = { value = 1000, quota_name = "All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests" }
+}
+
 variables {
   controlplane = {
     name                        = "spin"
@@ -24,6 +35,7 @@ variables {
     runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
     runner_user_data            = "#!/bin/sh\n# the control plane module's\nexec /usr/local/bin/spin-boot runner --config 'ssm:///spin/runner-config?region=us-east-2'\n"
     boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
+    standard_vcpus              = 8
     boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
     collector                   = ""
     session_manager_policy_arn  = "arn:aws:iam::123456789012:policy/spin-session-manager"
@@ -73,6 +85,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
       runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
       runner_user_data            = "#!/bin/sh\n"
       boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
+      standard_vcpus              = 8
       boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
       collector                   = "cp.spin.internal:4317"
       session_manager_policy_arn  = "arn:aws:iam::123456789012:policy/spin-session-manager"
@@ -123,5 +136,61 @@ run "the_group_is_the_control_planes_to_size" {
     condition = anytrue([for h in aws_autoscaling_group.runner.initial_lifecycle_hook :
     h.lifecycle_transition == "autoscaling:EC2_INSTANCE_TERMINATING" && h.default_result == "CONTINUE"])
     error_message = "a host the group takes away is not held while it drains"
+  }
+}
+
+# A quota lower than max_hosts of the largest type is asked of AWS, for exactly that; spot and
+# on-demand are two quotas, and on-demand runners share theirs with the control plane and the proxy.
+run "the_quota_the_runners_need_is_asked_for" {
+  command = plan
+  variables {
+    max_hosts = 2
+  }
+  assert {
+    condition = (
+      aws_servicequotas_service_quota.runners[0].quota_code == "L-34B43A08" &&
+      aws_servicequotas_service_quota.runners[0].value == 96
+    )
+    error_message = "the spot quota two runners of 48 vCPUs need is not asked for"
+  }
+  expect_failures = [check.room_for_runners]
+  override_data {
+    target = data.aws_servicequotas_service_quota.runners
+    values = { value = 32, quota_name = "a new account's" }
+  }
+}
+
+run "on_demand_runners_share_their_quota" {
+  command = plan
+  variables {
+    spot = false
+  }
+  assert {
+    condition = (
+      aws_servicequotas_service_quota.runners[0].quota_code == "L-1216C47A" &&
+      aws_servicequotas_service_quota.runners[0].value == 56
+    )
+    error_message = "the on-demand quota does not count the control plane's and the proxy's machines"
+  }
+  expect_failures = [check.room_for_runners]
+  override_data {
+    target = data.aws_servicequotas_service_quota.runners
+    values = { value = 32, quota_name = "a new account's" }
+  }
+}
+
+run "no_request_when_asked_not_to" {
+  command = plan
+  variables {
+    request_quota = false
+  }
+  assert {
+    condition     = length(aws_servicequotas_service_quota.runners) == 0
+    error_message = "a quota was requested by an installation that said not to"
+  }
+  expect_failures = [check.room_for_runners]
+  override_data {
+    target = data.aws_servicequotas_service_quota.runners
+    values = { value = 32, quota_name = "a new account's" }
   }
 }
