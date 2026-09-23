@@ -229,7 +229,7 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   # leads; a proxy takes the address once Caddy answers.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "point 'cp.spin.internal'\nSPIN_CP_DATABASE_URL=") &&
+      can(regex("(?s)\npoint 'cp.spin.internal'\n.*\nspin-install control-plane", local.controlplane_user_data)) &&
       strcontains(local.controlplane_user_data, "\nin_service\nserving=yes\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
       strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal'\naws --region 'us-east-2' ec2 associate-address --allocation-id 'eipalloc-0123456789abcdef0'")
     )
@@ -284,23 +284,74 @@ run "the_encryption_key_is_kept_before_it_is_used" {
 
   assert {
     condition = can(regex(
-      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*stored=\\$\\(key\\).*SPIN_CP_ENCRYPTION_KEY=.*spin-install control-plane",
+      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*spin-install control-plane",
       local.controlplane_user_data,
     ))
-    error_message = "the encryption key is used before it is stored, or is not the stored one"
+    error_message = "the control plane is installed before the key everything its catalog seals is sealed under exists"
   }
   assert {
     condition     = !can(regex("put-parameter --name '/spin/controlplane-encryption-key'[^\n]*--overwrite", local.controlplane_user_data)) && length(regexall("put-parameter --name '/spin/controlplane-encryption-key'", local.controlplane_user_data)) == 1
     error_message = "the encryption key can be overwritten, or is written more than once"
   }
-  # The key is the file's secret, not the directory's: the control plane runs as its own user
-  # and opens the database's CA in that same directory, which spin-install writes 0644.
+  # Made here and read nowhere here: the document says where it is, and the control plane reads
+  # it with its own credentials at every start. A boot that read it would put it in this script's
+  # environment and in a file on a disk that the next machine replaces.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "install -d -m 0755 /etc/spin-stack\n(umask 077; printf 'SPIN_CP_ENCRYPTION_KEY=") &&
+      !strcontains(local.controlplane_user_data, "SPIN_CP_ENCRYPTION_KEY") &&
+      !can(regex("get-parameter --name '/spin/controlplane-encryption-key'[^\n]*--with-decryption", local.controlplane_user_data))
+    )
+    error_message = "the boot reads the encryption key, so it is in a shell's environment and on the machine"
+  }
+  # A directory anyone may enter: the control plane runs as its own user and opens the
+  # database's CA there, which spin-install writes 0644.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "install -d -m 0755 /etc/spin-stack") &&
       !strcontains(local.controlplane_user_data, "install -d -m 0700 /etc/spin-stack")
     )
     error_message = "/etc/spin-stack is a directory the control plane's user cannot enter, so it cannot read the CA its catalog is verified by"
+  }
+}
+
+# What a control plane starts on is one document in the parameter store, and the machine is told
+# where it is and nothing else. Two things are asserted here and each has been got wrong: that
+# the document holds no secret - the key is a parameter of its own, made by the first boot, so
+# neither this document nor the state of an apply carries it - and that no value in it is also a
+# flag on the machine, which is a fact in two places where the one that loses loses silently.
+run "the_installation_is_in_its_document_and_not_on_its_machines" {
+  command = plan
+
+  assert {
+    condition = (
+      local.controlplane_document.encryption_key_at == "ssm:///spin/controlplane-encryption-key" &&
+      !contains(keys(local.controlplane_document), "encryption_key")
+    )
+    error_message = "the document holds the encryption key rather than where it is, so Terraform's state holds it too"
+  }
+  assert {
+    condition = (
+      local.controlplane_document.database.auth == "aws-iam" &&
+      !can(regex("password", local.controlplane_document.database.url)) &&
+      local.controlplane_document.production &&
+      local.controlplane_document.tls.extra_sans == ["cp.spin.internal"]
+    )
+    error_message = "the document does not say what the control plane needs before it can read its catalog"
+  }
+  assert {
+    condition     = aws_ssm_parameter.controlplane_config.type == "String" && yamldecode(aws_ssm_parameter.controlplane_config.value) == local.controlplane_document
+    error_message = "the document is not what the parameter holds"
+  }
+  # The location, and where this machine put the database's bundle. Not the database, not the
+  # names the certificate covers: spin-install refuses both beside --config.
+  assert {
+    condition = (
+      strcontains(local.controlplane_user_data, "spin-install control-plane --config 'ssm:///spin/controlplane-config'") &&
+      !strcontains(local.controlplane_user_data, "SPIN_CP_DATABASE_URL") &&
+      !strcontains(local.controlplane_user_data, "--advertise") &&
+      !strcontains(local.controlplane_user_data, "--database-auth")
+    )
+    error_message = "the machine is given values the document decides"
   }
 }
 
@@ -334,7 +385,7 @@ run "the_components_reach_each_other_by_name" {
     error_message = "a replaced machine's name is kept by clients longer than ten seconds"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "--advertise 'cp.spin.internal'") && output.url == "https://cp.spin.internal:8080"
+    condition     = local.controlplane_document.tls.extra_sans == ["cp.spin.internal"] && output.url == "https://cp.spin.internal:8080"
     error_message = "the control plane's certificate does not carry the name it is reached by"
   }
   assert {
@@ -512,7 +563,9 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && strcontains(local.controlplane_user_data, "--otel-collector 'cp.spin.internal:4317' --otel-metric-interval '60s'")
+    condition = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && local.controlplane_document.telemetry == {
+      enabled = true, endpoint = "cp.spin.internal:4317", metric_interval = "60s"
+    }
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {
@@ -565,7 +618,7 @@ run "the_catalog" {
     error_message = "the control plane signs in to the catalog as something other than spin"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "--database-auth aws-iam") && strcontains(local.controlplane_user_data, "sslmode=verify-full")
+    condition     = local.controlplane_document.database.auth == "aws-iam" && strcontains(local.controlplane_document.database.url, "sslmode=verify-full")
     error_message = "the control plane signs in with a password, or does not check the catalog's certificate"
   }
 }

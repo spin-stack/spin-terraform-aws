@@ -104,15 +104,15 @@ locals {
     bucket        = aws_s3_bucket.volumes.bucket
     role_arn      = aws_iam_role.runner_scope.arn
     database_host = aws_db_instance.catalog.address
-    database_url  = local.database_url
     # The secret's ARN, which is not the secret: the machine reads it with its role, once.
-    database_admin               = aws_db_instance.catalog.master_user_secret[0].secret_arn
+    database_admin = aws_db_instance.catalog.master_user_secret[0].secret_arn
+    # Where the installation's own values are, which is all this machine is told about them.
+    config_parameter             = local.config_parameter
     key_parameter                = local.key_parameter
     ca_parameter                 = local.ca_parameter
     bootstrap_password_parameter = local.bootstrap_password_parameter
     bootstrap_user_parameter     = local.bootstrap_user_parameter
     collector                    = local.collector
-    metric_interval              = local.metric_interval
     alloy_version                = local.telemetry ? var.grafana_cloud.alloy_version : ""
     alloy_sha256                 = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
   })
@@ -218,6 +218,8 @@ resource "aws_autoscaling_group" "controlplane" {
   }
 
   depends_on = [
+    # What the machine starts on: it reads this at its first boot and at every start after.
+    aws_ssm_parameter.controlplane_config,
     # The installer checks the bucket and a credential minted under the role; both exist and
     # the bucket answers only through the endpoint.
     aws_s3_bucket_policy.volumes,
