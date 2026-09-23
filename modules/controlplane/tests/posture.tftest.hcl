@@ -139,11 +139,20 @@ run "the_machines" {
     error_message = "a disk is not encrypted"
   }
   # The proxy in subnets of its own, which are what the control plane trusts a browser's
-  # address from: a runner or the control plane itself is never among them.
+  # address from: a runner or the control plane itself is never among them. Declared in the
+  # installation's configuration rather than installed on the machine, so the day this edge
+  # changes is an apply.
   assert {
-    condition = length(setintersection(toset(aws_subnet.edge[*].cidr_block), toset(concat(aws_subnet.public[*].cidr_block, aws_subnet.database[*].cidr_block)))) == 0 && strcontains(local.controlplane_user_data,
-    "--trusted-proxy '10.42.136.0/24,10.42.137.0/24,10.42.138.0/24'")
+    condition     = length(setintersection(toset(aws_subnet.edge[*].cidr_block), toset(concat(aws_subnet.public[*].cidr_block, aws_subnet.database[*].cidr_block)))) == 0
+    error_message = "the proxy's subnets are not its own"
+  }
+  assert {
+    condition     = toset(local.installation.settings.trusted_proxies) == toset(aws_subnet.edge[*].cidr_block)
     error_message = "the control plane takes a browser's address from somewhere a proxy is not alone"
+  }
+  assert {
+    condition     = !strcontains(local.controlplane_user_data, "--trusted-proxy")
+    error_message = "a machine is installed with who may name a browser, which is the installation's to say"
   }
 }
 

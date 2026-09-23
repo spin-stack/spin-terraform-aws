@@ -97,7 +97,7 @@ SPIN_CP_DATABASE_URL='${database_url}' spin-install control-plane \
   --database-auth aws-iam --database-ca /etc/spin-stack/database-ca.pem \
   --advertise '${cp_host}' \
   --s3-bucket '${bucket}' --s3-region "$region" --s3-role-arn '${role_arn}' \
-  --trusted-proxy '${trusted_proxies}' %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
+  %{ if collector != "" }--otel-collector '${collector}' --otel-metric-interval '${metric_interval}'%{ endif }
 
 # --- the installation's config: the operator's, and how the runners are sized ----------------
 # By name, and as the control plane's own user: the command runs as that user (spin-install

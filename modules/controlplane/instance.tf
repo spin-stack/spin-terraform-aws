@@ -77,6 +77,11 @@ locals {
   operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
   installation = merge(local.operator, {
     settings = merge(try(local.operator.settings, {}), merge({
+      # Whose word about a browser's address the control plane takes: the proxy's subnets, where
+      # nothing but a proxy runs. Declared here rather than installed on the machine, so the day
+      # this installation's edge changes is an apply and not a machine replaced - and the control
+      # plane re-reads it as it ages.
+      trusted_proxies          = aws_subnet.edge[*].cidr_block
       autoscaling_group        = local.runner_group
       autoscaling_region       = local.region
       autoscaling_idle_minutes = var.runner_idle_minutes
@@ -96,13 +101,10 @@ locals {
     write_files   = local.write_files["controlplane"]
     cp_host       = local.cp_host
     domain        = var.domain
-    # Whose word about a browser's address the control plane takes: the proxy's subnets, where
-    # nothing but a proxy runs.
-    trusted_proxies = join(",", aws_subnet.edge[*].cidr_block)
-    bucket          = aws_s3_bucket.volumes.bucket
-    role_arn        = aws_iam_role.runner_scope.arn
-    database_host   = aws_db_instance.catalog.address
-    database_url    = local.database_url
+    bucket        = aws_s3_bucket.volumes.bucket
+    role_arn      = aws_iam_role.runner_scope.arn
+    database_host = aws_db_instance.catalog.address
+    database_url  = local.database_url
     # The secret's ARN, which is not the secret: the machine reads it with its role, once.
     database_admin               = aws_db_instance.catalog.master_user_secret[0].secret_arn
     key_parameter                = local.key_parameter
