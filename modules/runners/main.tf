@@ -1,9 +1,8 @@
-# An autoscaling group of runners that join by themselves: each reads the pool's token and the
-# CA the control plane publishes to SSM, and registers with the policy the token carries. Nothing
-# reaches a runner - its group has no ingress - and it reaches the control plane on 8080, the
-# proxy's relay on 443 and the bucket through the gateway endpoint.
-
-data "aws_region" "current" {}
+# An autoscaling group of runners that join by themselves: each reads its document, proves to the
+# control plane who it is with its instance role (spin's internal/domain/hostjoin) and joins under
+# the policy the installation declares for that role. There is no token to publish or read.
+# Nothing reaches a runner - its group has no ingress - and it reaches the control plane on 8080,
+# the proxy's relay on 443 and the bucket through the gateway endpoint.
 
 # The newest of Canonical's own images of the release: owned by Canonical's account, so a
 # public image named like one is not picked up. A new one reaches hosts the group starts after
@@ -85,13 +84,14 @@ resource "aws_iam_role" "runner" {
   tags                 = local.tags
 }
 
-# The two parameters and nothing else: a runner's credential to the bucket is the control
-# plane's to mint, an hour at a time and for its own volumes. Its instance role opens nothing a
-# tenant who escaped a machine could use against another tenant.
+# Its document and nothing else: a runner's credential to the bucket is the control plane's to
+# mint, an hour at a time and for its own volumes, and who it is needs no permission - STS answers
+# GetCallerIdentity for any principal. Its instance role opens nothing a tenant who escaped a
+# machine could use against another tenant.
 data "aws_iam_policy_document" "runner" {
   statement {
     actions   = ["ssm:GetParameter"]
-    resources = [var.controlplane.token_parameter_arn, var.controlplane.ca_parameter_arn]
+    resources = [var.controlplane.runner_config_parameter_arn]
   }
 }
 
@@ -99,6 +99,11 @@ resource "aws_iam_role_policy" "runner" {
   name   = "spin"
   role   = aws_iam_role.runner.id
   policy = data.aws_iam_policy_document.runner.json
+}
+
+resource "aws_iam_role_policy_attachment" "runner_boot_log" {
+  role       = aws_iam_role.runner.name
+  policy_arn = var.controlplane.boot_log_policy_arn
 }
 
 resource "aws_iam_role_policy_attachment" "runner_ssm" {
@@ -160,22 +165,8 @@ resource "aws_launch_template" "runner" {
     }
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data.sh.tftpl", {
-    region = data.aws_region.current.region
-    # The control plane module's: one way a machine of the installation checks what it runs.
-    fetch_release   = var.controlplane.fetch_release
-    controlplane    = var.controlplane.url
-    token_parameter = var.controlplane.token_parameter
-    ca_parameter    = var.controlplane.ca_parameter
-    unpublished     = var.controlplane.unpublished
-    data_on_ebs     = var.data_volume_gb > 0
-    # The relay by the proxy's private name: its public address would take the relay out through
-    # the internet gateway and back in, from an address the proxy would have to let in. The
-    # certificate is checked as the relay's own name either way.
-    relay_dial      = var.controlplane.relay_dial
-    collector       = var.controlplane.collector
-    metric_interval = var.controlplane.metric_interval
-  }))
+  # The control plane module's: spin-boot by its digest, over the runners' document.
+  user_data = base64encode(var.controlplane.runner_user_data)
 
   tag_specifications {
     resource_type = "instance"

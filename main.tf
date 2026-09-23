@@ -15,6 +15,8 @@ module "controlplane" {
   domain              = var.domain
   route53_zone_id     = var.route53_zone_id
   acme_email          = var.acme_email
+  admin_email         = var.admin_email
+  runner_policy       = var.runner_policy
   proxy_allowed_cidrs = var.proxy_allowed_cidrs
   instance_type       = var.instance_type
   proxy_instance_type = var.proxy_instance_type

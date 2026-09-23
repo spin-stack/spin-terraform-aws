@@ -1,6 +1,0 @@
-[Unit]
-Description=Refresh the Grafana Cloud token Alloy ships with, from SSM
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/spin-alloy-token

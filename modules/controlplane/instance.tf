@@ -1,7 +1,6 @@
-# One machine that holds nothing the installation cannot lose. The catalog is RDS (rds.tf), the
-# CA and the KEK are sealed in it, and the encryption key that opens them is in SSM from the
-# first start on: a replaced instance reads the key back, installs the same release and serves
-# the same catalog.
+# One machine that holds nothing the installation cannot lose. The catalog is RDS (rds.tf), and
+# the key and the CA are in SSM (secrets.tf): a replaced instance reads its document, installs the
+# same release and serves the same catalog.
 
 # The newest of Canonical's own images of the release: owned by Canonical's account, so a
 # public image named like one is not picked up.
@@ -26,7 +25,24 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+# The image the machines boot: the newest of the release when the installation's release last
+# changed, and kept until it changes again. An image Canonical publishes is then picked up by an
+# update, not by whatever apply happens to follow it - which would replace both machines for a
+# change nobody asked for. image_id pins one outright.
+resource "terraform_data" "image" {
+  input            = var.image_id != "" ? var.image_id : data.aws_ami.ubuntu.id
+  triggers_replace = [var.spin_version, var.ubuntu_release, var.image_id]
+}
+
 locals {
+  image = terraform_data.image.output
+
+  # What each machine starts on, as the tag that makes a change to it a new launch template: a
+  # machine reads its document at every start, and nothing else would roll the change out. The
+  # control plane's includes the installation's configuration, which it applies when it starts.
+  controlplane_starts_on = sha256(join("\n", [yamlencode(local.controlplane_document), yamlencode(local.installation)]))
+  proxy_starts_on        = sha256(yamlencode(local.proxy_document))
+
   # The names the components dial each other by - the control plane's certificate carries
   # cp.<zone>, and every runner and proxy is configured with it - which each machine points at
   # itself (dns.tf). No address is fixed: an update stands a new machine beside the old.
@@ -38,101 +54,16 @@ locals {
   controlplane_group = "${var.name}-controlplane"
   proxy_group        = "${var.name}-proxy"
 
-  # How often a booting machine says it is still going, and how long the group waits without
-  # hearing it: five silent minutes is a machine to abandon, and the beats are what let a boot
-  # that takes half an hour be a boot rather than a timeout.
-  heartbeat_interval = 60
-  heartbeat_timeout  = 300
-  lifecycle_sh = { for role, group in { controlplane = local.controlplane_group, proxy = local.proxy_group } :
-    role => templatefile("${path.module}/files/lifecycle.sh.tftpl", {
-      region    = local.region
-      zone_id   = aws_route53_zone.internal.zone_id
-      group     = group
-      ttl       = local.internal_record_ttl
-      heartbeat = local.heartbeat_interval
-    })
-  }
-
-  token_parameter = "/${var.name}/runner-registration-token"
-  ca_parameter    = "/${var.name}/controlplane-ca"
-  key_parameter   = "/${var.name}/controlplane-encryption-key"
-  # The first administrator, for an operator who has just applied and has nowhere else to read
-  # it: the password only exists until that administrator chooses their own.
-  bootstrap_password_parameter = "/${var.name}/bootstrap-password"
-  bootstrap_user_parameter     = "/${var.name}/bootstrap-user"
-  # What the runners wait for: the control plane has not published anything yet.
-  unpublished = "unpublished"
-
   # The group the runners module makes; its name is the contract between the two modules.
   runner_group = "${var.name}-runners"
-
-  # How every machine of the installation gets a release file: cosign and oras by their pinned
-  # SHA-256, then the file and its bundle from the release's package, verified against spin's
-  # release workflow at the version's tag before anything in it runs. Defines
-  # `release <version> <file>`; the runners module is given it, and names the version its
-  # control plane serves.
-  fetch_release = templatefile("${path.module}/files/fetch-release.sh.tftpl", { cosign = var.cosign, oras = var.oras })
-
-  # The operator's config file, with the settings the control plane sizes the runners by.
-  operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
-  installation = merge(local.operator, {
-    settings = merge(try(local.operator.settings, {}), merge({
-      # Whose word about a browser's address the control plane takes: the proxy's subnets, where
-      # nothing but a proxy runs. Declared here rather than installed on the machine, so the day
-      # this installation's edge changes is an apply and not a machine replaced - and the control
-      # plane re-reads it as it ages.
-      trusted_proxies          = aws_subnet.edge[*].cidr_block
-      autoscaling_group        = local.runner_group
-      autoscaling_region       = local.region
-      autoscaling_idle_minutes = var.runner_idle_minutes
-      }, var.quiet_hours == "" ? {} : {
-      autoscaling_quiet_hours = var.quiet_hours
-      autoscaling_time_zone   = var.time_zone
-      }, !local.telemetry ? {} : {
-      # Where this installation pushes what it records. Declared, not installed: the collector
-      # is on the control plane's own machine, so an installation cannot be asked for its
-      # address before it exists - and one added later is this apply, not every machine
-      # rewritten and restarted.
-      telemetry_collector       = local.collector
-      telemetry_metric_interval = local.metric_interval
-    }))
-  })
-}
-
-locals {
-  controlplane_user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    name   = var.name
-    region = local.region
-    # The release, for the tag spin-boot is fetched under, and the digest that says it is
-    # spin-boot. Everything else about the release is in the document (config.tf).
-    spin_version     = var.spin_version
-    spin_boot_sha256 = var.spin_boot_sha256
-    write_files      = local.write_files["controlplane"]
-    cp_host          = local.cp_host
-    domain           = var.domain
-    database_host    = aws_db_instance.catalog.address
-    # The secret's ARN, which is not the secret: the machine reads it with its role, once.
-    database_admin = aws_db_instance.catalog.master_user_secret[0].secret_arn
-    # Where the installation's own values are, which is all this machine is told about them.
-    config_parameter             = local.config_parameter
-    key_parameter                = local.key_parameter
-    ca_parameter                 = local.ca_parameter
-    bootstrap_password_parameter = local.bootstrap_password_parameter
-    bootstrap_user_parameter     = local.bootstrap_user_parameter
-    collector                    = local.collector
-    alloy_version                = local.telemetry ? var.grafana_cloud.alloy_version : ""
-    alloy_sha256                 = local.telemetry ? var.grafana_cloud.alloy_sha256 : ""
-  })
 }
 
 resource "aws_launch_template" "controlplane" {
   name_prefix            = "${var.name}-controlplane-"
-  image_id               = data.aws_ami.ubuntu.id
+  image_id               = local.image
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.controlplane.id]
-  # Gzipped, which cloud-init reads as it is: the script with the collector's configuration in it
-  # is over the 16 KiB EC2 takes, and a third of that compressed.
-  user_data = base64gzip(local.controlplane_user_data)
+  user_data              = base64encode(local.user_data["control-plane"])
 
   iam_instance_profile {
     arn = aws_iam_instance_profile.controlplane.arn
@@ -156,7 +87,7 @@ resource "aws_launch_template" "controlplane" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.tags, { Name = "${var.name}-controlplane", "spin:role" = "controlplane" })
+    tags          = merge(local.tags, { Name = "${var.name}-controlplane", "spin:role" = "controlplane", "spin:starts-on" = local.controlplane_starts_on })
   }
   tag_specifications {
     resource_type = "volume"
@@ -171,7 +102,10 @@ resource "aws_launch_template" "controlplane" {
 # itself and starts, which takes the term: the old one, superseded, closes and stays down, and
 # every runner and the proxy reconnect to the name within seconds. The workspaces never stop:
 # they are the runners'. The launch hook holds the refresh until the new machine leads, and
-# abandons it - leaving the old - if it never does.
+# abandons it - leaving the old - if it never does (spin's internal/boot).
+#
+# A change to the document alone is not a new template version: the document is read at every
+# start, and the refresh that brings it in is `aws autoscaling start-instance-refresh`.
 resource "aws_autoscaling_group" "controlplane" {
   name                = local.controlplane_group
   min_size            = 1
@@ -196,14 +130,18 @@ resource "aws_autoscaling_group" "controlplane" {
       min_healthy_percentage = 100
       max_healthy_percentage = 200
       instance_warmup        = 60
+      # A refresh whose machine never comes into service puts the group back on the template it
+      # had: otherwise the old machine goes on serving while the group holds the one that failed,
+      # and the next replacement - an unhealthy machine, a zone lost - boots that.
+      auto_rollback = true
     }
   }
 
   initial_lifecycle_hook {
     name                 = "ready"
     lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
-    # The boot beats while it works (files/lifecycle.sh.tftpl), so this is how long it may be
-    # silent - not how long the release, the database and the base image's first look take.
+    # The boot beats while it works, so this is how long it may be silent - not how long the
+    # release, the database and the base image's first look take.
     heartbeat_timeout = local.heartbeat_timeout
     default_result    = "ABANDON"
   }
@@ -225,8 +163,12 @@ resource "aws_autoscaling_group" "controlplane" {
   }
 
   depends_on = [
-    # What the machine starts on: it reads this at its first boot and at every start after.
+    # What the machine starts on, and what the document names.
     aws_ssm_parameter.controlplane_config,
+    aws_ssm_parameter.installation,
+    aws_ssm_parameter.encryption_key,
+    aws_ssm_parameter.ca,
+    aws_ssm_parameter.admin_password,
     # The installer checks the bucket and a credential minted under the role; both exist and
     # the bucket answers only through the endpoint.
     aws_s3_bucket_policy.volumes,
@@ -237,28 +179,4 @@ resource "aws_autoscaling_group" "controlplane" {
     aws_vpc_endpoint.s3,
     aws_vpc_security_group_egress_rule.controlplane_to_database,
   ]
-}
-
-# Where the control plane publishes what a runner needs to join, created here so the runners'
-# role can be given exactly these. The values are the control plane's to write.
-resource "aws_ssm_parameter" "token" {
-  name        = local.token_parameter
-  description = "A pool's registration token for ${var.name}'s runners, rotated by the control plane"
-  type        = "SecureString"
-  value       = local.unpublished
-  tags        = local.tags
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
-resource "aws_ssm_parameter" "ca" {
-  name        = local.ca_parameter
-  description = "The CA ${var.name}'s runners trust the control plane by"
-  type        = "String"
-  value       = local.unpublished
-  tags        = local.tags
-  lifecycle {
-    ignore_changes = [value]
-  }
 }

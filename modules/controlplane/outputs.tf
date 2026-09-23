@@ -23,32 +23,39 @@ output "session_manager_policy_arn" {
   value       = aws_iam_policy.session_manager.arn
 }
 
-output "fetch_release" {
-  description = "The shell function every machine of the installation fetches a release file with, `release <version> <file>`: cosign by its pinned SHA-256, and the file verified against the release workflow at that version's tag."
-  value       = local.fetch_release
-}
-
 output "url" {
   description = "The control plane as runners reach it, the address its certificate names."
   value       = local.url
 }
 
-output "token_parameter" {
-  description = "The SSM parameter holding the pool's current registration token."
-  value       = aws_ssm_parameter.token.name
+output "ca_cert" {
+  description = "The installation's CA certificate, which every component trusts the control plane by."
+  value       = tls_self_signed_cert.ca.cert_pem
 }
 
-output "token_parameter_arn" {
-  value = aws_ssm_parameter.token.arn
+output "runner_config_parameter_arn" {
+  description = "The runners' document, which the runners' role reads and nothing else of SSM."
+  value       = aws_ssm_parameter.runner_config.arn
 }
 
-output "ca_parameter" {
-  description = "The SSM parameter holding the control plane's CA."
-  value       = aws_ssm_parameter.ca.name
+output "runner_user_data" {
+  description = "What a runner's machine runs at its first boot: spin-boot, by its digest, over the runners' document."
+  value       = local.user_data["runner"]
 }
 
-output "ca_parameter_arn" {
-  value = aws_ssm_parameter.ca.arn
+output "boot_log_group" {
+  description = "The CloudWatch log group every machine's boot writes to, a stream per instance."
+  value       = aws_cloudwatch_log_group.boot.name
+}
+
+output "boot_log_policy_arn" {
+  description = "Writing a machine's boot to that group, and nothing else: the runners module attaches it to the runners' role."
+  value       = aws_iam_policy.boot_log.arn
+}
+
+output "writes_public_dns" {
+  description = "Whether this module writes app.<domain> and *.app.<domain>, or they are the operator's to point at proxy_ip."
+  value       = var.route53_zone_id != ""
 }
 
 output "domain" {
@@ -63,17 +70,12 @@ output "internal_zone_id" {
 
 output "relay_dial" {
   description = "Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself."
-  value       = "${local.proxy_host}:443"
+  value       = local.runner_document.relay_dial
 }
 
 output "collector" {
   description = "Where every process of the installation pushes its telemetry, host:port; empty ships nothing."
   value       = local.collector
-}
-
-output "metric_interval" {
-  description = "How often a process pushes its metrics to the collector; empty is the binary's default."
-  value       = local.metric_interval
 }
 
 output "grafana_token_parameter" {
@@ -84,11 +86,6 @@ output "grafana_token_parameter" {
 output "boundary_arn" {
   description = "The permissions boundary every role of the installation carries; the runners module puts it on the runners' role."
   value       = aws_iam_policy.boundary.arn
-}
-
-output "unpublished" {
-  description = "What the two parameters hold until the control plane has written them."
-  value       = local.unpublished
 }
 
 output "proxy_ip" {
@@ -110,14 +107,14 @@ output "controlplane_group" {
   value       = aws_autoscaling_group.controlplane.name
 }
 
-output "bootstrap_user_parameter" {
-  description = "The SSM parameter naming the first administrator: the bootstrap admin, until an identity provider is configured and they are disabled."
-  value       = local.bootstrap_user_parameter
+output "admin_email" {
+  description = "Who the first administrator signs in as."
+  value       = local.admin_email
 }
 
-output "bootstrap_password_parameter" {
-  description = "The SSM SecureString holding that administrator's one-time password, written by the control plane's first boot and gone from the catalog the moment they choose their own."
-  value       = local.bootstrap_password_parameter
+output "admin_password_parameter" {
+  description = "The SSM SecureString holding the first administrator's one-time password: aws ssm get-parameter --with-decryption --name <this>. The first sign-in asks for a new one."
+  value       = aws_ssm_parameter.admin_password.name
 }
 
 output "region" {

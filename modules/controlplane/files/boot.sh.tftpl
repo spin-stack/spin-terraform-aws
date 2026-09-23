@@ -1,0 +1,10 @@
+#!/bin/sh
+# Every machine of the installation: spin-boot by the digest this module pins, then spin-boot.
+# Nothing else goes here (spin's CLAUDE.md, "Who installs an installation").
+set -eu
+repo=spin-stack/spin-release
+token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+curl -fsSL -H "Authorization: Bearer $token" -o /usr/local/bin/spin-boot "https://ghcr.io/v2/$repo/blobs/sha256:${sha256}"
+echo '${sha256}  /usr/local/bin/spin-boot' | sha256sum --check --quiet
+chmod 0755 /usr/local/bin/spin-boot
+exec /usr/local/bin/spin-boot ${role} --config '${config}'

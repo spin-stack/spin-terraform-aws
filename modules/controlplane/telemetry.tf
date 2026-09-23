@@ -45,12 +45,14 @@ locals {
   token_parameter_grafana = "/${var.name}/grafana-cloud-token"
 }
 
+# The one parameter this apply does not fill: the token is the operator's, and is never in the
+# state. The collector refuses to start on this placeholder and says where the token goes.
 resource "aws_ssm_parameter" "grafana_token" {
   count       = local.telemetry ? 1 : 0
   name        = local.token_parameter_grafana
   description = "The Grafana Cloud access policy token ${var.name}'s collector ships with; written by the operator"
   type        = "SecureString"
-  value       = local.unpublished
+  value       = "unpublished"
   tags        = local.tags
   lifecycle {
     ignore_changes = [value]

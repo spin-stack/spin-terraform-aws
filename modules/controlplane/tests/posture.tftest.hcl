@@ -79,6 +79,23 @@ override_resource {
   values = { allocation_id = "eipalloc-0123456789abcdef0", public_ip = "203.0.113.10" }
 }
 
+override_resource {
+  target = aws_ssm_parameter.proxy_config
+  values = { arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/proxy-config" }
+}
+
+# The image the release's machines boot, which is known once it is applied.
+override_resource {
+  target = terraform_data.image
+  values = { output = "ami-0123456789abcdef0" }
+}
+
+# The CA's certificate, which the proxy's and the runners' documents carry.
+override_resource {
+  target = tls_self_signed_cert.ca
+  values = { cert_pem = "-----BEGIN CERTIFICATE-----\nthe installation's CA\n-----END CERTIFICATE-----\n" }
+}
+
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
@@ -154,8 +171,39 @@ run "the_machines" {
     error_message = "the control plane takes a browser's address from somewhere a proxy is not alone"
   }
   assert {
-    condition     = !strcontains(local.controlplane_user_data, "--trusted-proxy")
+    condition     = !strcontains(local.user_data["control-plane"], "--trusted-proxy") && !strcontains(yamlencode(local.controlplane_document), "trusted")
     error_message = "a machine is installed with who may name a browser, which is the installation's to say"
+  }
+}
+
+# What a machine's user data is: spin-boot fetched by the digest this module pins, checked, and
+# run over the role's document - and nothing else. Every step a boot takes is spin-boot's, in Go
+# with tests; a line added here is a step nobody can test, whose failure is on a disk the group
+# throws away.
+run "a_machines_user_data_is_spin_boot_and_nothing_else" {
+  command = plan
+
+  assert {
+    condition = alltrue([for role, u in local.user_data : (
+      strcontains(u, "/v2/$repo/blobs/sha256:${var.spin_boot_sha256}\"") &&
+      strcontains(u, "echo '${var.spin_boot_sha256}  /usr/local/bin/spin-boot' | sha256sum --check --quiet") &&
+      endswith(u, "exec /usr/local/bin/spin-boot ${role} --config 'ssm:///spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2'\n") &&
+      length(regexall("\n[^#\n]", u)) <= 7
+    )])
+    error_message = "a machine's user data does more than fetch spin-boot by its digest and run it over its document"
+  }
+  assert {
+    condition = alltrue([for u in values(local.user_data) : alltrue([for never in ["aws ", "systemctl", "apt-get", "python", "put-parameter", "spin-controlplane", "spin-install"] :
+    !strcontains(u, never)])])
+    error_message = "a machine's user data calls a cloud, a package manager or systemd itself"
+  }
+  assert {
+    condition = (
+      base64decode(aws_launch_template.controlplane.user_data) == local.user_data["control-plane"] &&
+      base64decode(aws_launch_template.proxy.user_data) == local.user_data["proxy"] &&
+      output.runner_user_data == local.user_data["runner"]
+    )
+    error_message = "a machine is launched with other user data than its role's"
   }
 }
 
@@ -199,139 +247,117 @@ run "an_update_stands_the_new_machine_beside_the_old" {
     anytrue([for h in g.initial_lifecycle_hook : h.heartbeat_timeout == 300])])
     error_message = "the hook waits out a long silence, so a machine that is gone holds the group"
   }
+  # The boot beats more often than the hook's timeout, in the group and at the hook the group
+  # holds the machine by; the order a machine takes the installation over in, and how it hands
+  # it back, are spin-boot's and tested there (spin's internal/boot).
   assert {
-    condition = alltrue([for u in [local.controlplane_user_data, base64decode(aws_launch_template.proxy.user_data)] :
-    strcontains(u, ". /usr/local/lib/spin/lifecycle.sh\nheartbeating\n")])
-    error_message = "a boot says nothing while it works, so its own silence is what abandons it"
+    condition = alltrue([for d in [local.controlplane_document, local.proxy_document] : (
+      d.install.launch.aws.heartbeat == "60s" && d.install.launch.aws.hook == "ready" &&
+      contains([local.controlplane_group, local.proxy_group], d.install.launch.aws.group)
+    )]) && alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] : anytrue([for h in g.initial_lifecycle_hook : h.name == "ready"])])
+    error_message = "a boot says nothing while it works, or to a hook its group does not have, so its own silence is what abandons it"
   }
-  assert {
-    condition = strcontains(local.controlplane_files["/usr/local/lib/spin/lifecycle.sh"].content,
-    "autoscaling record-lifecycle-action-heartbeat")
-    error_message = "there is nothing for a boot to beat with"
-  }
-  # The installation's config is read by the control plane's own user, so it is given to that
-  # user and passed by name: a redirection hands the command root's descriptor, which it cannot
-  # open, and the file is 0600 because it is the operator's.
+  # A change to what a machine starts on is a new template, which the refresh rolls out; one
+  # whose machine never comes into service puts the group back on the template it had.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "chown --reference=/var/lib/spin-stack /etc/spin-stack/installation.yaml\nspin-controlplane config apply /etc/spin-stack/installation.yaml") &&
-      !strcontains(local.controlplane_user_data, "config apply /dev/stdin") &&
-      local.controlplane_files["/etc/spin-stack/installation.yaml"].mode == "0600"
+      aws_launch_template.controlplane.tag_specifications[0].tags["spin:starts-on"] == sha256(join("\n", [yamlencode(local.controlplane_document), yamlencode(local.installation)])) &&
+      aws_launch_template.proxy.tag_specifications[0].tags["spin:starts-on"] == sha256(yamlencode(local.proxy_document)) &&
+      alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] : g.instance_refresh[0].preferences[0].auto_rollback])
     )
-    error_message = "the installation's config is handed to the control plane as a descriptor it cannot open, or left readable by anyone"
+    error_message = "a change to a document reaches no machine until something replaces it, or a failed update is left as the group's template"
+  }
+  # The image is the one of the release, not the newest on whatever day an apply runs.
+  assert {
+    condition     = aws_launch_template.controlplane.image_id == terraform_data.image.output && aws_launch_template.proxy.image_id == terraform_data.image.output
+    error_message = "the machines boot an image an unrelated apply picked"
+  }
+  # Each machine takes its own name, in the installation's zone, and the proxy its address.
+  assert {
+    condition = (
+      local.controlplane_document.install.launch.aws.name == "cp.spin.internal" &&
+      local.proxy_document.install.launch.aws.name == "proxy.spin.internal" &&
+      local.controlplane_document.install.launch.aws.zone == "Z0SPININTERNAL" &&
+      local.proxy_document.install.launch.aws.elastic_ip == "eipalloc-0123456789abcdef0" &&
+      !contains(keys(local.controlplane_document.install.launch.aws), "elastic_ip")
+    )
+    error_message = "a machine takes a name or an address that is not its role's"
   }
   # The domain is given to this module and then to the installation: an installation that has
   # none takes every browser origin but localhost for another site, so the dashboard loads and a
   # workspace's terminal is refused — with the operator asked, in the setup pages, for the one
   # thing they had already said here.
   assert {
-    condition     = strcontains(local.controlplane_user_data, "spin-controlplane base-domain 'example.com'")
+    condition     = local.installation.base_domain == "example.com" && local.proxy_document.domain == "example.com"
     error_message = "the installation is never told the domain it answers on"
-  }
-  # The new control plane takes its name before the term, and says it serves only once it
-  # leads; a proxy takes the address once Caddy answers.
-  assert {
-    condition = (
-      can(regex("(?s)\npoint 'cp.spin.internal'\n.*\n\"[$]boot\" control-plane", local.controlplane_user_data)) &&
-      strcontains(local.controlplane_user_data, "\nin_service\nserving=yes\nsystemctl enable --now spin-controlplane-watchdog.timer") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal'\naws --region 'us-east-2' ec2 associate-address --allocation-id 'eipalloc-0123456789abcdef0'")
-    )
-    error_message = "a new machine takes the installation over in another order than name, then service"
-  }
-  # Until it is in service, a new control plane that fails hands the installation back: its own
-  # control plane stopped, the name where it was, the launch abandoned; and the old machine's
-  # watchdog serves the name it is given back, and takes back one nobody answers at. The trap is
-  # set before anything that can fail but the machine's packages - a release it cannot fetch
-  # abandons the launch at once rather than holding the group for the hook's half an hour.
-  assert {
-    condition = (
-      strcontains(local.controlplane_user_data, "\nheartbeating\nprevious=\nserving=\nhand_back() {") &&
-      strcontains(local.controlplane_user_data, "point 'cp.spin.internal' \"$previous\" || true\n  fi\n  abandon || true") &&
-      strcontains(local.controlplane_user_data, "trap hand_back EXIT\n\n# --- the encryption key") &&
-      strcontains(local.controlplane_user_data, "previous=$(resolve 'cp.spin.internal')\npoint 'cp.spin.internal'\n") &&
-      strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "if [ \"$at\" = \"$self\" ]; then") &&
-      strcontains(local.controlplane_files["/usr/local/sbin/spin-controlplane-watchdog"].content, "point \"$name\"\n  systemctl start spin-controlplane.service")
-    )
-    error_message = "a failed replacement leaves the installation's name at a machine that is not serving it"
-  }
-  # A new proxy that fails does the same from its first step: the name back where it pointed,
-  # the address back on the proxy of this VPC that answers there, the launch abandoned.
-  assert {
-    condition = (
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "\nheartbeating\n\n# Until this machine is in service") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "trap hand_back EXIT\n\n# release <version> <file>") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "point 'proxy.spin.internal' \"$previous\" || true") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "'Name=vpc-id,Values=vpc-0spin' \"Name=private-ip-address,Values=$previous\"") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "--instance-id \"$old\" --allow-reassociation >/dev/null || true\n    fi\n  fi\n  abandon || true") &&
-      strcontains(base64decode(aws_launch_template.proxy.user_data), "\nin_service\nserving=yes\n")
-    )
-    error_message = "a failed proxy replacement leaves the name or the address at a machine that is not serving them"
-  }
-  # The first machine asks where the name points before it exists: an answer of nothing, and not
-  # a failure that set -e and pipefail would end the boot on.
-  assert {
-    condition     = strcontains(local.controlplane_files["/usr/local/lib/spin/lifecycle.sh"].content, "{ getent ahostsv4 \"$1\" || true; } | awk")
-    error_message = "resolving a name that does not exist yet ends the first machine's boot"
-  }
-  assert {
-    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "runuser -u spin-proxy -- /usr/local/sbin/spin-proxy-certificates restore\n\nspin-install proxy")
-    error_message = "a new proxy starts Caddy before it has the certificates the last one had, or restores them as root"
   }
 }
 
-# The encryption key is kept before anything uses it: stored in SSM without overwriting one that
-# is there, and then read back, so a first machine that dies has lost nothing and two racing end
-# on one key.
-run "the_encryption_key_is_kept_before_it_is_used" {
+# The installation's secrets are this apply's to write and nobody else's. The key and the first
+# administrator's password are ephemeral and written through write-only attributes, so neither is
+# in the plan or the state; each is written once, on the version this module fixes, and an apply
+# after that writes neither again - a new key is a catalog nothing can open.
+run "the_secrets_are_written_once_and_never_by_a_machine" {
   command = plan
 
   assert {
-    condition = can(regex(
-      "(?s)put-parameter --name '/spin/controlplane-encryption-key' --type SecureString --value \"file://\\$file\" \\\\\n.*\"[$]boot\" control-plane",
-      local.controlplane_user_data,
-    ))
-    error_message = "the control plane is installed before the key everything its catalog seals is sealed under exists"
+    condition = (
+      aws_ssm_parameter.encryption_key.type == "SecureString" && aws_ssm_parameter.encryption_key.value_wo_version == 1 &&
+      aws_ssm_parameter.admin_password.type == "SecureString" && aws_ssm_parameter.admin_password.value_wo_version == 1 &&
+      strcontains(file("${path.module}/secrets.tf"), "ephemeral \"random_password\" \"encryption_key\"") &&
+      strcontains(file("${path.module}/secrets.tf"), "ephemeral \"random_password\" \"admin\"")
+    )
+    error_message = "the encryption key or the administrator's password is in the state, or is written on every apply"
   }
+  # A plan that would make the key or the CA again is refused: a new key is a catalog nothing
+  # opens, a new CA every runner distrusting the control plane. lifecycle is not an attribute a
+  # plan can be asked about, so the file is.
   assert {
-    condition     = !can(regex("put-parameter --name '/spin/controlplane-encryption-key'[^\n]*--overwrite", local.controlplane_user_data)) && length(regexall("put-parameter --name '/spin/controlplane-encryption-key'", local.controlplane_user_data)) == 1
-    error_message = "the encryption key can be overwritten, or is written more than once"
+    condition     = length(regexall("prevent_destroy = true", file("${path.module}/secrets.tf"))) == 3
+    error_message = "the key or the CA can be replaced by an apply"
   }
-  # Made here and read nowhere here: the document says where it is, and the control plane reads
-  # it with its own credentials at every start. A boot that read it would put it in this script's
-  # environment and in a file on a disk that the next machine replaces.
+  # The CA the control plane issues under, and the certificate everything else trusts it by: a CA
+  # that can sign, and nothing but the certificate in a document another role reads.
   assert {
     condition = (
-      !strcontains(local.controlplane_user_data, "SPIN_CP_ENCRYPTION_KEY") &&
-      !can(regex("get-parameter --name '/spin/controlplane-encryption-key'[^\n]*--with-decryption", local.controlplane_user_data))
+      tls_self_signed_cert.ca.is_ca_certificate && contains(tls_self_signed_cert.ca.allowed_uses, "cert_signing") &&
+      tls_self_signed_cert.ca.early_renewal_hours == 0 &&
+      aws_ssm_parameter.ca.type == "SecureString" &&
+      local.controlplane_document.tls.ca_at == "ssm:///spin/controlplane-ca?region=us-east-2" &&
+      !strcontains(yamlencode(local.proxy_document), "PRIVATE KEY") && !strcontains(yamlencode(local.runner_document), "PRIVATE KEY")
     )
-    error_message = "the boot reads the encryption key, so it is in a shell's environment and on the machine"
+    error_message = "the CA cannot sign, would be made again by an apply, or its key is in a document another role reads"
   }
-  # A directory anyone may enter: the control plane runs as its own user and opens the
-  # database's CA there, which spin-install writes 0644.
+  # Named in the control plane's document and read by it; nothing reads them on a machine's behalf.
   assert {
     condition = (
-      strcontains(local.controlplane_user_data, "install -d -m 0755 /etc/spin-stack") &&
-      !strcontains(local.controlplane_user_data, "install -d -m 0700 /etc/spin-stack")
+      local.controlplane_document.encryption_key_at == "ssm:///spin/controlplane-encryption-key?region=us-east-2" &&
+      local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/bootstrap-password?region=us-east-2" &&
+      local.controlplane_document.bootstrap_admin.email == "admin@example.com" &&
+      !contains(keys(local.controlplane_document), "encryption_key")
     )
-    error_message = "/etc/spin-stack is a directory the control plane's user cannot enter, so it cannot read the CA its catalog is verified by"
+    error_message = "the document holds a secret rather than where it is"
+  }
+  # No role of the installation writes a parameter, whatever policy it is given later.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "ssm:PutParameter") && contains(s.actions, "ssm:DeleteParameter*") &&
+    s.resources == toset(["*"]) && length(s.condition) == 0])
+    error_message = "a machine of the installation can write a parameter another machine starts on"
+  }
+  assert {
+    condition = !anytrue([for d in [data.aws_iam_policy_document.controlplane, data.aws_iam_policy_document.proxy] :
+    anytrue([for s in d.statement : s.effect != "Deny" && anytrue([for a in s.actions : startswith(a, "ssm:") && a != "ssm:GetParameter"])])])
+    error_message = "a machine's role is granted more of SSM than reading its parameters"
   }
 }
 
-# What a control plane starts on is one document in the parameter store, and the machine is told
-# where it is and nothing else. Two things are asserted here and each has been got wrong: that
-# the document holds no secret - the key is a parameter of its own, made by the first boot, so
-# neither this document nor the state of an apply carries it - and that no value in it is also a
-# flag on the machine, which is a fact in two places where the one that loses loses silently.
+# What a machine starts on is one document in the parameter store, and the machine is told where
+# it is and nothing else: no value in the document is also a flag on the machine, which is a fact
+# in two places where the one that loses loses silently.
 run "the_installation_is_in_its_document_and_not_on_its_machines" {
   command = plan
 
-  assert {
-    condition = (
-      local.controlplane_document.encryption_key_at == "ssm:///spin/controlplane-encryption-key" &&
-      !contains(keys(local.controlplane_document), "encryption_key")
-    )
-    error_message = "the document holds the encryption key rather than where it is, so Terraform's state holds it too"
-  }
   assert {
     condition = (
       local.controlplane_document.database.auth == "aws-iam" &&
@@ -342,46 +368,54 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
     error_message = "the document does not say what the control plane needs before it can read its catalog"
   }
   assert {
-    condition     = aws_ssm_parameter.controlplane_config.type == "String" && yamldecode(aws_ssm_parameter.controlplane_config.value) == local.controlplane_document
-    error_message = "the document is not what the parameter holds"
+    condition = (
+      aws_ssm_parameter.controlplane_config.type == "String" && aws_ssm_parameter.controlplane_config.value == yamlencode(local.controlplane_document) &&
+      aws_ssm_parameter.proxy_config.type == "String" && aws_ssm_parameter.proxy_config.value == yamlencode(local.proxy_document) &&
+      aws_ssm_parameter.runner_config.type == "String" && aws_ssm_parameter.runner_config.value == yamlencode(local.runner_document)
+    )
+    error_message = "a document is not what its parameter holds"
+  }
+  # The installation's own configuration is read by the control plane at every start, which makes
+  # the catalog match it: nothing applies it by hand on a machine.
+  assert {
+    condition = (
+      local.controlplane_document.installation_at == "ssm:///spin/installation?region=us-east-2" &&
+      aws_ssm_parameter.installation.value == yamlencode(local.installation) &&
+      aws_ssm_parameter.installation.type == "SecureString"
+    )
+    error_message = "the installation's configuration is not where its control plane reads it"
   }
   # What the release this machine installs and the store its volumes live in are: in the document,
-  # so that the user data holds neither. A machine told a release in its user data and another in
-  # its document would install whichever the script happened to use.
+  # so that the user data holds neither. A runner's release is its control plane's, asked of it.
   assert {
     condition = (
       local.controlplane_document.install.release == "v20260921.02" &&
+      local.proxy_document.install.release == "v20260921.02" &&
+      !contains(keys(local.runner_document.install), "release") &&
       local.controlplane_document.install.store.bucket == "spin-volumes-123456789012-us-east-2" &&
       startswith(local.controlplane_document.install.store.role_arn, "arn:aws:iam::123456789012:role/")
     )
-    error_message = "the document does not say what this machine installs or where its volumes live"
-  }
-  # One location on the command line, and nothing else: no value the document holds, and no flag
-  # that would be a second answer to one of its keys.
-  assert {
-    condition = (
-      strcontains(local.controlplane_user_data, "\"$boot\" control-plane --config 'ssm:///spin/controlplane-config'") &&
-      !strcontains(local.controlplane_user_data, "SPIN_CP_DATABASE_URL") &&
-      !strcontains(local.controlplane_user_data, "--advertise") &&
-      !strcontains(local.controlplane_user_data, "--database-auth") &&
-      !strcontains(local.controlplane_user_data, "--s3-bucket")
-    )
-    error_message = "the machine is given values the document decides"
+    error_message = "a document does not say what its machine installs, or a runner is told a release other than its control plane's"
   }
 }
 
-# Caddy's directory is copied as Caddy's user, and links in it are not followed: as root, a link
-# Caddy planted would have the copy read any file of the machine into the bucket.
-run "the_certificates_are_copied_with_caddys_rights" {
+# A runner joins by who it is: its role, for this installation. The installation names the role
+# and the policy its machines start under, and the runner's document the same audience; there is
+# no token to mint, publish or read.
+run "a_runner_joins_by_its_role" {
   command = plan
 
   assert {
     condition = (
-      strcontains(local.proxy_files["/etc/systemd/system/spin-proxy-certificates.service"].content, "\nUser=spin-proxy\n") &&
-      strcontains(local.proxy_files["/usr/local/sbin/spin-proxy-certificates"].content, "--no-follow-symlinks") &&
-      strcontains(local.proxy_files["/usr/local/sbin/spin-proxy-certificates"].content, "if [ \"$(id -u)\" -eq 0 ]; then")
+      local.installation.host_join.audience == "spin:123456789012:spin" &&
+      local.runner_document.install.join.audience == local.installation.host_join.audience &&
+      local.installation.host_join.aws == [{ role = "arn:aws:iam::123456789012:role/spin-runner", shutdown_grace = "100s", preemption_source = "aws" }]
     )
-    error_message = "the certificates are copied as root, or links in Caddy's directory are followed"
+    error_message = "a runner joins for another installation than the one that names its role, or under no policy"
+  }
+  assert {
+    condition     = !strcontains(yamlencode(local.runner_document), "token")
+    error_message = "a runner is told where a token is"
   }
 }
 
@@ -396,7 +430,7 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the installation's names are not a zone private to its VPC"
   }
   assert {
-    condition     = strcontains(local.controlplane_user_data, "\"TTL\":%d") && strcontains(local.controlplane_user_data, "'10'")
+    condition     = local.controlplane_document.install.launch.aws.ttl == 10 && local.proxy_document.install.launch.aws.ttl == 10
     error_message = "a replaced machine's name is kept by clients longer than ten seconds"
   }
   assert {
@@ -404,8 +438,12 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the control plane's certificate does not carry the name it is reached by"
   }
   assert {
-    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "--control-plane 'https://cp.spin.internal:8080'") && output.relay_dial == "proxy.spin.internal:443"
-    error_message = "the proxy, or the runners' relay, is dialled by something other than its name"
+    condition = (
+      local.proxy_document.control_plane == "https://cp.spin.internal:8080" &&
+      local.runner_document.control_plane == "https://cp.spin.internal:8080" &&
+      local.runner_document.relay_dial == "proxy.spin.internal:443" && output.relay_dial == "proxy.spin.internal:443"
+    )
+    error_message = "the control plane, or the runners' relay, is dialled by something other than its name"
   }
 }
 
@@ -528,22 +566,23 @@ run "no_machine_reads_the_control_planes_secrets" {
     toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
     error_message = "a role other than the control plane's can read the encryption key"
   }
-  # The first administrator's one-time password is written where the operator reads it, and it is
-  # a credential: the same line as the encryption key, and nobody else's to read.
+  # The CA's key, the first administrator's password and the installation's configuration are
+  # the same line as the encryption key: nobody else's to read.
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-      s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") &&
-    contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/bootstrap-password")])
-    error_message = "a role other than the control plane's can read the first administrator's password"
+      s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") && length(setintersection(s.resources, toset([
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca",
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/bootstrap-password",
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/installation",
+    ]))) == 3])
+    error_message = "a role other than the control plane's can read the CA's key, the administrator's password or the installation's configuration"
   }
+  # Each of the other machines reads its own document and nothing else of SSM.
   assert {
-    condition = (
-      strcontains(local.controlplane_user_data, "if password=$(spin-controlplane bootstrap-password 2>/dev/null); then") &&
-      strcontains(local.controlplane_user_data, "--name '/spin/bootstrap-password' --type SecureString --overwrite \\\n    --value \"file://$file\"") &&
-      strcontains(local.controlplane_user_data, "--name '/spin/bootstrap-user' --type String") &&
-      !can(regex("put-parameter[^\n]*--value \"\\$password\"", local.controlplane_user_data))
-    )
-    error_message = "the first administrator is nowhere an operator can read, or their password travels as an argument"
+    condition = anytrue([for s in data.aws_iam_policy_document.proxy.statement :
+      s.actions == toset(["ssm:GetParameter"]) && length(s.resources) == 1]) && alltrue([for s in data.aws_iam_policy_document.proxy.statement :
+    !anytrue([for a in s.actions : startswith(a, "ssm:")]) || s.resources == toset([aws_ssm_parameter.proxy_config.arn])])
+    error_message = "the proxy reads more of SSM than its document"
   }
 }
 
@@ -555,8 +594,8 @@ run "no_collector_unless_asked" {
     error_message = "a collector's token or port exists on an installation that ships no telemetry"
   }
   assert {
-    condition     = !strcontains(local.controlplane_user_data, "alloy") && !strcontains(local.controlplane_user_data, "--otel-collector")
-    error_message = "the control plane installs a collector nobody asked for"
+    condition     = local.controlplane_document.install.collector == null && !local.runner_document.telemetry.enabled && !local.proxy_document.telemetry.enabled
+    error_message = "the control plane installs a collector nobody asked for, or a component pushes to one"
   }
 }
 
@@ -578,28 +617,29 @@ run "a_collector_when_asked" {
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
-    condition = strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.grafana_cloud.alloy_sha256}'") && (
-      # Declared in the installation's own configuration, not in what the machine starts on: an
-      # installation is not asked for a collector before it has one.
+    condition = (
+      local.controlplane_document.install.collector.alloy.sha256 == var.grafana_cloud.alloy_sha256 &&
+      # Declared in the installation's own configuration, not in what the control plane starts
+      # on: an installation is not asked for a collector before it has one.
       local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
       local.installation.settings.telemetry_metric_interval == "60s" &&
-      !contains(keys(local.controlplane_document), "telemetry") &&
-      can(regex("(?s)config apply [^\n]*\n(#[^\n]*\n)*systemctl restart spin-controlplane.service", local.controlplane_user_data))
+      !contains(keys(local.controlplane_document), "telemetry")
     )
     error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
   }
   assert {
-    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "--otel-collector 'cp.spin.internal:4317'")
-    error_message = "the proxy is not pointed at the collector"
+    condition = alltrue([for d in [local.proxy_document, local.runner_document] :
+    d.telemetry.enabled && d.telemetry.endpoint == "cp.spin.internal:4317" && d.telemetry.metric_interval == "60s"])
+    error_message = "the proxy or the runners are not pointed at the collector"
   }
+  # The token is the operator's, written where only the control plane reads it: the document says
+  # where, and the plan never holds it.
   assert {
-    condition     = !strcontains(local.controlplane_user_data, "glc_") && strcontains(local.controlplane_user_data, "/spin/grafana-cloud-token")
-    error_message = "the token is in the user data rather than read from SSM"
-  }
-  # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
-  assert {
-    condition     = startswith(aws_launch_template.controlplane.user_data, "H4sI") && length(aws_launch_template.controlplane.user_data) * 3 / 4 < 16384
-    error_message = "the control plane's user data is not gzipped, or is over the 16 KiB EC2 takes even so"
+    condition = (
+      local.controlplane_document.install.collector.token_at == "ssm:///spin/grafana-cloud-token?region=us-east-2" &&
+      anytrue([for s in data.aws_iam_policy_document.controlplane.statement : contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/grafana-cloud-token")])
+    )
+    error_message = "the token is not where the collector reads it"
   }
 }
 
@@ -612,13 +652,16 @@ run "the_catalog" {
     condition     = !aws_db_instance.catalog.publicly_accessible && aws_db_instance.catalog.manage_master_user_password && aws_db_instance.catalog.iam_database_authentication_enabled && aws_db_instance.catalog.password == null
     error_message = "the catalog is reachable from outside, or has a password this plan knows"
   }
-  # The master is a member of spin for the one statement that hands the database over, and not
-  # after it: rds_iam reaches the master through that membership, and RDS takes no password from
-  # a user it knows as an IAM one - the next boot could not sign in to run this file at all.
+  # The first boot makes the role the control plane signs in as, as RDS's master, whose password
+  # RDS keeps: the document names the secret, and the control plane's role alone reads it.
   assert {
-    condition = strcontains(local.controlplane_files["/etc/spin-stack/database-bootstrap.sql"].content,
-    "GRANT spin TO CURRENT_USER;\nALTER DATABASE spin OWNER TO spin;\nREVOKE spin FROM CURRENT_USER;")
-    error_message = "the master keeps its membership of spin, and with it an rds_iam that stops its password working"
+    condition = (
+      local.controlplane_document.install.catalog.admin_user == "spin_admin" &&
+      local.controlplane_document.install.catalog.admin_secret == "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc" &&
+      anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      s.actions == toset(["secretsmanager:GetSecretValue"]) && s.resources == toset(["arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc"])])
+    )
+    error_message = "the first boot cannot make the catalog's role, or reads more of Secrets Manager than the master's password"
   }
   assert {
     condition     = length(aws_subnet.database) >= 2 && alltrue([for s in aws_subnet.database : !s.map_public_ip_on_launch])
@@ -643,52 +686,22 @@ run "the_catalog" {
   }
 }
 
-# Every machine runs what the release workflow signed, and nothing that is an image.
-#
-# The control plane fetches one file with a digest this module pins and hands the rest to it:
-# spin-boot checks the release's signature itself, in Go, with tests (spin's internal/release).
-# The proxy still does it in shell with a pinned cosign and oras, which is what the control plane
-# did until spin-boot; the same identity, at the same tag, either way.
+# Every machine runs what the release workflow signed, and nothing that is an image. A machine
+# fetches one file by the digest this module pins and hands the rest to it: spin-boot checks the
+# release's signature itself, in Go, with tests (spin's internal/release). The file comes from
+# the release's public package by that digest, so what the registry serves under a tag is never
+# what decides; spin's repository is private, and its releases are a 404 to a machine.
 run "the_machines_run_what_the_release_signed" {
   command = plan
 
   assert {
-    condition = (
-      # The one file, by digest, and then nothing but spin-boot: no cosign, no oras, no tar.
-      strcontains(local.controlplane_user_data, "printf '%s  %s\\n' '${var.spin_boot_sha256}' \"$boot\" | sha256sum --check --quiet") &&
-      strcontains(local.controlplane_user_data, "/v2/$repo/manifests/v20260921.02-spin-boot-linux-amd64") &&
-      !strcontains(local.controlplane_user_data, "cosign") &&
-      !strcontains(local.controlplane_user_data, "oras") &&
-      !strcontains(local.controlplane_user_data, "tar -xzf") &&
-      !strcontains(local.controlplane_user_data, "docker")
-    )
-    error_message = "the control plane's boot runs something it did not check by digest, or is back to checking signatures in shell"
-  }
-  assert {
-    condition = alltrue([for u in [base64decode(aws_launch_template.proxy.user_data)] :
-      strcontains(u, "cosign verify-blob") && strcontains(u, "release.yml@refs/tags/$1\"") &&
-    strcontains(u, var.cosign.sha256) && !strcontains(u, "docker")]) && output.fetch_release == local.fetch_release
-    error_message = "a machine runs what it has not checked against the release's signature, or runs a container"
-  }
-  assert {
-    condition     = strcontains(base64decode(aws_launch_template.proxy.user_data), "release 'v20260921.02' spin-proxy-linux-amd64.tar.gz")
-    error_message = "a machine unpacks another role's tarball, or another release's"
-  }
-  # The files come from the release's public package, with an oras pinned like cosign: spin's
-  # repository is private, and a download from its releases is a 404 to a machine.
-  assert {
-    condition = (
-      # With a home: a first boot has no HOME, and oras refuses to start without one.
-      strcontains(local.fetch_release, "HOME=\"$${HOME:-/root}\" oras pull --no-tty \"ghcr.io/spin-stack/spin-release:$1-$${2%.tar.gz}\"\n  cosign verify-blob") &&
-      strcontains(local.fetch_release, "printf '%s  %s\\n' '${var.oras.sha256}' /tmp/oras.tar.gz | sha256sum --check") &&
-      !strcontains(local.fetch_release, "spin-stack/spin/releases/download")
-    )
-    error_message = "a machine fetches the release from somewhere it cannot read, or runs an oras it has not checked"
-  }
-  # EC2 refuses user data over 16 KiB, and says so at launch rather than at plan.
-  assert {
-    condition     = length(aws_launch_template.controlplane.user_data) * 3 / 4 < 16384 && length(base64decode(aws_launch_template.proxy.user_data)) < 16384
-    error_message = "a machine's user data is over the 16 KiB EC2 takes"
+    condition = alltrue([for u in values(local.user_data) : (
+      strcontains(u, "repo=spin-stack/spin-release\n") &&
+      !strcontains(u, "spin-stack/spin/releases/download") &&
+      !strcontains(u, "/manifests/") &&
+      !strcontains(u, "cosign") && !strcontains(u, "oras") && !strcontains(u, "tar ") && !strcontains(u, "docker")
+    )])
+    error_message = "a machine runs something it did not check by digest, or is back to checking signatures in shell"
   }
 }
 

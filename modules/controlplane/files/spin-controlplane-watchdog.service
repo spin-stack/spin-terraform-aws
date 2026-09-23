@@ -1,6 +1,0 @@
-[Unit]
-Description=Keep this machine's control plane to whose the installation's name is
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/spin-controlplane-watchdog

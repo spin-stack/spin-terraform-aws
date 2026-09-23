@@ -5,25 +5,18 @@
 # for, and which its role and boundary name in turn. Two names were two things to keep equal.
 
 variable "controlplane" {
-  description = "The control plane module's outputs, as they are: its name, where the runners go, whom they dial, and where they read the token and CA."
+  description = "The control plane module's outputs, as they are: its name, where the runners go, their document, and what a runner's machine runs at its first boot."
   type = object({
-    name                       = string
-    vpc_id                     = string
-    subnet_ids                 = list(string)
-    security_group_id          = string
-    url                        = string
-    token_parameter            = string
-    token_parameter_arn        = string
-    ca_parameter               = string
-    ca_parameter_arn           = string
-    unpublished                = string
-    boundary_arn               = string
-    domain                     = string
-    relay_dial                 = string
-    collector                  = string
-    metric_interval            = string
-    fetch_release              = string
-    session_manager_policy_arn = string
+    name                        = string
+    vpc_id                      = string
+    subnet_ids                  = list(string)
+    security_group_id           = string
+    runner_config_parameter_arn = string
+    runner_user_data            = string
+    boot_log_policy_arn         = string
+    boundary_arn                = string
+    collector                   = string
+    session_manager_policy_arn  = string
   })
 }
 
@@ -53,7 +46,7 @@ variable "nested_virtualization" {
 }
 
 variable "spot" {
-  description = "Every host a spot instance. The pool token's policy is what tells each one a stop is a reclaim."
+  description = "Every host a spot instance. The policy a runner joins under (the control plane module's runner_policy) is what tells each one a stop is a reclaim."
   type        = bool
   default     = true
   nullable    = false
@@ -82,7 +75,7 @@ variable "drain_seconds" {
 }
 
 variable "data_volume_gb" {
-  description = "An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more."
+  description = "An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more. A machine's boot takes an empty EBS volume where it has one, and the instance store otherwise."
   type        = number
   default     = 0
   nullable    = false

@@ -82,15 +82,25 @@ resource "aws_db_instance" "catalog" {
 
   # RDS's own backups beside the control plane's hourly catalog backup in the bucket: a point
   # in time to restore to, and a snapshot when the instance is deleted.
-  backup_retention_period   = var.database.backup_retention_days
-  copy_tags_to_snapshot     = true
-  deletion_protection       = var.database.deletion_protection
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.name}-catalog-final"
+  backup_retention_period = var.database.backup_retention_days
+  copy_tags_to_snapshot   = true
+  deletion_protection     = var.database.deletion_protection
+  skip_final_snapshot     = false
+  # Named for this installation's state, not only its name: an installation destroyed and made
+  # again under the same name would otherwise find the last one's snapshot in the way, and fail
+  # the destroy it needs to finish.
+  final_snapshot_identifier = "${var.name}-catalog-final-${random_id.catalog.hex}"
 
   auto_minor_version_upgrade = true
-  apply_immediately          = false
-  tags                       = local.tags
+  # A change asked for is made by the apply that asks for it, not at a maintenance window the
+  # operator never chose; a major version is one such change.
+  apply_immediately           = var.database.apply_immediately
+  allow_major_version_upgrade = true
+  tags                        = local.tags
+}
+
+resource "random_id" "catalog" {
+  byte_length = 4
 }
 
 locals {

@@ -36,6 +36,21 @@ variable "acme_email" {
   default     = null
 }
 
+variable "admin_email" {
+  description = "Who the first administrator signs in as; none is admin@<domain>."
+  type        = string
+  default     = null
+}
+
+variable "runner_policy" {
+  description = "The host policy a runner starts with when it joins: shutdown_grace and preemption_source; modules/controlplane's default is a spot runner on AWS with 100s."
+  type = object({
+    shutdown_grace    = optional(string)
+    preemption_source = optional(string)
+  })
+  default = null
+}
+
 variable "proxy_allowed_cidrs" {
   description = "Where users reach the proxy on 443 from; modules/controlplane's default is anywhere."
   type        = list(string)
@@ -43,13 +58,13 @@ variable "proxy_allowed_cidrs" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine; modules/controlplane's default is t3.micro."
+  description = "The control plane's machine; modules/controlplane's default is t8i.micro."
   type        = string
   default     = null
 }
 
 variable "proxy_instance_type" {
-  description = "The proxy's machine; modules/controlplane's default is t3.micro."
+  description = "The proxy's machine; modules/controlplane's default is t8i.micro."
   type        = string
   default     = null
 }
@@ -67,7 +82,7 @@ variable "grafana_cloud" {
 }
 
 variable "installation_config" {
-  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML, applied on the control plane's first boot."
+  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane makes its catalog match it at every start."
   type        = string
   default     = null
 }

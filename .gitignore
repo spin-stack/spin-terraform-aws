@@ -1,3 +1,8 @@
 # Pinned tools, installed by `task tools:tofu`, and each directory's provider cache.
 .tools/
 **/.terraform/
+# An installation's own values, which are the operator's (terraform.tfvars.example is the form).
+terraform.tfvars
+# bootstrap/'s own state, which is the account's and nobody else's.
+*.tfstate
+*.tfstate.backup

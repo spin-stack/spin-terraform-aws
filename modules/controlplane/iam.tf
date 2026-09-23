@@ -1,4 +1,4 @@
-# Two roles. The control plane's instance role opens the bucket and publishes to SSM. The
+# Two roles. The control plane's instance role opens the bucket and reads its document. The
 # runner-scope role is what it assumes to mint each runner's credential (--s3-role-arn): for an
 # hour, narrowed by a session policy to the volumes that runner serves
 # (spin's internal/server/volumeserver/storagecreds.go). Its own permissions are the widest that
@@ -56,7 +56,6 @@ resource "aws_iam_role_policy_attachment" "controlplane_ssm" {
 }
 
 locals {
-  ssm_prefix = "arn:aws:ssm:${local.region}:${local.account}:parameter/${var.name}"
   # Spelled out rather than read off the roles: the boundary names them, and the roles carry
   # the boundary.
   runner_scope_arn      = "arn:aws:iam::${local.account}:role/${var.name}-runner-scope"
@@ -102,12 +101,15 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["sts:AssumeRole"]
     resources = [aws_iam_role.runner_scope.arn]
   }
-  # The pool's token and the CA, which it publishes for runners, and the encryption key, which
-  # it backs up there on its first start and every later machine reads back.
+  # What it starts on, and the secrets its document names. Read, never written: every parameter
+  # of the installation is this module's to write (secrets.tf).
   statement {
-    sid       = "Publish"
-    actions   = ["ssm:GetParameter", "ssm:PutParameter"]
-    resources = ["${local.ssm_prefix}/*"]
+    sid     = "ItsDocumentAndSecrets"
+    actions = ["ssm:GetParameter"]
+    resources = [for p in concat(
+      [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter],
+      local.telemetry ? [local.token_parameter_grafana] : [],
+    ) : "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
   }
   # The catalog, as spin and as nobody else: an IAM token for that one database user.
   statement {

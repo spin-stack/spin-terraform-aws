@@ -1,0 +1,18 @@
+# Copy this to terraform.tfvars and fill it in. Keeping the values here rather than on the command
+# line is what makes an update one edit: change spin_version and spin_boot_sha256 to the new
+# release's, run `tofu apply`, and nothing else changes by accident.
+
+# The release, and the SHA-256 of its spin-boot. Both are in the release's notes on
+# https://github.com/spin-stack/spin/releases, ready to paste.
+spin_version     = "v20260923.1"
+spin_boot_sha256 = "<64 hex digits from the release notes>"
+
+# The domain the installation answers on: the dashboard is app.<domain>.
+domain = "example.com"
+
+# A Route 53 hosted zone for that domain, if it is in this account; leave it out and you add the
+# two DNS records yourself (tofu output -raw next_steps says which).
+# zone = "Z0123456789ABCDEFGHIJ"
+
+# The region, if not us-west-2. It must be the one bootstrap/ was applied in.
+# region = "us-west-2"

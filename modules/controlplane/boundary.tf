@@ -70,15 +70,15 @@ data "aws_iam_policy_document" "boundary" {
     ]
   }
   # The control plane's secrets are its role's alone, whatever policy a role is given later: the
-  # encryption key that opens the catalog's seals, and the collector's token. The parameters are
-  # read under the account's aws/ssm key, which opens them to any principal SSM lets read them,
-  # so this is where the line is. The pool's token is the runners' to read as well, and every
-  # parameter here is the control plane's alone to write.
+  # encryption key that opens the catalog's seals, the CA's key, the first administrator's
+  # password, the collector's token, and the installation's configuration, which may say whom it
+  # registers. The parameters are read under the account's aws/ssm key, which opens them to any
+  # principal SSM lets read them, so this is where the line is.
   statement {
     sid     = "TheControlPlanesSecrets"
     effect  = "Deny"
-    actions = ["ssm:GetParameter*", "ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
-    resources = [for p in [local.key_parameter, local.token_parameter_grafana, local.bootstrap_password_parameter] :
+    actions = ["ssm:GetParameter*"]
+    resources = [for p in [local.key_parameter, local.ca_parameter, local.admin_password_parameter, local.token_parameter_grafana, local.installation_parameter] :
     "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
     condition {
       test     = "ArnNotEquals"
@@ -86,27 +86,14 @@ data "aws_iam_policy_document" "boundary" {
       values   = [local.controlplane_role_arn]
     }
   }
+  # No machine writes a parameter. What a machine reads is what an apply wrote, so a machine that
+  # was taken cannot leave a value for the next one to start on - which is what a control plane
+  # publishing a CA and a token for runners was.
   statement {
-    sid       = "ThePoolsToken"
+    sid       = "NoMachineWritesAParameter"
     effect    = "Deny"
-    actions   = ["ssm:GetParameter*"]
-    resources = ["arn:aws:ssm:${local.region}:${local.account}:parameter${local.token_parameter}"]
-    condition {
-      test     = "ArnNotEquals"
-      variable = "aws:PrincipalArn"
-      values   = [local.controlplane_role_arn, local.runner_role_arn]
-    }
-  }
-  statement {
-    sid       = "OnlyTheControlPlaneWrites"
-    effect    = "Deny"
-    actions   = ["ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion"]
-    resources = ["${local.ssm_prefix}/*"]
-    condition {
-      test     = "ArnNotEquals"
-      variable = "aws:PrincipalArn"
-      values   = [local.controlplane_role_arn]
-    }
+    actions   = ["ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion", "ssm:AddTagsToResource"]
+    resources = ["*"]
   }
   # The machines are reached by a person through Session Manager; a role is never the one
   # starting a session or running a command on another.

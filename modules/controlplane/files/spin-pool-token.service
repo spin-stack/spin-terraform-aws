@@ -1,9 +1,0 @@
-[Unit]
-Description=Mint a new pool token for spin's runners into SSM
-After=spin-controlplane.service
-Requires=spin-controlplane.service
-
-[Service]
-Type=oneshot
-Environment=PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-ExecStart=/usr/local/sbin/spin-rotate-pool-token

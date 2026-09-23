@@ -2,7 +2,7 @@
 # this one - the repository's root - passes what it was given without restating what it means.
 
 variable "name" {
-  description = "Prefix for every resource, and the SSM path (/<name>/...) the runners read their token and CA from."
+  description = "Prefix for every resource, and the SSM path (/<name>/...) each machine's document is at."
   type        = string
   default     = "spin"
   nullable    = false
@@ -70,9 +70,9 @@ variable "availability_zones" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine: the control plane, and the collector where there is one. Its database is RDS, so it is small; t3.small where Alloy ships a busy fleet's telemetry."
+  description = "The control plane's machine: the control plane, and the collector where there is one. Its database is RDS, so it is small; t8i.small where Alloy ships a busy fleet's telemetry."
   type        = string
-  default     = "t3.micro"
+  default     = "t8i.micro"
   nullable    = false
 }
 
@@ -81,6 +81,9 @@ variable "database" {
     The catalog's RDS instance. db.t4g.micro and 20 GB are the free tier's where the account has
     one; the catalog is rows about workspaces and volumes, not their data, which is the bucket's.
     deletion_protection keeps a destroy from taking it: turn it off, apply, then destroy.
+    apply_immediately makes a change to the instance - its class, its version - during the apply
+    that asks for it, a minute or two of the catalog restarting; false leaves it for RDS's
+    maintenance window.
   EOT
   type = object({
     engine_version        = optional(string, "18")
@@ -90,43 +93,17 @@ variable "database" {
     multi_az              = optional(bool, false)
     backup_retention_days = optional(number, 7)
     deletion_protection   = optional(bool, true)
+    apply_immediately     = optional(bool, true)
   })
   default  = {}
   nullable = false
 }
 
-variable "cosign" {
-  description = "The cosign every machine checks the release's tarballs with, pinned by the SHA-256 of its linux-amd64 binary: the one thing a machine runs before anything is verified."
-  type = object({
-    version = string
-    sha256  = string
-  })
-  default = {
-    version = "3.1.3"
-    sha256  = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
-  }
-  nullable = false
-  validation {
-    condition     = can(regex("^[0-9a-f]{64}$", var.cosign.sha256))
-    error_message = "cosign.sha256 is 64 hex digits."
-  }
-}
-
-variable "oras" {
-  description = "The oras every machine pulls the release's files from its package with, pinned by the SHA-256 of its linux-amd64 tarball. It only carries them: what a file is trusted by is its bundle, which cosign checks."
-  type = object({
-    version = string
-    sha256  = string
-  })
-  default = {
-    version = "1.3.4"
-    sha256  = "f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454"
-  }
-  nullable = false
-  validation {
-    condition     = can(regex("^[0-9a-f]{64}$", var.oras.sha256))
-    error_message = "oras.sha256 is 64 hex digits."
-  }
+variable "admin_email" {
+  description = "Who the first administrator signs in as; empty is admin@<domain>. The one-time password is in the admin_password_parameter output's parameter."
+  type        = string
+  default     = ""
+  nullable    = false
 }
 
 variable "flow_logs" {
@@ -168,7 +145,7 @@ variable "proxy_allowed_cidrs" {
 variable "proxy_instance_type" {
   description = "The proxy's machine: Caddy and nothing else, the one address the internet reaches."
   type        = string
-  default     = "t3.micro"
+  default     = "t8i.micro"
   nullable    = false
 }
 
@@ -179,29 +156,26 @@ variable "object_lock_days" {
   nullable    = false
 }
 
-variable "pool_token_flags" {
-  description = "The host policy every runner the pool's token registers starts with, as `controlplane registration-token` flags. Say a little less grace than the two minutes a spot reclaim gives."
-  type        = list(string)
-  default     = ["--preemption-source", "aws", "--shutdown-grace", "100s"]
-  nullable    = false
-}
-
-variable "pool_token_rotation" {
-  description = "How often the control plane mints a new pool token into SSM, as a systemd OnCalendar/OnUnitActiveSec span. Each token lasts four times this, so one published is good for three rotations after it."
-  type        = string
-  default     = "6h"
-  nullable    = false
+variable "runner_policy" {
+  description = "The host policy a runner starts with when it joins: how long it stays up once told to stop - a little less than the two minutes a spot reclaim gives - and the cloud that announces a reclaim."
+  type = object({
+    shutdown_grace    = optional(string, "100s")
+    preemption_source = optional(string, "aws")
+  })
+  default  = {}
+  nullable = false
   validation {
-    condition     = can(regex("^[0-9]+h$", var.pool_token_rotation))
-    error_message = "pool_token_rotation is a whole number of hours, e.g. 6h."
+    condition     = can(regex("^[0-9]+s$", var.runner_policy.shutdown_grace)) && contains(["aws", "gcp", "azure"], var.runner_policy.preemption_source)
+    error_message = "runner_policy.shutdown_grace is whole seconds, e.g. 100s, and preemption_source is aws, gcp or azure."
   }
 }
 
 variable "installation_config" {
   description = <<-EOT
-    The installation's config file (spin's configs/spin-example.yaml), as YAML. This module
-    applies it on the control plane's first boot with the autoscaling settings below added to its
-    settings block, and is then its one author: a second file applied from elsewhere would remove
+    The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds
+    what it knows - the domain, who joins as a host, the autoscaling settings below - and writes
+    it where the control plane reads it at every start, which makes the catalog match it before
+    it serves. It is then the file's one author: a second one applied from elsewhere would remove
     what this one declares, and this one what it does.
   EOT
   type        = string
@@ -238,6 +212,13 @@ variable "tags" {
   description = "Tags on everything this module creates."
   type        = map(string)
   default     = {}
+  nullable    = false
+}
+
+variable "image_id" {
+  description = "An AMI for the control plane and the proxy, instead of the newest of ubuntu_release at the time spin_version last changed."
+  type        = string
+  default     = ""
   nullable    = false
 }
 
