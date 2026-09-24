@@ -91,6 +91,23 @@ A release older than the one that last started the database refuses to start on 
 past a change to the schema is a restore of the database (spin's `controlplane database restore`), not an
 update.
 
+## Operating it
+
+What drain, activate and revoke do to a runner, and how to undo each, is spin's
+`docs/runners.md`. What is AWS's is replacing a runner's machine - after a revoke, or when one is
+wedged: terminate its instance in the group without lowering the group's size, and the group starts
+another, which joins by its role as a new host.
+
+```bash
+aws autoscaling describe-auto-scaling-instances \
+  --query 'AutoScalingInstances[?AutoScalingGroupName==`<name>-runners`].[InstanceId,LifecycleState,HealthStatus]' --output table
+aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <i-...> --no-should-decrement-desired-capacity
+```
+
+Drain it first if it still runs workspaces you want kept. With nothing waiting for a host the
+control plane may have sized the group to zero already, and then there is nothing to replace: the
+next workspace that waits starts one.
+
 ## Removing an installation
 
 The encryption key and the CA refuse to be destroyed, because an apply that replaced either would
