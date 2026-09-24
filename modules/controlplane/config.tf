@@ -47,6 +47,8 @@ locals {
   }
 
   controlplane_document = {
+    # The platform (spin's internal/provider): hosts join by who they are, with their IAM role.
+    provider = "aws"
     database = {
       url = local.database_url
       # An RDS token signed per connection by this machine's role: the catalog has no password

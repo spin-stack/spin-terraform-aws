@@ -424,6 +424,10 @@ run "a_runner_joins_by_its_role" {
     error_message = "a runner joins for another installation than the one that names its role, or under no policy"
   }
   assert {
+    condition     = local.controlplane_document.provider == "aws"
+    error_message = "the control plane is not told its installation's hosts join by who they are"
+  }
+  assert {
     condition     = !strcontains(yamlencode(local.runner_document), "token")
     error_message = "a runner is told where a token is"
   }
