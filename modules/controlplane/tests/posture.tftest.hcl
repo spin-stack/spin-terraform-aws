@@ -326,6 +326,12 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
     condition     = length(regexall("prevent_destroy = true", file("${path.module}/secrets.tf"))) == 3
     error_message = "the key or the CA can be replaced by an apply"
   }
+  # Nor rewritten in place: any change to the key's parameter is a PutParameter carrying a value,
+  # and its value is an ephemeral password made again at every apply. Its wording is held.
+  assert {
+    condition     = strcontains(file("${path.module}/secrets.tf"), "ignore_changes = [description]")
+    error_message = "an edit to the encryption key's description would rewrite the key"
+  }
   # The CA the control plane issues under, and the certificate everything else trusts it by: a CA
   # that can sign, and nothing but the certificate in a document another role reads.
   assert {

@@ -24,8 +24,12 @@ ephemeral "random_password" "encryption_key" {
 }
 
 resource "aws_ssm_parameter" "encryption_key" {
-  name        = local.key_parameter
-  description = "The encryption key of ${var.name}: with the database, the installation"
+  name = local.key_parameter
+  # Worded as the installation was first made, and never changed after: a change to the
+  # parameter is a PutParameter, which carries a value, and the value is write-only - an
+  # ephemeral password made again at every apply. An apply that rewrote the description could
+  # write a new key, and a new key is a database nothing can open.
+  description = "The encryption key of ${var.name}: with the catalog, the installation"
   type        = "SecureString"
   # Thirty-two bytes, as base64: what the control plane's key is.
   value_wo         = base64sha256(ephemeral.random_password.encryption_key.result)
@@ -36,6 +40,8 @@ resource "aws_ssm_parameter" "encryption_key" {
   # installation".
   lifecycle {
     prevent_destroy = true
+    # The description above, held: an edit to it is not an edit this parameter may take.
+    ignore_changes = [description]
   }
 }
 
