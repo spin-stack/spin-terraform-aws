@@ -20,7 +20,7 @@ module "controlplane" {
   instance_type       = var.instance_type
   proxy_instance_type = var.proxy_instance_type
   database            = var.database
-  grafana_cloud       = var.grafana_cloud
+  collector           = var.collector
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes
   quiet_hours         = var.quiet_hours

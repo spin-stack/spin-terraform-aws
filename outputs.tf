@@ -48,11 +48,10 @@ locals {
       "5. A shell on a machine, when you need one:",
       "     ${format(local.session, module.controlplane.controlplane_group)}",
     ],
-    module.controlplane.grafana_token_parameter == "" ? [] : [
+    [
       "",
-      "6. Telemetry is off until you write the Grafana Cloud token; the collector starts within",
-      "   five minutes of it:",
-      "     ${local.aws} ssm put-parameter --overwrite --type SecureString --name ${module.controlplane.grafana_token_parameter} --value <token>",
+      "6. Telemetry goes nowhere until an administrator says where: Admin -> Settings -> Telemetry,",
+      "   the backend's OTLP endpoint, its user and a token. The collector is told within a minute.",
     ],
   ))
 }
@@ -104,11 +103,6 @@ output "boot_log" {
 output "runners_group" {
   description = "The runners' group, which the control plane sizes: empty until a workspace waits for one."
   value       = module.runners.autoscaling_group
-}
-
-output "grafana_token_parameter" {
-  description = "Where the Grafana Cloud access policy token goes, written by the operator: aws ssm put-parameter --overwrite --type SecureString --name <this> --value <token>. Empty without grafana_cloud."
-  value       = module.controlplane.grafana_token_parameter
 }
 
 output "controlplane" {

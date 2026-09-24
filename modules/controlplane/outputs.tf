@@ -79,13 +79,8 @@ output "relay_dial" {
 }
 
 output "collector" {
-  description = "Where every process of the installation pushes its telemetry, host:port; empty ships nothing."
+  description = "Where every process of the installation pushes its telemetry, host:port. Where the collector sends it is set in the dashboard."
   value       = local.collector
-}
-
-output "grafana_token_parameter" {
-  description = "Where the Grafana Cloud access policy token goes: aws ssm put-parameter --overwrite --type SecureString --name <this> --value <token>. Empty without grafana_cloud."
-  value       = local.telemetry ? aws_ssm_parameter.grafana_token[0].name : ""
 }
 
 output "boundary_arn" {

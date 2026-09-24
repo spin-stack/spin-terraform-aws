@@ -106,10 +106,8 @@ data "aws_iam_policy_document" "controlplane" {
   statement {
     sid     = "ItsDocumentAndSecrets"
     actions = ["ssm:GetParameter"]
-    resources = [for p in concat(
-      [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter],
-      local.telemetry ? [local.token_parameter_grafana] : [],
-    ) : "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
+    resources = [for p in [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter] :
+    "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
   }
   # The catalog, as spin and as nobody else: an IAM token for that one database user.
   statement {

@@ -69,10 +69,10 @@ variable "database" {
   default     = null
 }
 
-variable "grafana_cloud" {
-  description = "Where the installation ships its telemetry, as modules/controlplane's grafana_cloud object; none ships nothing."
+variable "collector" {
+  description = "The collector, as modules/controlplane's collector object: the metric interval and the Alloy package pinned. Where it sends is set in the dashboard."
   type        = any
-  default     = null
+  default     = {}
 }
 
 variable "installation_config" {

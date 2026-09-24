@@ -611,60 +611,38 @@ run "no_machine_reads_the_control_planes_secrets" {
   }
 }
 
-run "no_collector_unless_asked" {
+# Every installation has its collector, pinned, and every process pushes to it. Where it sends and
+# with what token are the installation's, set in the dashboard: nothing of them is in the plan, the
+# documents or a parameter.
+run "the_collector" {
   command = plan
 
   assert {
-    condition     = length(aws_ssm_parameter.grafana_token) == 0 && length(aws_vpc_security_group_ingress_rule.collector_from_proxy) == 0
-    error_message = "a collector's token or port exists on an installation that ships no telemetry"
-  }
-  assert {
-    condition     = local.controlplane_document.install.collector == null && !local.runner_document.telemetry.enabled && !local.proxy_document.telemetry.enabled
-    error_message = "the control plane installs a collector nobody asked for, or a component pushes to one"
-  }
-}
-
-run "a_collector_when_asked" {
-  command = plan
-  variables {
-    grafana_cloud = {
-      otlp_endpoint = "https://otlp-gateway-prod-us-west-0.grafana.net/otlp"
-      instance_id   = "123456"
-    }
-  }
-
-  assert {
-    condition     = aws_ssm_parameter.grafana_token[0].type == "SecureString" && aws_ssm_parameter.grafana_token[0].value == "unpublished"
-    error_message = "the token's parameter is not a SecureString the operator fills"
-  }
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.collector_from_proxy[0].from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_proxy[0].cidr_ipv4 == null
+    condition     = aws_vpc_security_group_ingress_rule.collector_from_proxy.from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_proxy.cidr_ipv4 == null
     error_message = "the collector's port is open to an address range rather than to the proxy"
   }
   assert {
     condition = (
-      local.controlplane_document.install.collector.alloy.sha256 == var.grafana_cloud.alloy_sha256 &&
+      local.controlplane_document.install.collector.alloy.sha256 == var.collector.alloy_sha256 &&
+      keys(local.controlplane_document.install.collector) == ["alloy"] &&
       # Declared in the installation's own configuration, not in what the control plane starts
       # on: an installation is not asked for a collector before it has one.
       local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
       local.installation.settings.telemetry_metric_interval == "60s" &&
       !contains(keys(local.controlplane_document), "telemetry")
     )
-    error_message = "the collector is installed unchecked, or the control plane is not pointed at it"
+    error_message = "the collector is installed unchecked, is told a backend here, or the control plane is not pointed at it"
   }
   assert {
     condition = alltrue([for d in [local.proxy_document, local.runner_document] :
     d.telemetry.enabled && d.telemetry.endpoint == "cp.spin.internal:4317" && d.telemetry.metric_interval == "60s"])
     error_message = "the proxy or the runners are not pointed at the collector"
   }
-  # The token is the operator's, written where only the control plane reads it: the document says
-  # where, and the plan never holds it.
   assert {
-    condition = (
-      local.controlplane_document.install.collector.token_at == "ssm:///spin/grafana-cloud-token?region=us-east-2" &&
-      anytrue([for s in data.aws_iam_policy_document.controlplane.statement : contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/grafana-cloud-token")])
-    )
-    error_message = "the token is not where the collector reads it"
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      s.sid != "ItsDocumentAndSecrets" || length(s.resources) == 5
+    ])
+    error_message = "the control plane reads a telemetry token from SSM: it is the catalog's"
   }
 }
 

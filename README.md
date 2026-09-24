@@ -210,13 +210,15 @@ What is left is the catalog's final snapshot. Install the next one under another
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
   `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
   Route 53 Resolver's, and `dns_query_logs = true` asks for it.
-- **Telemetry, to Grafana Cloud, where `grafana_cloud` is given.** Grafana Alloy on the
-  control plane's machine is the one collector: the control plane, the proxy and every runner
-  push OTLP to it on 4317, which only they may reach, and only it holds the token and reaches
-  Grafana Cloud. The token is an access policy token with metrics:write and traces:write,
-  written by the operator into the `grafana_token_parameter` SecureString: never
-  in Terraform's state or a machine's user data. Metrics are pushed every 60 seconds, a point a
-  minute per series. Which traces and metrics leave is the dashboard's (Admin → Settings →
+- **Telemetry, where an administrator says.** Grafana Alloy on the control plane's machine is
+  the one collector, pinned by `collector` (the package and its SHA-256): the control plane, the
+  proxy and every runner push OTLP to it on 4317, which only they may reach, and only it holds
+  the token and reaches the backend. Where it sends — the backend's OTLP endpoint, its user and a
+  token, for Grafana Cloud an access policy token with metrics:write and traces:write — is set in
+  the dashboard (Admin → Settings → Telemetry) and kept in the catalog, the token sealed: never in
+  Terraform's state, a parameter or a machine's user data. Until then the collector drops what it
+  is given. Metrics are pushed every 60 seconds, a point a minute per series. Which traces and
+  metrics leave is the dashboard's too (Admin → Settings →
   Telemetry): every trace that failed anywhere, every one slower than a threshold, a percent of
   the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and decides at
   the end of each trace. Logs do not leave the machine that wrote them. The dashboard shows one

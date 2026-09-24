@@ -28,7 +28,6 @@ locals {
     key            = local.key_parameter
     ca             = local.ca_parameter
     admin_password = local.admin_password_parameter
-    grafana_token  = local.token_parameter_grafana
   } : k => "ssm://${p}?region=${local.region}" }
 
   # How long a booting machine may go without saying it is still going before its group abandons
@@ -41,7 +40,7 @@ locals {
   join_audience = "spin:${local.account}:${var.name}"
 
   telemetry_of = {
-    enabled         = local.telemetry
+    enabled         = true
     endpoint        = local.collector
     metric_interval = local.metric_interval
   }
@@ -88,11 +87,9 @@ locals {
         admin_user   = aws_db_instance.catalog.username
         admin_secret = aws_db_instance.catalog.master_user_secret[0].secret_arn
       }
-      collector = !local.telemetry ? null : {
-        otlp_endpoint = var.grafana_cloud.otlp_endpoint
-        instance_id   = var.grafana_cloud.instance_id
-        token_at      = local.ssm.grafana_token
-        alloy         = { version = var.grafana_cloud.alloy_version, sha256 = var.grafana_cloud.alloy_sha256 }
+      # Alloy, pinned: where it sends is the installation's, set in the dashboard (telemetry.tf).
+      collector = {
+        alloy = { version = var.collector.alloy_version, sha256 = var.collector.alloy_sha256 }
       }
     }
   }
@@ -159,7 +156,7 @@ locals {
       }, var.quiet_hours == "" ? {} : {
       autoscaling_quiet_hours = var.quiet_hours
       autoscaling_time_zone   = var.time_zone
-      }, !local.telemetry ? {} : {
+      }, {
       # Where the installation pushes what it records: the collector on the control plane's
       # own machine.
       telemetry_collector       = local.collector
