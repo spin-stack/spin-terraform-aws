@@ -365,6 +365,32 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
 # What a machine starts on is one document in the parameter store, and the machine is told where
 # it is and nothing else: no value in the document is also a flag on the machine, which is a fact
 # in two places where the one that loses loses silently.
+# The operator's file is what the installation declares, with what this module knows laid over it:
+# its policies as it wrote them, its settings beside the module's own.
+run "the_operators_file_is_the_installations" {
+  command = plan
+  variables {
+    installation_config = <<-EOT
+      settings:
+        default_network_tags: [web]
+      network_policies:
+        - name: web
+          allowPorts: [80, 443]
+    EOT
+  }
+
+  assert {
+    condition = (
+      local.installation.network_policies[0].name == "web" &&
+      local.installation.network_policies[0].allowPorts == [80, 443] &&
+      local.installation.settings.default_network_tags == ["web"] &&
+      local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
+      local.installation.base_domain == "example.com"
+    )
+    error_message = "the operator's file is not what the installation declares, beside what the module knows"
+  }
+}
+
 run "the_installation_is_in_its_document_and_not_on_its_machines" {
   command = plan
 

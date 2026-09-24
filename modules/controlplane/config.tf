@@ -138,7 +138,9 @@ locals {
   }
 
   # The operator's config file, with what this module knows about the installation added.
-  operator = var.installation_config == "" ? {} : yamldecode(var.installation_config)
+  # Decoded whole, "{}" for none: a conditional between an empty object and the file's would have
+  # to give both one type, which a file with anything in it never has.
+  operator = yamldecode(var.installation_config == "" ? "{}" : var.installation_config)
   installation = merge(local.operator, {
     base_domain = var.domain
     # Who joins as a host: the runners' role, under the policy a runner of it starts with.
