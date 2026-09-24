@@ -1,4 +1,4 @@
-# A spin installation on AWS: the control plane with its catalog, proxy and network
+# A spin installation on AWS: the control plane with its database, proxy and network
 # (modules/controlplane), and the runners' group it sizes (modules/runners). What an installation
 # usually decides is a variable here; everything else is each module's, used directly where it
 # matters - the two are this composed and nothing more.

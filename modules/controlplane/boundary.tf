@@ -70,7 +70,7 @@ data "aws_iam_policy_document" "boundary" {
     ]
   }
   # The control plane's secrets are its role's alone, whatever policy a role is given later: the
-  # encryption key that opens the catalog's seals, the CA's key, the first administrator's
+  # encryption key that opens the database's seals, the CA's key, the first administrator's
   # password, the collector's token, and the installation's configuration, which may say whom it
   # registers. The parameters are read under the account's aws/ssm key, which opens them to any
   # principal SSM lets read them, so this is where the line is.
@@ -112,7 +112,7 @@ data "aws_iam_policy_document" "boundary" {
       "s3:PutBucketObjectLockConfiguration", "s3:DeleteBucket",
       "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
       "cloudtrail:*", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "ec2:DeleteFlowLogs",
-      # The catalog, and what would bring it back: a taken machine signs in to the database as
+      # The database, and what would bring it back: a taken machine signs in to it as
       # the control plane does, and no further.
       "rds:Delete*", "rds:Modify*", "rds:Reboot*", "rds:Stop*", "rds:RestoreDB*", "rds:CopyDBSnapshot",
       "rds:ModifyDBSnapshotAttribute",

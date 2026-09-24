@@ -15,7 +15,7 @@ The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
 not expose what an installation needs to decide:
 
-- **`modules/controlplane`** - the VPC, the bucket, the catalog on RDS, the control plane's
+- **`modules/controlplane`** - the VPC, the bucket, the database on RDS, the control plane's
   machine, the proxy's on its own, the installation's CA and secrets, and the document each
   machine starts on.
 - **`modules/runners`** - an autoscaling group of runners that join by themselves, spot by
@@ -87,8 +87,8 @@ case the old machine is still serving and `tofu output boot_log` says why the ne
 up. A change to anything else a machine starts on - `installation_config`, the autoscaling
 settings - rolls out the same way.
 
-A release older than the one that last started the catalog refuses to start on it: going back past
-a change to the schema is a restore of the catalog (spin's `controlplane catalog restore`), not an
+A release older than the one that last started the database refuses to start on it: going back
+past a change to the schema is a restore of the database (spin's `controlplane database restore`), not an
 update.
 
 ## Removing an installation
@@ -119,7 +119,7 @@ aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file
 tofu destroy
 ```
 
-What is left is the catalog's final snapshot. Install the next one under another `name`.
+What is left is the database's final snapshot. Install the next one under another `name`.
 
 ## What it decides, and why
 
@@ -127,7 +127,7 @@ What is left is the catalog's final snapshot. Install the next one under another
   the same five lines: fetch `spin-boot` from the release's public package
   (`ghcr.io/spin-stack/spin-release`) by the digest pinned in `spin_boot_sha256`, check it, and
   run it with its role and the SSM parameter its document is in. Everything else - the release,
-  the catalog, the name it takes, the collector - is in that document, and every step is
+  the database, the name it takes, the collector - is in that document, and every step is
   `spin-boot`'s, in Go with tests (spin's `internal/boot`). `spin-boot` fetches the release's
   files and checks that spin's `release.yml` signed them at the version's tag before anything in
   them runs. Nothing is a container: each role is a binary under systemd, as its own user.
@@ -138,7 +138,7 @@ What is left is the catalog's final snapshot. Install the next one under another
   one to start on. The one parameter the operator writes is the collector's token.
 - **The encryption key and the first password never reach the state.** Both are ephemeral values
   written through write-only attributes, once (`value_wo_version`). The key is, with the
-  catalog, the installation: a new one is a catalog nothing can open, so nothing here makes one
+  database, the installation: a new one is a database nothing can open, so nothing here makes one
   again. The CA is in the state on purpose - its certificate is in the proxy's and the runners'
   documents - so **encrypt the state** (OpenTofu's `encryption` block; a KMS key is the simplest).
 - **Runners join by who they are.** A runner signs a GetCallerIdentity with its instance role,
@@ -215,7 +215,7 @@ What is left is the catalog's final snapshot. Install the next one under another
   proxy and every runner push OTLP to it on 4317, which only they may reach, and only it holds
   the token and reaches the backend. Where it sends — the backend's OTLP endpoint, its user and a
   token, for Grafana Cloud an access policy token with metrics:write and traces:write — is set in
-  the dashboard (Admin → Settings → Telemetry) and kept in the catalog, the token sealed: never in
+  the dashboard (Admin → Settings → Telemetry) and kept in the database, the token sealed: never in
   Terraform's state, a parameter or a machine's user data. Until then the collector drops what it
   is given. Metrics are pushed every 60 seconds, a point a minute per series. Which traces and
   metrics leave is the dashboard's too (Admin → Settings →
@@ -251,15 +251,15 @@ What is left is the catalog's final snapshot. Install the next one under another
   runner reads the lifecycle state from the metadata service and suspends its workspaces to
   the bucket, where they resume on the next host. A spot reclaim is the same with a two-minute
   notice, and capacity rebalancing starts the replacement first.
-- **The catalog is RDS, and the control plane's machine holds nothing it cannot get back.**
+- **The database is RDS, and the control plane's machine holds nothing it cannot get back.**
   PostgreSQL 18 on `db.t4g.micro` (`database`), in subnets of its own with no route out of the
   VPC, taking 5432 from the control plane's group alone, with a week of backups and deletion
-  protection; beside it the control plane writes an hourly catalog backup into the bucket. No
+  protection; beside it the control plane writes an hourly database backup into the bucket. No
   password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
   once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
   role signs and owns the database.
 - **Small machines.** The control plane and the proxy are `t8i.micro` by default: with the
-  catalog on RDS, the control plane is the control plane alone (and Alloy, where there is a
+  database on RDS, the control plane is the control plane alone (and Alloy, where there is a
   collector - `t8i.small` there for a busy fleet). Two of them and the database are the whole
   standing cost when no runner is up.
 

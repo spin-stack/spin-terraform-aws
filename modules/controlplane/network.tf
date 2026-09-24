@@ -89,7 +89,7 @@ resource "aws_vpc_security_group_ingress_rule" "controlplane_from_proxy" {
 }
 
 # Out, only the web: images, the machine release, GitHub, STS, SSM, Auto Scaling and the bucket
-# through its endpoint, all 443 (80 for apt). The catalog is rds.tf's own rule.
+# through its endpoint, all 443 (80 for apt). The database is rds.tf's own rule.
 resource "aws_vpc_security_group_egress_rule" "controlplane" {
   for_each          = toset(["80", "443"])
   security_group_id = aws_security_group.controlplane.id

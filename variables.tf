@@ -64,7 +64,7 @@ variable "proxy_instance_type" {
 }
 
 variable "database" {
-  description = "The catalog's RDS instance, as modules/controlplane's database object: engine_version, instance_class, storage_gb, max_storage_gb, multi_az, backup_retention_days, deletion_protection."
+  description = "The database's RDS instance, as modules/controlplane's database object: engine_version, instance_class, storage_gb, max_storage_gb, multi_az, backup_retention_days, deletion_protection."
   type        = any
   default     = null
 }
@@ -76,7 +76,7 @@ variable "collector" {
 }
 
 variable "installation_config" {
-  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane makes its catalog match it at every start."
+  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane makes its database match it at every start."
   type        = string
   default     = null
 }

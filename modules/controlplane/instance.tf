@@ -1,6 +1,6 @@
-# One machine that holds nothing the installation cannot lose. The catalog is RDS (rds.tf), and
+# One machine that holds nothing the installation cannot lose. The database is RDS (rds.tf), and
 # the key and the CA are in SSM (secrets.tf): a replaced instance reads its document, installs the
-# same release and serves the same catalog.
+# same release and serves the same database.
 
 # The newest of Canonical's own images of the release: owned by Canonical's account, so a
 # public image named like one is not picked up.

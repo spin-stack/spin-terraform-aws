@@ -4,8 +4,8 @@
 # (files/boot.sh.tftpl) - and spin-boot does the rest from what the document says.
 #
 # Beside the documents, the installation's own configuration (installation.yaml, as it would be
-# kept in git): what an administrator could change once the catalog is open. The control plane
-# makes its catalog match it every time it starts, before it serves, so a change to it is an
+# kept in git): what an administrator could change once the database is open. The control plane
+# makes its database match it every time it starts, before it serves, so a change to it is an
 # apply and the next start of a control plane - not a command somebody runs on a machine.
 #
 # A document holds no secret. Where one is, it says where (secrets.tf): the key, the CA's key,
@@ -50,7 +50,7 @@ locals {
     provider = "aws"
     database = {
       url = local.database_url
-      # An RDS token signed per connection by this machine's role: the catalog has no password
+      # An RDS token signed per connection by this machine's role: the database has no password
       # to keep anywhere.
       auth = "aws-iam"
     }
@@ -83,9 +83,9 @@ locals {
       }
       # The role the control plane signs in as, made by RDS's master user, whose password RDS
       # keeps in Secrets Manager: read once by the first boot, never by the control plane.
-      catalog = {
-        admin_user   = aws_db_instance.catalog.username
-        admin_secret = aws_db_instance.catalog.master_user_secret[0].secret_arn
+      database_admin = {
+        user   = aws_db_instance.database.username
+        secret = aws_db_instance.database.master_user_secret[0].secret_arn
       }
       # Alloy, pinned: where it sends is the installation's, set in the dashboard (telemetry.tf).
       collector = {
@@ -195,7 +195,7 @@ resource "aws_ssm_parameter" "runner_config" {
 # alone to read; and it grows, so it is not held to a standard parameter's 4 KiB.
 resource "aws_ssm_parameter" "installation" {
   name        = local.installation_parameter
-  description = "${var.name}'s configuration, which its control plane makes its catalog match at every start"
+  description = "${var.name}'s configuration, which its control plane makes its database match at every start"
   type        = "SecureString"
   tier        = "Intelligent-Tiering"
   value       = yamlencode(local.installation)

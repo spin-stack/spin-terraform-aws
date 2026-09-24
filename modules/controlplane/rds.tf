@@ -1,4 +1,4 @@
-# The catalog: Postgres on RDS, in subnets of its own that have no route out of the VPC, reached
+# The database: Postgres on RDS, in subnets of its own that have no route out of the VPC, reached
 # on 5432 from the control plane's group alone. No password of it is anywhere Terraform writes:
 # the master's is RDS's own, in Secrets Manager, and used once by the control plane's first boot
 # to make the role the control plane signs in as - spin, which authenticates with an IAM token
@@ -15,7 +15,7 @@ resource "aws_subnet" "database" {
 }
 
 # No route but the VPC's own: a database that cannot reach the internet cannot be made to send
-# the catalog to it.
+# its rows to it.
 resource "aws_route_table" "database" {
   vpc_id = aws_vpc.this.id
   tags   = merge(local.tags, { Name = "${var.name}-database" })
@@ -27,7 +27,10 @@ resource "aws_route_table_association" "database" {
   route_table_id = aws_route_table.database.id
 }
 
-resource "aws_db_subnet_group" "catalog" {
+# The names in AWS — the instance, its subnet group, its security group's description — keep the
+# word the installation was first made with: changing any of them replaces the resource, and the
+# instance's replacement is the database's.
+resource "aws_db_subnet_group" "database" {
   name       = "${var.name}-catalog"
   subnet_ids = aws_subnet.database[*].id
   tags       = local.tags
@@ -55,10 +58,10 @@ resource "aws_vpc_security_group_egress_rule" "controlplane_to_database" {
   ip_protocol                  = "tcp"
   from_port                    = 5432
   to_port                      = 5432
-  description                  = "the catalog"
+  description                  = "the database"
 }
 
-resource "aws_db_instance" "catalog" {
+resource "aws_db_instance" "database" {
   identifier     = "${var.name}-catalog"
   engine         = "postgres"
   engine_version = var.database.engine_version
@@ -75,12 +78,12 @@ resource "aws_db_instance" "catalog" {
   manage_master_user_password         = true
   iam_database_authentication_enabled = true
 
-  db_subnet_group_name   = aws_db_subnet_group.catalog.name
+  db_subnet_group_name   = aws_db_subnet_group.database.name
   vpc_security_group_ids = [aws_security_group.database.id]
   publicly_accessible    = false
   multi_az               = var.database.multi_az
 
-  # RDS's own backups beside the control plane's hourly catalog backup in the bucket: a point
+  # RDS's own backups beside the control plane's hourly database backup in the bucket: a point
   # in time to restore to, and a snapshot when the instance is deleted.
   backup_retention_period = var.database.backup_retention_days
   copy_tags_to_snapshot   = true
@@ -89,7 +92,7 @@ resource "aws_db_instance" "catalog" {
   # Named for this installation's state, not only its name: an installation destroyed and made
   # again under the same name would otherwise find the last one's snapshot in the way, and fail
   # the destroy it needs to finish.
-  final_snapshot_identifier = "${var.name}-catalog-final-${random_id.catalog.hex}"
+  final_snapshot_identifier = "${var.name}-catalog-final-${random_id.database.hex}"
 
   auto_minor_version_upgrade = true
   # A change asked for is made by the apply that asks for it, not at a maintenance window the
@@ -99,10 +102,25 @@ resource "aws_db_instance" "catalog" {
   tags                        = local.tags
 }
 
-resource "random_id" "catalog" {
+resource "random_id" "database" {
   byte_length = 4
 }
 
+moved {
+  from = aws_db_subnet_group.catalog
+  to   = aws_db_subnet_group.database
+}
+
+moved {
+  from = aws_db_instance.catalog
+  to   = aws_db_instance.database
+}
+
+moved {
+  from = random_id.catalog
+  to   = random_id.database
+}
+
 locals {
-  database_url = "postgres://spin@${aws_db_instance.catalog.address}:${aws_db_instance.catalog.port}/spin?sslmode=verify-full"
+  database_url = "postgres://spin@${aws_db_instance.database.address}:${aws_db_instance.database.port}/spin?sslmode=verify-full"
 }

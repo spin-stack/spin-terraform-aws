@@ -2,7 +2,7 @@
 # the control plane, the proxy and every runner push OTLP to it inside the VPC, and only it holds
 # the backend's token and reaches the backend. Where that backend is, and the token, are the
 # installation's: an administrator sets them in the dashboard (Admin -> Settings -> Telemetry),
-# the catalog keeps them — the token sealed — and spin-boot's watch on the control plane's
+# the database keeps them — the token sealed — and spin-boot's watch on the control plane's
 # machine gives them to Alloy. Nothing of it is in this module, its state or a machine's user
 # data. Until an administrator says where, the collector drops what it is given. Which traces and
 # metrics leave is the dashboard's too. Logs stay on the machine that wrote them.

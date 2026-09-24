@@ -71,11 +71,11 @@ variable "instance_type" {
 
 variable "database" {
   description = <<-EOT
-    The catalog's RDS instance. db.t4g.micro and 20 GB are the free tier's where the account has
-    one; the catalog is rows about workspaces and volumes, not their data, which is the bucket's.
+    The database's RDS instance. db.t4g.micro and 20 GB are the free tier's where the account has
+    one; the database is rows about workspaces and volumes, not their data, which is the bucket's.
     deletion_protection keeps a destroy from taking it: turn it off, apply, then destroy.
     apply_immediately makes a change to the instance - its class, its version - during the apply
-    that asks for it, a minute or two of the catalog restarting; false leaves it for RDS's
+    that asks for it, a minute or two of the database restarting; false leaves it for RDS's
     maintenance window.
   EOT
   type = object({
@@ -167,7 +167,7 @@ variable "installation_config" {
   description = <<-EOT
     The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds
     what it knows - the domain, who joins as a host, the autoscaling settings below - and writes
-    it where the control plane reads it at every start, which makes the catalog match it before
+    it where the control plane reads it at every start, which makes the database match it before
     it serves. It is then the file's one author: a second one applied from elsewhere would remove
     what this one declares, and this one what it does.
   EOT

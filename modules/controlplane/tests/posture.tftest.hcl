@@ -59,7 +59,7 @@ override_resource {
 }
 
 override_resource {
-  target = aws_db_instance.catalog
+  target = aws_db_instance.database
   values = {
     address            = "spin-catalog.c1a2b3c4d5e6.us-east-2.rds.amazonaws.com"
     port               = 5432
@@ -165,7 +165,7 @@ run "the_machines" {
   }
   assert {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
-    t.block_device_mappings[0].ebs[0].encrypted == "true"]) && aws_db_instance.catalog.storage_encrypted
+    t.block_device_mappings[0].ebs[0].encrypted == "true"]) && aws_db_instance.database.storage_encrypted
     error_message = "a disk is not encrypted"
   }
   # The proxy in subnets of its own, which are what the control plane trusts a browser's
@@ -306,7 +306,7 @@ run "an_update_stands_the_new_machine_beside_the_old" {
 # The installation's secrets are this apply's to write and nobody else's. The key and the first
 # administrator's password are ephemeral and written through write-only attributes, so neither is
 # in the plan or the state; each is written once, on the version this module fixes, and an apply
-# after that writes neither again - a new key is a catalog nothing can open.
+# after that writes neither again - a new key is a database nothing can open.
 run "the_secrets_are_written_once_and_never_by_a_machine" {
   command = plan
 
@@ -319,7 +319,7 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
     )
     error_message = "the encryption key or the administrator's password is in the state, or is written on every apply"
   }
-  # A plan that would make the key or the CA again is refused: a new key is a catalog nothing
+  # A plan that would make the key or the CA again is refused: a new key is a database nothing
   # opens, a new CA every runner distrusting the control plane. lifecycle is not an attribute a
   # plan can be asked about, so the file is.
   assert {
@@ -401,7 +401,7 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
       local.controlplane_document.production &&
       local.controlplane_document.tls.extra_sans == ["cp.spin.internal"]
     )
-    error_message = "the document does not say what the control plane needs before it can read its catalog"
+    error_message = "the document does not say what the control plane needs before it can read its database"
   }
   assert {
     condition = (
@@ -412,7 +412,7 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
     error_message = "a document is not what its parameter holds"
   }
   # The installation's own configuration is read by the control plane at every start, which makes
-  # the catalog match it: nothing applies it by hand on a machine.
+  # the database match it: nothing applies it by hand on a machine.
   assert {
     condition = (
       local.controlplane_document.installation_at == "ssm:///spin/installation?region=us-east-2" &&
@@ -668,50 +668,50 @@ run "the_collector" {
     condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
       s.sid != "ItsDocumentAndSecrets" || length(s.resources) == 5
     ])
-    error_message = "the control plane reads a telemetry token from SSM: it is the catalog's"
+    error_message = "the control plane reads a telemetry token from SSM: it is the database's"
   }
 }
 
-# The catalog is RDS where only the control plane reaches it, and no password of it is in the
+# The database is RDS where only the control plane reaches it, and no password of it is in the
 # plan: the master's is RDS's own in Secrets Manager, and the control plane signs in with a token.
-run "the_catalog" {
+run "the_database" {
   command = plan
 
   assert {
-    condition     = !aws_db_instance.catalog.publicly_accessible && aws_db_instance.catalog.manage_master_user_password && aws_db_instance.catalog.iam_database_authentication_enabled && aws_db_instance.catalog.password == null
-    error_message = "the catalog is reachable from outside, or has a password this plan knows"
+    condition     = !aws_db_instance.database.publicly_accessible && aws_db_instance.database.manage_master_user_password && aws_db_instance.database.iam_database_authentication_enabled && aws_db_instance.database.password == null
+    error_message = "the database is reachable from outside, or has a password this plan knows"
   }
   # The first boot makes the role the control plane signs in as, as RDS's master, whose password
   # RDS keeps: the document names the secret, and the control plane's role alone reads it.
   assert {
     condition = (
-      local.controlplane_document.install.catalog.admin_user == "spin_admin" &&
-      local.controlplane_document.install.catalog.admin_secret == "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc" &&
+      local.controlplane_document.install.database_admin.user == "spin_admin" &&
+      local.controlplane_document.install.database_admin.secret == "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc" &&
       anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
       s.actions == toset(["secretsmanager:GetSecretValue"]) && s.resources == toset(["arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc"])])
     )
-    error_message = "the first boot cannot make the catalog's role, or reads more of Secrets Manager than the master's password"
+    error_message = "the first boot cannot make the database's role, or reads more of Secrets Manager than the master's password"
   }
   assert {
     condition     = length(aws_subnet.database) >= 2 && alltrue([for s in aws_subnet.database : !s.map_public_ip_on_launch])
-    error_message = "the catalog's subnets give out public addresses, or are fewer than the two zones RDS takes"
+    error_message = "the database's subnets give out public addresses, or are fewer than the two zones RDS takes"
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.database_from_controlplane.from_port == 5432 && aws_vpc_security_group_ingress_rule.database_from_controlplane.cidr_ipv4 == null
-    error_message = "the catalog takes connections from an address range rather than the control plane"
+    error_message = "the database takes connections from an address range rather than the control plane"
   }
   assert {
-    condition     = aws_db_instance.catalog.deletion_protection && !aws_db_instance.catalog.skip_final_snapshot && aws_db_instance.catalog.backup_retention_period >= 7
-    error_message = "the catalog can be destroyed without a snapshot, or keeps less than a week to restore to"
+    condition     = aws_db_instance.database.deletion_protection && !aws_db_instance.database.skip_final_snapshot && aws_db_instance.database.backup_retention_period >= 7
+    error_message = "the database can be destroyed without a snapshot, or keeps less than a week to restore to"
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
     contains(s.actions, "rds-db:connect") && s.resources == toset(["arn:aws:rds-db:us-east-2:123456789012:dbuser:db-ABCDEFGHIJKLMNOP/spin"])])
-    error_message = "the control plane signs in to the catalog as something other than spin"
+    error_message = "the control plane signs in to the database as something other than spin"
   }
   assert {
     condition     = local.controlplane_document.database.auth == "aws-iam" && strcontains(local.controlplane_document.database.url, "sslmode=verify-full")
-    error_message = "the control plane signs in with a password, or does not check the catalog's certificate"
+    error_message = "the control plane signs in with a password, or does not check the database's certificate"
   }
 }
 

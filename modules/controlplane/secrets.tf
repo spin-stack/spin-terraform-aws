@@ -17,15 +17,15 @@ locals {
   admin_email              = var.admin_email != "" ? var.admin_email : "admin@${var.domain}"
 }
 
-# The key everything the catalog seals is sealed under. With the catalog, it is the installation:
-# a new one is a catalog nothing can open, which is why its version is a constant.
+# The key everything the database seals is sealed under. With the database, it is the
+# installation: a new one is a database nothing can open, which is why its version is a constant.
 ephemeral "random_password" "encryption_key" {
   length = 64
 }
 
 resource "aws_ssm_parameter" "encryption_key" {
   name        = local.key_parameter
-  description = "The encryption key of ${var.name}: with the catalog, the installation"
+  description = "The encryption key of ${var.name}: with the database, the installation"
   type        = "SecureString"
   # Thirty-two bytes, as base64: what the control plane's key is.
   value_wo         = base64sha256(ephemeral.random_password.encryption_key.result)

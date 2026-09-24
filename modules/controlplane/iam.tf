@@ -109,11 +109,11 @@ data "aws_iam_policy_document" "controlplane" {
     resources = [for p in [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter] :
     "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
   }
-  # The catalog, as spin and as nobody else: an IAM token for that one database user.
+  # The database, as spin and as nobody else: an IAM token for that one database user.
   statement {
-    sid       = "SignInToTheCatalog"
+    sid       = "SignInToTheDatabase"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${local.region}:${local.account}:dbuser:${aws_db_instance.catalog.resource_id}/spin"]
+    resources = ["arn:aws:rds-db:${local.region}:${local.account}:dbuser:${aws_db_instance.database.resource_id}/spin"]
   }
   # Its own name in the internal zone, and nothing else there: what a new machine takes when it
   # takes the installation over.
@@ -137,9 +137,9 @@ data "aws_iam_policy_document" "controlplane" {
   # The master's password, which the first boot uses to make that user. RDS keeps it and the
   # machine reads it; nothing else of Secrets Manager.
   statement {
-    sid       = "MakeTheCatalogsUser"
+    sid       = "MakeTheDatabasesUser"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.catalog.master_user_secret[0].secret_arn]
+    resources = [aws_db_instance.database.master_user_secret[0].secret_arn]
   }
 }
 

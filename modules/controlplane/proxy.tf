@@ -1,6 +1,6 @@
 # The proxy on a machine of its own: the one address the internet is given, and nothing on it
 # but Caddy. Whatever reaches it - a flaw in Caddy, a request it mishandles - lands on a machine
-# that holds a CA certificate and its own TLS certificates, not on the one with the catalog and
+# that holds a CA certificate and its own TLS certificates, not on the one with the database and
 # the encryption key.
 #
 # One proxy, replaced beside itself as the control plane is (instance.tf): the new machine
