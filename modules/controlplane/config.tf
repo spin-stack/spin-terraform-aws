@@ -99,6 +99,7 @@ locals {
   }
 
   proxy_document = {
+    provider      = local.controlplane_document.provider
     control_plane = local.url
     ca_cert       = tls_self_signed_cert.ca.cert_pem
     domain        = var.domain
@@ -126,6 +127,7 @@ locals {
   # A runner's release is not here: it is the control plane's, asked of it once the runner has
   # joined, because the control plane an update is replacing may be either release for a while.
   runner_document = {
+    provider      = local.controlplane_document.provider
     control_plane = local.url
     ca_cert       = tls_self_signed_cert.ca.cert_pem
     # The relay by the proxy's private name: its public address would take the relay out through
