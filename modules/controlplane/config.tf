@@ -92,7 +92,6 @@ locals {
         otlp_endpoint = var.grafana_cloud.otlp_endpoint
         instance_id   = var.grafana_cloud.instance_id
         token_at      = local.ssm.grafana_token
-        log_severity  = var.grafana_cloud.log_severity
         alloy         = { version = var.grafana_cloud.alloy_version, sha256 = var.grafana_cloud.alloy_sha256 }
       }
     }

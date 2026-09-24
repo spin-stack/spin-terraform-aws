@@ -213,15 +213,15 @@ What is left is the catalog's final snapshot. Install the next one under another
 - **Telemetry, to Grafana Cloud, where `grafana_cloud` is given.** Grafana Alloy on the
   control plane's machine is the one collector: the control plane, the proxy and every runner
   push OTLP to it on 4317, which only they may reach, and only it holds the token and reaches
-  Grafana Cloud. The token is an access policy token with metrics:write, logs:write and
-  traces:write, written by the operator into the `grafana_token_parameter` SecureString: never
+  Grafana Cloud. The token is an access policy token with metrics:write and traces:write,
+  written by the operator into the `grafana_token_parameter` SecureString: never
   in Terraform's state or a machine's user data. Metrics are pushed every 60 seconds, a point a
   minute per series. Which traces and metrics leave is the dashboard's (Admin → Settings →
   Telemetry): every trace that failed anywhere, every one slower than a threshold, a percent of
   the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and decides at
-  the end of each trace. Logs below `log_severity` (WARN) do not leave. The dashboard shows one
+  the end of each trace. Logs do not leave the machine that wrote them. The dashboard shows one
   monitoring: set Admin → Settings → Monitoring to Grafana Cloud with the stack's address, and
-  the sidebar links to it and each host and workspace links to its traces and logs in Explore.
+  the sidebar links to it and each host and workspace links to its traces in Explore.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above - the user data, the documents, the secrets, the ingress rules, IMDSv2, encryption,
   the bucket's lock and policy, the roles and their boundary - and `task lint` runs it with the

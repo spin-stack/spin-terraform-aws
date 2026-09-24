@@ -2,20 +2,19 @@
 # control plane's machine is the one collector, the control plane, the proxy and every runner
 # push OTLP to it inside the VPC, and only it holds the token and reaches Grafana Cloud. Which
 # traces and metrics leave is the dashboard's (Admin -> Settings -> Telemetry), read by Alloy
-# from the control plane; which logs, the least severity below.
+# from the control plane. Logs stay on the machine that wrote them.
 
 variable "grafana_cloud" {
   description = <<-EOT
     Ship the installation's telemetry to a Grafana Cloud stack; null ships nothing and installs
     no collector. otlp_endpoint and instance_id are the stack's OTLP gateway and its user, from
     the stack's OpenTelemetry page. The token is not here: write an access policy token with
-    metrics:write, logs:write and traces:write alone into the SSM parameter this creates
+    metrics:write and traces:write alone into the SSM parameter this creates
     (grafana_token_parameter), and it never reaches Terraform's state or a machine's user data.
   EOT
   type = object({
     otlp_endpoint   = string
     instance_id     = string
-    log_severity    = optional(string, "WARN")
     metric_interval = optional(string, "60s")
     alloy_version   = optional(string, "1.19.2")
     # The SHA-256 of that version's alloy-<v>-1.amd64.deb, from the release's SHA256SUMS: the
@@ -23,10 +22,6 @@ variable "grafana_cloud" {
     alloy_sha256 = optional(string, "9872732d43c6d14996e1ad5a075086a93381ea6375c8c756820da68b85422eea")
   })
   default = null
-  validation {
-    condition     = var.grafana_cloud == null || contains(["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"], try(var.grafana_cloud.log_severity, ""))
-    error_message = "grafana_cloud.log_severity is one of TRACE, DEBUG, INFO, WARN, ERROR, FATAL."
-  }
   validation {
     condition     = var.grafana_cloud == null || can(regex("^[0-9]+s$", try(var.grafana_cloud.metric_interval, "")))
     error_message = "grafana_cloud.metric_interval is whole seconds, e.g. 60s."
