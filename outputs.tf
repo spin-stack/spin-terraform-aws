@@ -51,7 +51,8 @@ locals {
     [
       "",
       "6. Telemetry goes nowhere until an administrator says where: Admin -> Settings -> Telemetry,",
-      "   the backend's OTLP endpoint, its user and a token. The collector is told within a minute.",
+      "   traces over OTLP and metrics to a Prometheus remote write, each with its user and token,",
+      "   tried with Test connection before it is saved. The collector is told within a minute.",
     ],
   ))
 }

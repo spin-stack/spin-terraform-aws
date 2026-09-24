@@ -230,17 +230,20 @@ What is left is the database's final snapshot. Install the next one under anothe
 - **Telemetry, where an administrator says.** Grafana Alloy on the control plane's machine is
   the one collector, pinned by `collector` (the package and its SHA-256): the control plane, the
   proxy and every runner push OTLP to it on 4317, which only they may reach, and only it holds
-  the token and reaches the backend. Where it sends — the backend's OTLP endpoint, its user and a
-  token, for Grafana Cloud an access policy token with metrics:write and traces:write — is set in
-  the dashboard (Admin → Settings → Telemetry) and kept in the database, the token sealed: never in
-  Terraform's state, a parameter or a machine's user data. Until then the collector drops what it
-  is given. Metrics are pushed every 60 seconds, a point a minute per series. Which traces and
-  metrics leave is the dashboard's too (Admin → Settings →
-  Telemetry): every trace that failed anywhere, every one slower than a threshold, a percent of
-  the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and decides at
-  the end of each trace. Logs do not leave the machine that wrote them. The dashboard shows one
-  monitoring: set Admin → Settings → Monitoring to Grafana Cloud with the stack's address, and
-  the sidebar links to it and each host and workspace links to its traces in Explore.
+  the tokens and reaches the backend. Where it sends is set in the dashboard (Admin → Settings →
+  Telemetry), each half with its user and token and a *Test connection* that tries it from the
+  control plane first: traces over OTLP (for Grafana Cloud, the stack's OTLP endpoint and an access
+  policy token with traces:write), and metrics remote-written to a Prometheus (the stack's
+  remote-write URL and a token with metrics:write) — or over OTLP too, with no Prometheus. It is
+  kept in the database, the tokens sealed: never in Terraform's state, a parameter or a machine's
+  user data, so whoever owns the backend fills it in after the install, with no apply. Until then
+  the collector drops what it is given. The same page shows what the collector sent and failed to
+  send over its last minute. Metrics are pushed every 60 seconds, a point a minute per series.
+  Which traces and metrics leave is the dashboard's too: every trace that failed anywhere, every
+  one slower than a threshold, a percent of the rest, and the metrics dropped by name; Alloy reads
+  it every thirty seconds and decides at the end of each trace. Logs do not leave the machine that
+  wrote them. With the stack's address set on that page, the sidebar links to it and each host
+  and workspace links to its traces in Explore.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above - the user data, the documents, the secrets, the ingress rules, IMDSv2, encryption,
   the bucket's lock and policy, the roles and their boundary - and `task lint` runs it with the
