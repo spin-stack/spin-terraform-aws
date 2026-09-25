@@ -52,7 +52,7 @@ variable "proxy_allowed_cidrs" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine; modules/controlplane's default is t8i.micro."
+  description = "The control plane's machine; modules/controlplane's default is t8i.small."
   type        = string
   default     = null
 }

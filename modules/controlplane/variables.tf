@@ -63,9 +63,9 @@ variable "availability_zones" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine: the control plane, and the collector where there is one. Its database is RDS, so it is small; t8i.small where Alloy ships a busy fleet's telemetry."
+  description = "The control plane's machine: the control plane, the collector, and the store of logs and traces it runs (Quickwit). Its database is RDS; the store is what sizes it."
   type        = string
-  default     = "t8i.micro"
+  default     = "t8i.small"
   nullable    = false
 }
 

@@ -278,10 +278,10 @@ What is left is the database's final snapshot. Install the next one under anothe
   password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
   once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
   role signs and owns the database.
-- **Small machines.** The control plane and the proxy are `t8i.micro` by default: with the
-  database on RDS, the control plane is the control plane alone (and Alloy, where there is a
-  collector - `t8i.small` there for a busy fleet). Two of them and the database are the whole
-  standing cost when no runner is up.
+- **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.small` by default:
+  with the database on RDS, the control plane's machine holds the control plane, Alloy and the
+  store of logs and traces it runs (Quickwit), and the store is what needs the second gigabyte.
+  Two of them and the database are the whole standing cost when no runner is up.
 
 Hosts outside the group are still added the ordinary way - a one-time token from Admin → Hosts
 and `spin-install runner` - and are policed by the same control plane.
