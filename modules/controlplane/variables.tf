@@ -77,6 +77,8 @@ variable "database" {
     apply_immediately makes a change to the instance - its class, its version - during the apply
     that asks for it, a minute or two of the database restarting; false leaves it for RDS's
     maintenance window.
+    insights keeps seven days of Performance Insights: which statements take the time, and what
+    they wait on.
   EOT
   type = object({
     engine_version        = optional(string, "18")
@@ -87,6 +89,7 @@ variable "database" {
     backup_retention_days = optional(number, 7)
     deletion_protection   = optional(bool, true)
     apply_immediately     = optional(bool, true)
+    insights              = optional(bool, true)
   })
   default  = {}
   nullable = false

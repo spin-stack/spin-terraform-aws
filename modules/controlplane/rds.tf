@@ -94,6 +94,12 @@ resource "aws_db_instance" "database" {
   # the destroy it needs to finish.
   final_snapshot_identifier = "${var.name}-catalog-final-${random_id.database.hex}"
 
+  # Which statements take the time, and waiting on what: the control plane's traces time each
+  # query from its side, which cannot tell a statement waiting on the disk of a burstable
+  # instance from one waiting on a lock. Seven days is the retention that costs nothing.
+  performance_insights_enabled          = var.database.insights
+  performance_insights_retention_period = var.database.insights ? 7 : null
+
   auto_minor_version_upgrade = true
   # A change asked for is made by the apply that asks for it, not at a maintenance window the
   # operator never chose; a major version is one such change.

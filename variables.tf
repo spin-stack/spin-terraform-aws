@@ -64,7 +64,7 @@ variable "proxy_instance_type" {
 }
 
 variable "database" {
-  description = "The database's RDS instance, as modules/controlplane's database object: engine_version, instance_class, storage_gb, max_storage_gb, multi_az, backup_retention_days, deletion_protection."
+  description = "The database's RDS instance, as modules/controlplane's database object: engine_version, instance_class, storage_gb, max_storage_gb, multi_az, backup_retention_days, deletion_protection, apply_immediately, insights."
   type        = any
   default     = null
 }
