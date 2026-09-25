@@ -536,6 +536,43 @@ run "the_bucket" {
   }
 }
 
+run "the_logs_bucket" {
+  command = plan
+
+  assert {
+    condition     = aws_s3_bucket.logs.bucket != aws_s3_bucket.volumes.bucket
+    error_message = "the logs are kept in the volumes' bucket"
+  }
+  assert {
+    condition     = local.installation.settings.logs_bucket == aws_s3_bucket.logs.bucket
+    error_message = "the control plane is not told where its logs go"
+  }
+  assert {
+    condition = alltrue([
+      aws_s3_bucket_public_access_block.logs.block_public_acls,
+      aws_s3_bucket_public_access_block.logs.block_public_policy,
+      aws_s3_bucket_public_access_block.logs.ignore_public_acls,
+      aws_s3_bucket_public_access_block.logs.restrict_public_buckets,
+    ])
+    error_message = "the logs bucket may be made public"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.logs_bucket.statement :
+    s.effect == "Deny" && contains(s.actions, "s3:GetObject*") && anytrue([for c in s.condition : c.variable == "aws:SourceVpce"])])
+    error_message = "the logs' objects are not refused outside the VPC's endpoint"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.logs_bucket.statement :
+    s.effect == "Deny" && anytrue([for c in s.condition : c.variable == "aws:SecureTransport"])])
+    error_message = "the logs bucket answers without TLS"
+  }
+  # A lifecycle deleting under the store would leave its metastore naming splits that are gone.
+  assert {
+    condition     = alltrue([for r in aws_s3_bucket_lifecycle_configuration.logs.rule : length(r.expiration) == 0])
+    error_message = "a lifecycle rule expires what the store's retention decides"
+  }
+}
+
 run "the_roles" {
   command = plan
 

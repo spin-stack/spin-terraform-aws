@@ -163,6 +163,10 @@ locals {
       # own machine.
       telemetry_collector       = local.collector
       telemetry_metric_interval = local.metric_interval
+      # Where it keeps its logs and traces; how long, the operator's file says.
+      # Its name and not its id: the name is known at plan, and what a machine starts on is
+      # hashed into its launch template then.
+      logs_bucket = aws_s3_bucket.logs.bucket
     }))
   })
 }

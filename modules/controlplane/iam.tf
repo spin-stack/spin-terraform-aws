@@ -83,6 +83,14 @@ data "aws_iam_policy_document" "controlplane" {
     ]
     resources = [aws_s3_bucket.volumes.arn, "${aws_s3_bucket.volumes.arn}/*"]
   }
+  # Its logs and traces: the store it runs reads and writes its indexes and its metastore here,
+  # and deletes the splits retention drops. Nothing else is given this bucket - a runner's
+  # credentials are minted for the volumes' alone.
+  statement {
+    sid       = "TheLogs"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [aws_s3_bucket.logs.arn, "${aws_s3_bucket.logs.arn}/*"]
+  }
   # The runners' group, which the runners module names ${name}-runners: the control plane
   # starts a host when a workspace waits for one and empties the group when nothing runs.
   # Describe has no resource-level permission; the resize is held to that one group.
