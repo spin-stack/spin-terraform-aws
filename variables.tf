@@ -14,7 +14,7 @@ variable "spin_boot_sha256" {
 }
 
 variable "domain" {
-  description = "The base domain: the dashboard is app.<domain>, workspaces are *.app.<domain>."
+  description = "The base domain: the dashboard is app.<domain>, workspaces are *.ws.<domain>."
   type        = string
 }
 

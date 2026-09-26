@@ -483,7 +483,7 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the domain's zone is not a public one of its own"
   }
   assert {
-    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "*.app.${var.domain}"])
+    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "*.ws.${var.domain}"])
     error_message = "the dashboard and the workspaces' names are not written into the domain's zone"
   }
   assert {

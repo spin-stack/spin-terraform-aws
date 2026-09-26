@@ -22,7 +22,7 @@ variable "spin_version" {
 }
 
 variable "domain" {
-  description = "The base domain: the dashboard is app.<domain>, workspaces are *.app.<domain>."
+  description = "The base domain: the dashboard is app.<domain>, workspaces are *.ws.<domain>."
   type        = string
 }
 

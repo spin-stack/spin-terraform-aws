@@ -188,8 +188,9 @@ What is left is the database's final snapshot. Install the next one under anothe
   relay at `proxy.spin.internal` too, checking its certificate as `tunnel.app.<domain>`, so the
   relay never leaves the VPC and the proxy's 443 need not be open to wherever runners happen to
   be: `proxy_allowed_cidrs` can be the users' networks alone (80 stays open for the ACME
-  challenge). The domain's public zone is the installation's too, and `app.` and `*.app.` in it
-  point at the proxy's elastic IP.
+  challenge). The domain's public zone is the installation's too, and `app.`, `tunnel.app.` and
+  `*.ws.` in it point at the proxy's elastic IP: the workspaces under a name of their own, so
+  none is a subdomain of the dashboard's.
 - **An update is a machine beside the old one, not a stop.** The control plane and the proxy
   are each an autoscaling group of one, and a change to what a machine is - `spin_version`, the
   image, the size - is a new launch template the group's instance refresh rolls out at 100%

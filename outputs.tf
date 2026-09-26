@@ -79,7 +79,7 @@ output "name_servers" {
 }
 
 output "proxy_ip" {
-  description = "The proxy's elastic IP, where app.<domain> and *.app.<domain> point: the one address of the installation the internet reaches."
+  description = "The proxy's elastic IP, where app.<domain>, tunnel.app.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches."
   value       = module.controlplane.proxy_ip
 }
 
