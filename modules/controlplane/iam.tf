@@ -64,22 +64,36 @@ locals {
 }
 
 data "aws_iam_policy_document" "controlplane" {
+  # What spin does with the bucket, and nothing it does not: list it and read what it is made
+  # with (versioning, the lock, the lifecycle, which configure checks), and read, write, mark
+  # deleted, hold and release its objects. Deleting a version is how a delete is undone (the
+  # marker is a version); the lock refuses it on anything it still holds.
   statement {
-    sid       = "TheBucket"
-    actions   = ["s3:*"]
-    resources = [aws_s3_bucket.volumes.arn, "${aws_s3_bucket.volumes.arn}/*"]
+    sid = "TheBucket"
+    actions = ["s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads", "s3:GetBucketLocation",
+    "s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration", "s3:GetLifecycleConfiguration"]
+    resources = [aws_s3_bucket.volumes.arn]
   }
-  # Nothing in spin bypasses a retention or rewrites the bucket's policy, and a control plane
-  # that could would make the lock and the endpoint condition its own to lift. It writes the
-  # lock's rule only to a bucket that has none, and this one is made with one. Versioning is
-  # left writable: the bootstrap enables it on every configure, and S3 refuses to suspend it on
-  # a bucket under Object Lock.
   statement {
-    sid    = "NotTheLock"
+    sid = "ItsObjects"
+    actions = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion",
+      "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:PutObjectLegalHold", "s3:GetObjectLegalHold",
+    "s3:GetObjectRetention"]
+    resources = ["${aws_s3_bucket.volumes.arn}/*"]
+  }
+  # Nothing in spin bypasses a retention or configures the bucket, and a control plane that could
+  # would make the lock, the endpoint condition and the lifecycle its own to lift: a lifecycle
+  # rule alone expires every volume without an object being touched. Denied as well as not
+  # granted, so a grant added later for something else does not bring them back.
+  statement {
+    sid    = "NotTheLockNorTheBucketsConfiguration"
     effect = "Deny"
     actions = [
-      "s3:BypassGovernanceRetention", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:DeleteBucket",
-      "s3:PutBucketObjectLockConfiguration",
+      "s3:BypassGovernanceRetention", "s3:DeleteBucket", "s3:DeleteBucketPolicy", "s3:CreateBucket",
+      "s3:PutBucket*", "s3:PutLifecycleConfiguration", "s3:PutEncryptionConfiguration",
+      "s3:PutReplicationConfiguration", "s3:PutIntelligentTieringConfiguration", "s3:PutInventoryConfiguration",
+      "s3:PutAnalyticsConfiguration", "s3:PutMetricsConfiguration", "s3:PutAccelerateConfiguration",
+      "s3:PutObjectAcl",
     ]
     resources = [aws_s3_bucket.volumes.arn, "${aws_s3_bucket.volumes.arn}/*"]
   }

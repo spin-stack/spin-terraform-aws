@@ -146,7 +146,7 @@ variable "proxy_instance_type" {
 }
 
 variable "object_lock_days" {
-  description = "The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and spin's lifecycle rule waits it out."
+  description = "The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and the bucket's lifecycle (bucket.tf) removes them a day after."
   type        = number
   default     = 30
   nullable    = false

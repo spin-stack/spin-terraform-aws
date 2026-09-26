@@ -601,8 +601,25 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
-    s.effect == "Deny" && contains(s.actions, "s3:BypassGovernanceRetention") && contains(s.actions, "s3:PutBucketPolicy")])
-    error_message = "the control plane can lift the bucket's lock or rewrite its policy"
+      s.effect == "Deny" && contains(s.actions, "s3:BypassGovernanceRetention") && contains(s.actions, "s3:PutBucket*") &&
+    contains(s.actions, "s3:PutLifecycleConfiguration")])
+    error_message = "the control plane can lift the bucket's lock, rewrite its policy or configure it"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      s.effect == "Deny" || length([for a in s.actions : a if a == "s3:*" ||
+    (startswith(a, "s3:Put") && !contains(["s3:PutObject", "s3:PutObjectLegalHold"], a))]) == 0])
+    error_message = "the control plane is granted all of S3, or a bucket configuration to write"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+    s.effect == "Deny" && contains(s.actions, "s3:PutLifecycleConfiguration")])
+    error_message = "a role the boundary bounds can write a bucket's lifecycle"
+  }
+  assert {
+    condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.volumes.rule :
+    r.status == "Enabled" && anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days > var.object_lock_days])])
+    error_message = "the volumes bucket keeps what a delete left forever, or asks to expire it while the lock still holds it"
   }
   assert {
     condition     = aws_iam_role.runner_scope.max_session_duration == 3600

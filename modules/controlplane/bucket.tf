@@ -1,10 +1,8 @@
-# Every workspace's disk. Made here with what spin requires of it - versioning and Object Lock
-# with a default retention, which `controlplane storage configure` checks and would otherwise
-# set - so the lock is declared rather than left to whichever process made the bucket first.
-#
-# Its lifecycle rules are not declared: spin writes them (its internal/storage/simio/real), merged
-# by name into whatever is there, and a lifecycle configuration here would replace them on
-# every apply.
+# Every workspace's disk. Made here with everything spin requires of it - versioning, Object Lock
+# with a default retention, and the lifecycle below - which `controlplane storage configure`
+# reads and refuses a bucket without. spin never writes any of it: the control plane is denied
+# every write to the bucket's configuration (iam.tf, boundary.tf), because one able to write the
+# lifecycle could expire every volume in it without touching an object.
 
 resource "aws_s3_bucket" "volumes" {
   bucket              = "${var.name}-volumes-${local.account}-${local.region}"
@@ -26,6 +24,37 @@ resource "aws_s3_bucket_object_lock_configuration" "volumes" {
       # GOVERNANCE: COMPLIANCE is a bill nobody can stop, the account's root included.
       mode = "GOVERNANCE"
       days = var.object_lock_days
+    }
+  }
+  depends_on = [aws_s3_bucket_versioning.volumes]
+}
+
+# What ends what the storage leaves behind, over the whole bucket (spin's RequireLifecycle):
+#   - the parts of uploads nobody completed, after a day: a cancelled or killed publish leaves
+#     billed, unlisted parts, and nobody else aborts them;
+#   - the versions a delete made non-current, once the lock that holds them has lapsed, and the
+#     markers left alone after. A delete is a marker and the bytes stay - a checkpoint's are a
+#     machine's whole RAM - until this; asking before the lock lapses would read as an erasure
+#     and perform none.
+resource "aws_s3_bucket_lifecycle_configuration" "volumes" {
+  bucket = aws_s3_bucket.volumes.id
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+  rule {
+    id     = "expire-deleted-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = var.object_lock_days + 1
+    }
+    expiration {
+      expired_object_delete_marker = true
     }
   }
   depends_on = [aws_s3_bucket_versioning.volumes]

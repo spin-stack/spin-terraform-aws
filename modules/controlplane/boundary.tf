@@ -110,6 +110,9 @@ data "aws_iam_policy_document" "boundary" {
       "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock",
       "s3:PutAccountPublicAccessBlock", "s3:BypassGovernanceRetention",
       "s3:PutBucketObjectLockConfiguration", "s3:DeleteBucket",
+      # A bucket's lifecycle expires what it holds without an object being touched; the
+      # installation declares it, and no role this boundary bounds writes one.
+      "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning",
       "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
       "cloudtrail:*", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "ec2:DeleteFlowLogs",
       # The database, and what would bring it back: a taken machine signs in to it as
