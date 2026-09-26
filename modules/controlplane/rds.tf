@@ -83,12 +83,15 @@ resource "aws_db_instance" "database" {
   publicly_accessible    = false
   multi_az               = var.database.multi_az
 
-  # RDS's own backups beside the control plane's hourly database backup in the bucket: a point
-  # in time to restore to, and a snapshot when the instance is deleted.
-  backup_retention_period = var.database.backup_retention_days
-  copy_tags_to_snapshot   = true
-  deletion_protection     = var.database.deletion_protection
-  skip_final_snapshot     = false
+  # The database's only backups: the control plane writes no copy of its rows, so these are a
+  # point in time to restore to, and a snapshot when the instance is deleted. The automated
+  # backups outlive a deleted instance for their retention, so a delete leaves a point in time
+  # before it as well as the final snapshot.
+  backup_retention_period  = var.database.backup_retention_days
+  delete_automated_backups = false
+  copy_tags_to_snapshot    = true
+  deletion_protection      = var.database.deletion_protection
+  skip_final_snapshot      = false
   # Named for this installation's state, not only its name: an installation destroyed and made
   # again under the same name would otherwise find the last one's snapshot in the way, and fail
   # the destroy it needs to finish.

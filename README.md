@@ -88,8 +88,8 @@ up. A change to anything else a machine starts on - `installation_config`, the a
 settings - rolls out the same way.
 
 A release older than the one that last started the database refuses to start on it: going back
-past a change to the schema is a restore of the database (spin's `controlplane database restore`), not an
-update.
+past a change to the schema is a restore of the database to a point before it (RDS's point in
+time recovery), not an update.
 
 ## Operating it
 
@@ -273,8 +273,9 @@ What is left is the database's final snapshot. Install the next one under anothe
   notice, and capacity rebalancing starts the replacement first.
 - **The database is RDS, and the control plane's machine holds nothing it cannot get back.**
   PostgreSQL 18 on `db.t4g.micro` (`database`), in subnets of its own with no route out of the
-  VPC, taking 5432 from the control plane's group alone, with a week of backups and deletion
-  protection; beside it the control plane writes an hourly database backup into the bucket. No
+  VPC, taking 5432 from the control plane's group alone, with a week of point in time recovery
+  that outlives a deleted instance, a final snapshot, and deletion protection: these are the
+  database's only backups, and the control plane writes no copy of its rows into the bucket. No
   password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
   once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
   role signs and owns the database.
