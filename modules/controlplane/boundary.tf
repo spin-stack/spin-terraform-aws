@@ -71,7 +71,7 @@ data "aws_iam_policy_document" "boundary" {
   }
   # The control plane's secrets are its role's alone, whatever policy a role is given later: the
   # encryption key that opens the database's seals, the CA's key, the first administrator's
-  # password, the collector's token, and the installation's configuration, which may say whom it
+  # password, and the installation's configuration, which may say whom it
   # registers. The parameters are read under the account's aws/ssm key, which opens them to any
   # principal SSM lets read them, so this is where the line is.
   statement {

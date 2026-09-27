@@ -1,11 +1,8 @@
 # The installation's telemetry: Grafana Alloy on the control plane's machine is the one collector,
-# the control plane, the proxy and every runner push OTLP to it inside the VPC, and only it holds
-# the backend's token and reaches the backend. Where that backend is, and the token, are the
-# installation's: an administrator sets them in the dashboard (Admin -> Settings -> Telemetry),
-# the database keeps them — the token sealed — and spin-boot's watch on the control plane's
-# machine gives them to Alloy. Nothing of it is in this module, its state or a machine's user
-# data. Until an administrator says where, the collector drops what it is given. Which traces and
-# metrics leave is the dashboard's too. Logs stay on the machine that wrote them.
+# the control plane, the proxy and every runner push OTLP to it inside the VPC, and it keeps what
+# it is given in the stores beside it on that machine - Quickwit and VictoriaMetrics, over the
+# logs bucket (logs_bucket.tf). Nothing leaves the installation, and no token for a backend is
+# anywhere. Which traces and metrics are kept is the dashboard's (Admin -> Settings -> Telemetry).
 
 variable "collector" {
   description = "The collector: how often metrics are pushed to it, and the Alloy package installed, checked against its SHA-256."

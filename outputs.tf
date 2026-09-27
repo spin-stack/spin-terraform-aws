@@ -50,9 +50,9 @@ locals {
     ],
     [
       "",
-      "6. Telemetry goes nowhere until an administrator says where: Admin -> Settings -> Telemetry,",
-      "   traces over OTLP and metrics to a Prometheus remote write, each with its user and token,",
-      "   tried with Test connection before it is saved. The collector is told within a minute.",
+      "6. The installation keeps its own logs, traces and metrics on the control plane's machine,",
+      "   over the logs bucket. Its dashboards are under Observe -> Metrics, for administrators;",
+      "   what is kept is Admin -> Settings -> Telemetry.",
     ],
   ))
 }

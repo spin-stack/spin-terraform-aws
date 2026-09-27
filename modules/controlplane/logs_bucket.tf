@@ -1,12 +1,15 @@
-# The installation's logs and traces: the store the leading control plane runs (spin's
-# internal/logstore) keeps its indexes and its metastore here. A bucket of its own and not a
-# prefix of the volumes': what is in it has another owner, another retention and another reader,
-# and nothing in it needs the volumes' Object Lock.
+# The installation's logs, traces and metrics: the stores the leading control plane's machine runs
+# keep them here - Quickwit its indexes and its metastore (spin's internal/logstore), and the metric
+# store its backups under metrics/, a prefix per backup of which spin keeps the last three
+# (internal/metricstore). A bucket of its own and not a prefix of the volumes': what is in it has
+# another owner, another retention and another reader, and nothing in it needs the volumes' Object
+# Lock.
 #
-# No versioning: Quickwit rewrites its metastore in place, and every old copy kept would be paid
-# for and never read. No expiration rule either: retention is the store's, split by split, and a
-# rule deleting under it would leave the metastore naming splits that are gone. What a lifecycle
-# does do here is clear uploads a machine abandoned halfway.
+# No versioning: Quickwit rewrites its metastore in place, and the metric store's backups are
+# removed as newer ones complete; every old copy kept would be paid for and never read. No
+# expiration rule either: retention is the stores', and a rule deleting under Quickwit would leave
+# its metastore naming splits that are gone. What a lifecycle does do here is clear uploads a
+# machine abandoned halfway.
 
 resource "aws_s3_bucket" "logs" {
   bucket = "${var.name}-logs-${local.account}-${local.region}"

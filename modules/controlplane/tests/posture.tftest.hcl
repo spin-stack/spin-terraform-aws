@@ -654,8 +654,8 @@ run "the_roles" {
 }
 
 # No machine but the control plane's reads its secrets: Session Manager comes with nothing else
-# of SSM, and the boundary refuses the encryption key and the collector's token to any other
-# role, whatever policy it is given later.
+# of SSM, and the boundary refuses the encryption key and the control plane's other secrets to
+# any other role, whatever policy it is given later.
 run "no_machine_reads_the_control_planes_secrets" {
   command = plan
 

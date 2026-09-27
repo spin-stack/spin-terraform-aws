@@ -8,9 +8,9 @@
 # makes its database match it every time it starts, before it serves, so a change to it is an
 # apply and the next start of a control plane - not a command somebody runs on a machine.
 #
-# A document holds no secret. Where one is, it says where (secrets.tf): the key, the CA's key,
-# the first administrator's password and the collector's token are parameters of their own, and
-# only the control plane's role reads them.
+# A document holds no secret. Where one is, it says where (secrets.tf): the key, the CA's key and
+# the first administrator's password are parameters of their own, and only the control plane's
+# role reads them.
 
 locals {
   config_parameter       = "/${var.name}/controlplane-config"

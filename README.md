@@ -152,7 +152,7 @@ What is left is the database's final snapshot. Install the next one under anothe
   installation's configuration, the CA, the encryption key and the first administrator's
   password are all this module's; the permissions boundary denies every role of the
   installation `ssm:PutParameter`. A machine that was taken cannot leave a value for the next
-  one to start on. The one parameter the operator writes is the collector's token.
+  one to start on.
 - **The encryption key and the first password never reach the state.** Both are ephemeral values
   written through write-only attributes, once (`value_wo_version`). The key is, with the
   database, the installation: a new one is a database nothing can open, so nothing here makes one
@@ -224,27 +224,25 @@ What is left is the database's final snapshot. Install the next one under anothe
   `AmazonSSMManagedInstanceCore`, which also reads every parameter in the account: the
   parameters are under the account's `aws/ssm` key, so on the proxy or a runner it opened the
   encryption key. The boundary backs this: no role but the control plane's reads the key, the
-  CA's key, the first password, the installation's configuration or the collector's token.
+  CA's key, the first password or the installation's configuration.
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
   `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
   Route 53 Resolver's, and `dns_query_logs = true` asks for it.
-- **Telemetry, where an administrator says.** Grafana Alloy on the control plane's machine is
+- **Telemetry, kept by the installation itself.** Grafana Alloy on the control plane's machine is
   the one collector, pinned by `collector` (the package and its SHA-256): the control plane, the
-  proxy and every runner push OTLP to it on 4317, which only they may reach, and only it holds
-  the tokens and reaches the backend. Where it sends is set in the dashboard (Admin → Settings →
-  Telemetry), each half with its user and token and a *Test connection* that tries it from the
-  control plane first: traces over OTLP (for Grafana Cloud, the stack's OTLP endpoint and an access
-  policy token with traces:write), and metrics remote-written to a Prometheus (the stack's
-  remote-write URL and a token with metrics:write) — or over OTLP too, with no Prometheus. It is
-  kept in the database, the tokens sealed: never in Terraform's state, a parameter or a machine's
-  user data, so whoever owns the backend fills it in after the install, with no apply. Until then
-  the collector drops what it is given. The same page shows what the collector sent and failed to
-  send over its last minute. Metrics are pushed every 60 seconds, a point a minute per series.
-  Which traces and metrics leave is the dashboard's too: every trace that failed anywhere, every
-  one slower than a threshold, a percent of the rest, and the metrics dropped by name; Alloy reads
-  it every thirty seconds and decides at the end of each trace. Logs do not leave the machine that
-  wrote them. With the stack's address set on that page, the sidebar links to it and each host
-  and workspace links to its traces in Explore.
+  proxy and every runner push OTLP to it on 4317, which only they may reach. It keeps what it is
+  given in the stores beside it, on the same machine and on loopback only: logs and traces in
+  Quickwit and metrics in VictoriaMetrics, both over the logs bucket - Quickwit's indexes and
+  metastore, and the metric store's backups under `metrics/`, taken every quarter of an hour and
+  as the machine stops, so a machine a release replaces takes nothing with it. Nothing leaves the
+  installation, and there is no backend's token to hold. Grafana over the metric store is served
+  to administrators alone, inside the dashboard (Observe → Metrics), signed in by a token the
+  control plane signs. Each store is a systemd unit of its own user, started only while the
+  control plane beside it leads. Which traces and metrics are kept is the dashboard's (Admin →
+  Settings → Telemetry): every trace that failed anywhere, every one slower than a threshold, a
+  percent of the rest, and the metrics dropped by name; Alloy reads it every thirty seconds and
+  decides at the end of each trace. The same page shows what the collector kept and failed to
+  over its last minute. Metrics are pushed every 60 seconds, a point a minute per series.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above - the user data, the documents, the secrets, the ingress rules, IMDSv2, encryption,
   the bucket's lock and policy, the roles and their boundary - and `task lint` runs it with the
