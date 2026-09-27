@@ -5,7 +5,7 @@
 # name the control plane hands out (spin-install runner --relay-dial), so it never leaves the VPC.
 #
 # The records are the machines' own. Each writes its name when it is about to serve under it
-# (files/lifecycle.sh.tftpl) - a control plane just before it takes the term, a proxy once
+# (spin-boot, spin's internal/installation/boot) - a control plane just before it takes the term, a proxy once
 # Caddy answers - which is the moment an update moves the installation to it; Terraform, which
 # does not know the address of a machine an autoscaling group has not started, writes none.
 # force_destroy, because a destroy would otherwise refuse the records it did not make.

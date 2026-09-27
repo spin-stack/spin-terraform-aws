@@ -1,15 +1,5 @@
 variable "spin_version" {
-  description = "The release to install, as v<YYYYMMDD>.<N>: the control plane's and the proxy's. A runner installs whichever release its control plane serves."
-  type        = string
-}
-
-variable "spin_boot_sha256" {
-  description = <<-EOT
-    The SHA-256 of spin-boot-linux-amd64 of spin_version, from that release's checksums.txt: the
-    one file a machine fetches before anything is verified, and so the one thing to pin here.
-    Everything after it — the release's tarballs and their signatures — spin-boot checks itself
-    against the signature spin's release workflow published.
-  EOT
+  description = "The release the installation runs, as v<YYYYMMDD>.<N>: every machine boots the Spin OS image of it (spin-stack/ami), published into this account and tagged spin:version."
   type        = string
 }
 

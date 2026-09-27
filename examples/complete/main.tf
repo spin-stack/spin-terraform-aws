@@ -4,8 +4,8 @@
 #
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
-#   tofu apply -var spin_version=v20260921.02 -var spin_boot_sha256=<sha256> \
-#     -var domain=spin.example.com
+#   (the Spin OS image of that release in this account: spin-stack/ami, task build publish)
+#   tofu apply -var spin_version=v20260921.02 -var domain=spin.example.com
 #
 # From elsewhere, the source is this repository at a tag:
 #
@@ -64,11 +64,6 @@ variable "spin_version" {
   type = string
 }
 
-variable "spin_boot_sha256" {
-  description = "The SHA-256 of that release's spin-boot-linux-amd64, from its checksums.txt."
-  type        = string
-}
-
 variable "domain" {
   type = string
 }
@@ -78,11 +73,10 @@ provider "aws" {
 }
 
 module "spin" {
-  source           = "../.."
-  name             = var.name
-  spin_version     = var.spin_version
-  spin_boot_sha256 = var.spin_boot_sha256
-  domain           = var.domain
+  source       = "../.."
+  name         = var.name
+  spin_version = var.spin_version
+  domain       = var.domain
 
   runner_idle_minutes = 60
   quiet_hours         = "20:00-07:00"

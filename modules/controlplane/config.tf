@@ -1,7 +1,7 @@
 # What each machine starts on: one document per role in the parameter store, written by this
-# apply and read by that role's machines (spin's internal/bootstrap). A machine is told where its
-# document is and nothing else - its user data is the same five lines for every role
-# (files/boot.sh.tftpl) - and spin-boot does the rest from what the document says.
+# apply and read by that role's machines (spin's internal/bootstrap). A machine is told its role
+# and where its document is and nothing else - its user data is those two, as systemd credentials
+# (user_data below) - and the image's spin-boot does the rest from what the document says.
 #
 # Beside the documents, the installation's own configuration (installation.yaml, as it would be
 # kept in git): where the installation starts, which an administrator changes from the dashboard
@@ -88,10 +88,9 @@ locals {
         user   = aws_db_instance.database.username
         secret = aws_db_instance.database.master_user_secret[0].secret_arn
       }
-      # Alloy, pinned: where it sends is the installation's, set in the dashboard (telemetry.tf).
-      collector = {
-        alloy = { version = var.collector.alloy_version, sha256 = var.collector.alloy_sha256 }
-      }
+      # The collector, which is the image's Alloy: where it sends is the installation's, set in the
+      # dashboard (telemetry.tf).
+      collector = {}
     }
   }
 
@@ -207,9 +206,14 @@ resource "aws_ssm_parameter" "installation" {
   tags        = local.tags
 }
 
-# The same five lines for every machine, told which role it is and where that role's document is.
+# Every machine's user data: which role it is and where that role's document is, as the two
+# systemd credentials Spin OS's spin-boot unit takes. systemd-imds imports them from IMDS into
+# /run/credstore; nothing on the machine runs the user data.
 locals {
   user_data = { for role, doc in { "control-plane" = local.ssm.config, proxy = local.ssm.proxy, runner = local.ssm.runner } :
-    role => templatefile("${path.module}/files/boot.sh.tftpl", { sha256 = var.spin_boot_sha256, role = role, config = doc })
+    role => jsonencode({ "systemd.credentials" = [
+      { name = "spin.role", text = role },
+      { name = "spin.config", text = doc },
+    ] })
   }
 }

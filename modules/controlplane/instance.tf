@@ -2,40 +2,40 @@
 # the key and the CA are in SSM (secrets.tf): a replaced instance reads its document, installs the
 # same release and serves the same database.
 
-# The newest of Canonical's own images of the release: owned by Canonical's account, so a
-# public image named like one is not picked up.
-data "aws_ami" "ubuntu" {
+# Spin OS of this installation's release (spin-stack/ami): the image is the release - a machine of
+# it runs that release and no other, from a root it cannot write - so the release names the image,
+# by the spin:version tag the image was published with. Only this account's images: one shared
+# into it with the same tag is not picked up. image_id names one outright.
+data "aws_ami" "spin_os" {
   most_recent = true
-  owners      = ["099720109477"]
+  owners      = ["self"]
   filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-*-${var.ubuntu_release}-amd64-server-*"]
+    name   = var.image_id != "" ? "image-id" : "tag:spin:version"
+    values = [var.image_id != "" ? var.image_id : var.spin_version]
   }
   filter {
     name   = "architecture"
     values = ["x86_64"]
   }
   filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  filter {
-    name   = "root-device-type"
-    values = ["ebs"]
+    name   = "boot-mode"
+    values = ["uefi"]
   }
 }
 
-# The image the machines boot: the newest of the release when the installation's release last
-# changed, and kept until it changes again. An image Canonical publishes is then picked up by an
-# update, not by whatever apply happens to follow it - which would replace both machines for a
-# change nobody asked for. image_id pins one outright.
+# The image the machines boot, kept until the release changes: an image published again for the
+# same release - a rebuilt kernel, a package patched - is picked up by the next update, not by
+# whatever apply happens to follow it, which would replace every machine for a change nobody asked
+# for.
 resource "terraform_data" "image" {
-  input            = var.image_id != "" ? var.image_id : data.aws_ami.ubuntu.id
-  triggers_replace = [var.spin_version, var.ubuntu_release, var.image_id]
+  input            = data.aws_ami.spin_os.id
+  triggers_replace = [var.spin_version, var.image_id]
 }
 
 locals {
   image = terraform_data.image.output
+  # The image's root device, where a machine's root volume is sized: Spin OS's is /dev/xvda.
+  root_device = data.aws_ami.spin_os.root_device_name
 
   # What each machine starts on, as the tag that makes a change to it a new launch template: a
   # machine reads its document at every start, and nothing else would roll the change out. The
@@ -84,7 +84,7 @@ resource "aws_launch_template" "controlplane" {
   }
 
   block_device_mappings {
-    device_name = "/dev/sda1"
+    device_name = local.root_device
     ebs {
       volume_type           = "gp3"
       volume_size           = 20

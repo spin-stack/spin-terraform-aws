@@ -4,12 +4,16 @@ A [spin](https://github.com/spin-stack/spin) installation on AWS, as one module:
 
 ```hcl
 module "spin" {
-  source           = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
-  spin_version     = "v20260921.02"
-  spin_boot_sha256 = "<from that release's checksums.txt>"
-  domain           = "example.com"
+  source       = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
+  spin_version = "v20260921.02"
+  domain       = "example.com"
 }
 ```
+
+Every machine boots **Spin OS** of that release: the image
+[spin-stack/ami](https://github.com/spin-stack/ami) builds and publishes into this account
+(`task build publish` there, with `SPIN_VERSION` set), tagged `spin:version`. Publish it before
+the apply that names the release.
 
 The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
@@ -74,14 +78,18 @@ ten minutes the first time) and where to look if it is not, and the first sign-i
 
 ## Updating
 
-Change `spin_version` and `spin_boot_sha256` in `terraform.tfvars` to the new release's, then:
+Publish the new release's Spin OS into the account, change `spin_version` in
+`terraform.tfvars` to it, then:
 
 ```bash
-tofu plan     # the launch templates and the documents change, and nothing else
+tofu plan     # the image, the launch templates and the documents change, and nothing else
 tofu apply
 ```
 
-Each machine is replaced beside itself, and the old one serves until the new one does. How it
+Each machine is replaced beside itself, and the old one serves until the new one does. A machine
+cannot take a release in place - its root is read-only and verified - so the runners are replaced
+too, one at a time with the new one first, each old one leaving by its drain: its workspaces
+suspended and resumed on another host. How it
 went is `tofu output update_status`: `Successful`; or `RollbackSuccessful` with the reason, in which
 case the old machine is still serving and `tofu output boot_log` says why the new one did not come
 up. A change to anything else a machine starts on - `installation_config`, the autoscaling
@@ -140,14 +148,15 @@ What is left is the database's final snapshot. Install the next one under anothe
 
 ## What it decides, and why
 
-- **A machine is told where its document is, and nothing else.** Every machine's user data is
-  the same five lines: fetch `spin-boot` from the release's public package
-  (`ghcr.io/spin-stack/spin-release`) by the digest pinned in `spin_boot_sha256`, check it, and
-  run it with its role and the SSM parameter its document is in. Everything else - the release,
+- **A machine is its release's image, and is told its role and where its document is.** Every
+  machine boots Spin OS of `spin_version`: a read-only root the kernel checks every block of, into
+  which spin laid what its `release.yml` signed, checked against the signature when the image was
+  built. A machine fetches nothing. Its user data is two systemd credentials - its role and the
+  SSM parameter its document is in - which systemd-imds imports and nothing runs. Everything else -
   the database, the name it takes, the collector - is in that document, and every step is
-  `spin-boot`'s, in Go with tests (spin's `internal/boot`). `spin-boot` fetches the release's
-  files and checks that spin's `release.yml` signed them at the version's tag before anything in
-  them runs. Nothing is a container: each role is a binary under systemd, as its own user.
+  `spin-boot`'s, in Go with tests (spin's `internal/installation/boot`); a document naming another
+  release than the image's is refused. Nothing is a container: each role is a binary under systemd,
+  as its own user.
 - **This apply writes every parameter, and no machine writes one.** The documents, the
   installation's configuration, the CA, the encryption key and the first administrator's
   password are all this module's; the permissions boundary denies every role of the

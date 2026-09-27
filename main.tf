@@ -11,7 +11,6 @@ module "controlplane" {
 
   name                = var.name
   spin_version        = var.spin_version
-  spin_boot_sha256    = var.spin_boot_sha256
   domain              = var.domain
   acme_email          = var.acme_email
   admin_email         = var.admin_email

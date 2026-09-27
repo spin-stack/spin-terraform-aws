@@ -218,7 +218,7 @@ resource "aws_launch_template" "proxy" {
   }
 
   block_device_mappings {
-    device_name = "/dev/sda1"
+    device_name = local.root_device
     ebs {
       volume_type           = "gp3"
       volume_size           = 20

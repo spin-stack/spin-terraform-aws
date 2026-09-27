@@ -21,6 +21,12 @@ override_data {
   values = { default_vcpus = 2 }
 }
 
+# The Spin OS image of the release, as spin-stack/ami registers one.
+override_data {
+  target = data.aws_ami.spin_os
+  values = { id = "ami-0123456789abcdef0", root_device_name = "/dev/xvda" }
+}
+
 override_data {
   target = data.aws_ec2_instance_type.proxy
   values = { default_vcpus = 2 }
@@ -34,11 +40,6 @@ override_data {
 override_data {
   target = data.aws_availability_zones.available
   values = { names = ["us-east-2a", "us-east-2b", "us-east-2c"] }
-}
-
-override_data {
-  target = data.aws_ami.ubuntu
-  values = { id = "ami-0123456789abcdef0" }
 }
 
 # Known at plan, so what carries them can be asserted on: the roles' boundary, and the user
@@ -109,9 +110,6 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
-  # The digest of that release's spin-boot: what a machine checks the one file it fetches
-  # against.
-  spin_boot_sha256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }
 
 run "the_internet_reaches_the_proxy_alone" {
@@ -186,26 +184,23 @@ run "the_machines" {
   }
 }
 
-# What a machine's user data is: spin-boot fetched by the digest this module pins, checked, and
-# run over the role's document - and nothing else. Every step a boot takes is spin-boot's, in Go
-# with tests; a line added here is a step nobody can test, whose failure is on a disk the group
-# throws away.
-run "a_machines_user_data_is_spin_boot_and_nothing_else" {
+# What a machine's user data is: its role and where the role's document is, as the two systemd
+# credentials Spin OS's spin-boot takes - data, which nothing on the machine runs - and nothing
+# else. Every step a boot takes is spin-boot's, in Go with tests, in an image whose root nothing
+# can write.
+run "a_machines_user_data_is_its_role_and_its_document" {
   command = plan
 
   assert {
-    condition = alltrue([for role, u in local.user_data : (
-      strcontains(u, "/v2/$repo/blobs/sha256:${var.spin_boot_sha256}\"") &&
-      strcontains(u, "echo '${var.spin_boot_sha256}  /usr/local/bin/spin-boot' | sha256sum --check --quiet") &&
-      endswith(u, "exec /usr/local/bin/spin-boot ${role} --config 'ssm:///spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2'\n") &&
-      length(regexall("\n[^#\n]", u)) <= 7
-    )])
-    error_message = "a machine's user data does more than fetch spin-boot by its digest and run it over its document"
+    condition = alltrue([for role, u in local.user_data : jsondecode(u) == { "systemd.credentials" = [
+      { name = "spin.role", text = role },
+      { name = "spin.config", text = "ssm:///spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2" },
+    ] }])
+    error_message = "a machine's user data is more than its role and its document, as systemd credentials"
   }
   assert {
-    condition = alltrue([for u in values(local.user_data) : alltrue([for never in ["aws ", "systemctl", "apt-get", "python", "put-parameter", "spin-controlplane", "spin-install"] :
-    !strcontains(u, never)])])
-    error_message = "a machine's user data calls a cloud, a package manager or systemd itself"
+    condition     = aws_launch_template.controlplane.image_id == "ami-0123456789abcdef0" && aws_launch_template.controlplane.block_device_mappings[0].device_name == "/dev/xvda"
+    error_message = "the control plane does not boot the release's image, on its root device"
   }
   assert {
     condition = (
@@ -709,15 +704,15 @@ run "the_collector" {
   }
   assert {
     condition = (
-      local.controlplane_document.install.collector.alloy.sha256 == var.collector.alloy_sha256 &&
-      keys(local.controlplane_document.install.collector) == ["alloy"] &&
+      # The installation has one, and says nothing of which: that is the image's Alloy.
+      local.controlplane_document.install.collector == {} &&
       # Declared in the installation's own configuration, not in what the control plane starts
       # on: an installation is not asked for a collector before it has one.
       local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
       local.installation.settings.telemetry_metric_interval == "60s" &&
       !contains(keys(local.controlplane_document), "telemetry")
     )
-    error_message = "the collector is installed unchecked, is told a backend here, or the control plane is not pointed at it"
+    error_message = "the collector is pinned here, is told a backend here, or the control plane is not pointed at it"
   }
   assert {
     condition = alltrue([for d in [local.proxy_document, local.runner_document] :
@@ -775,22 +770,28 @@ run "the_database" {
   }
 }
 
-# Every machine runs what the release workflow signed, and nothing that is an image. A machine
-# fetches one file by the digest this module pins and hands the rest to it: spin-boot checks the
-# release's signature itself, in Go, with tests (spin's internal/release). The file comes from
-# the release's public package by that digest, so what the registry serves under a tag is never
-# what decides; spin's repository is private, and its releases are a 404 to a machine.
-run "the_machines_run_what_the_release_signed" {
+# Every machine boots the release's image: Spin OS, into which spin-boot laid what the release's
+# workflow signed, checked against its signature, and whose root the kernel checks every block of.
+# The image is found by the release it carries, among this account's own - one shared into the
+# account with the same tag is not picked up - and nothing is fetched by a machine.
+run "the_machines_boot_the_releases_image" {
   command = plan
 
   assert {
-    condition = alltrue([for u in values(local.user_data) : (
-      strcontains(u, "repo=spin-stack/spin-release\n") &&
-      !strcontains(u, "spin-stack/spin/releases/download") &&
-      !strcontains(u, "/manifests/") &&
-      !strcontains(u, "cosign") && !strcontains(u, "oras") && !strcontains(u, "tar ") && !strcontains(u, "docker")
-    )])
-    error_message = "a machine runs something it did not check by digest, or is back to checking signatures in shell"
+    condition     = length(data.aws_ami.spin_os.owners) == 1 && contains(data.aws_ami.spin_os.owners, "self")
+    error_message = "the release's image is looked for outside this account"
+  }
+  assert {
+    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "tag:spin:version" && length(f.values) == 1 && contains(f.values, var.spin_version)])
+    error_message = "the image is not found by the release it carries"
+  }
+  assert {
+    condition     = aws_launch_template.controlplane.image_id == local.image && aws_launch_template.proxy.image_id == local.image
+    error_message = "a machine boots another image than the release's"
+  }
+  assert {
+    condition     = output.image.id == local.image && output.image.root_device == "/dev/xvda"
+    error_message = "the runners are not handed the release's image and its root device"
   }
 }
 

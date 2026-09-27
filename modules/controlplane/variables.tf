@@ -13,7 +13,7 @@ variable "name" {
 }
 
 variable "spin_version" {
-  description = "The release to install, as v<YYYYMMDD>.<N>. Runners are fetched from the control plane, so this is the fleet's release."
+  description = "The release the installation runs, as v<YYYYMMDD>.<N>: every machine boots the Spin OS image of it (spin-stack/ami), published into this account and tagged spin:version."
   type        = string
   validation {
     condition     = can(regex("^v[0-9]{8}\\.[0-9]+$", var.spin_version))
@@ -212,35 +212,8 @@ variable "tags" {
 }
 
 variable "image_id" {
-  description = "An AMI for the control plane and the proxy, instead of the newest of ubuntu_release at the time spin_version last changed."
+  description = "A Spin OS AMI of this account for every machine, instead of the newest one tagged spin:version = spin_version. It must carry that release: a machine refuses a document of another."
   type        = string
   default     = ""
   nullable    = false
-}
-
-variable "ubuntu_release" {
-  description = "The Ubuntu release the machines boot, as YY.MM; the newest image of it Canonical publishes is used. 26.04 is the LTS with a 7.x kernel."
-  type        = string
-  default     = "26.04"
-  nullable    = false
-  validation {
-    condition     = can(regex("^[0-9]{2}\\.(04|10)$", var.ubuntu_release))
-    error_message = "ubuntu_release is a release number, e.g. 26.04."
-  }
-}
-
-variable "spin_boot_sha256" {
-  description = <<-EOT
-    The SHA-256 of spin-boot-linux-amd64 of spin_version: the one file a machine fetches before
-    anything is verified, and therefore the one thing this module has to pin. Everything after it
-    — the release's tarballs, their signatures — spin-boot checks itself against the signature
-    spin's release workflow published.
-
-    It is in that release's checksums.txt, beside the file on the release page.
-  EOT
-  type        = string
-  validation {
-    condition     = can(regex("^[0-9a-f]{64}$", var.spin_boot_sha256))
-    error_message = "spin_boot_sha256 is 64 hex digits: the SHA-256 of spin-boot-linux-amd64 of this release."
-  }
 }

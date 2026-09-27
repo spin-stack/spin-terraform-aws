@@ -39,8 +39,13 @@ output "runner_config_parameter_arn" {
 }
 
 output "runner_user_data" {
-  description = "What a runner's machine runs at its first boot: spin-boot, by its digest, over the runners' document."
+  description = "A runner's user data: its role and the runners' document, as the systemd credentials Spin OS's spin-boot takes."
   value       = local.user_data["runner"]
+}
+
+output "image" {
+  description = "The Spin OS image of the installation's release, which the runners boot too: its id and its root device."
+  value       = { id = local.image, root_device = local.root_device }
 }
 
 output "boot_log_group" {

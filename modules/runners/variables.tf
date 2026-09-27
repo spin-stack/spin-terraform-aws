@@ -13,6 +13,7 @@ variable "controlplane" {
     security_group_id           = string
     runner_config_parameter_arn = string
     runner_user_data            = string
+    image                       = object({ id = string, root_device = string })
     boot_log_policy_arn         = string
     standard_vcpus              = number
     boundary_arn                = string
@@ -116,13 +117,3 @@ variable "tags" {
   nullable    = false
 }
 
-variable "ubuntu_release" {
-  description = "The Ubuntu release the machines boot, as YY.MM; the newest image of it Canonical publishes is used. 26.04 is the LTS with a 7.x kernel."
-  type        = string
-  default     = "26.04"
-  nullable    = false
-  validation {
-    condition     = can(regex("^[0-9]{2}\\.(04|10)$", var.ubuntu_release))
-    error_message = "ubuntu_release is a release number, e.g. 26.04."
-  }
-}

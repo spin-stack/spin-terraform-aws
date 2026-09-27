@@ -4,29 +4,8 @@
 # Nothing reaches a runner - its group has no ingress - and it reaches the control plane on 8080,
 # the proxy's relay on 443 and the bucket through the gateway endpoint.
 
-# The newest of Canonical's own images of the release: owned by Canonical's account, so a
-# public image named like one is not picked up. A new one reaches hosts the group starts after
-# it is published, since the template is re-applied with it.
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"]
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-*-${var.ubuntu_release}-amd64-server-*"]
-  }
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  filter {
-    name   = "root-device-type"
-    values = ["ebs"]
-  }
-}
+# A runner boots the control plane's image: the installation's release, which is the only one a
+# runner's control plane serves (spin's CheckRelease refuses a runner of another).
 
 locals {
   name = var.controlplane.name
@@ -120,7 +99,7 @@ resource "aws_iam_instance_profile" "runner" {
 
 resource "aws_launch_template" "runner" {
   name_prefix            = "${local.name}-runner-"
-  image_id               = data.aws_ami.ubuntu.id
+  image_id               = var.controlplane.image.id
   vpc_security_group_ids = [aws_security_group.runner.id]
   update_default_version = true
 
@@ -143,7 +122,7 @@ resource "aws_launch_template" "runner" {
   }
 
   block_device_mappings {
-    device_name = "/dev/sda1"
+    device_name = var.controlplane.image.root_device
     ebs {
       volume_type           = "gp3"
       volume_size           = var.root_volume_gb
@@ -165,7 +144,7 @@ resource "aws_launch_template" "runner" {
     }
   }
 
-  # The control plane module's: spin-boot by its digest, over the runners' document.
+  # The control plane module's: the runner role and the runners' document, as credentials.
   user_data = base64encode(var.controlplane.runner_user_data)
 
   tag_specifications {
@@ -213,6 +192,21 @@ resource "aws_autoscaling_group" "runner" {
           instance_type = override.value
         }
       }
+    }
+  }
+
+  # A new release is a new image, and a runner cannot take one in place: its root is read-only,
+  # and a runner of another release than its control plane's is refused. So a change of image
+  # replaces the group's hosts, one at a time and the new one first, each old one leaving by the
+  # termination hook below - its workspaces suspended to resume on another host - rather than
+  # restarting a runner under them.
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 100
+      max_healthy_percentage = 200
+      # The grace a host has to boot and join before the group judges it.
+      instance_warmup = 600
     }
   }
 

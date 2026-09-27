@@ -10,11 +10,6 @@ provider "aws" {
   skip_metadata_api_check     = true
 }
 
-override_data {
-  target = data.aws_ami.ubuntu
-  values = { id = "ami-0123456789abcdef0" }
-}
-
 # Every type 48 vCPUs, and an account with room; the quota's runs give it a new account's 32.
 override_data {
   target = data.aws_ec2_instance_type.runner
@@ -33,7 +28,8 @@ variables {
     subnet_ids                  = ["subnet-00000000000000000"]
     security_group_id           = "sg-00000000000000000"
     runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
-    runner_user_data            = "#!/bin/sh\n# the control plane module's\nexec /usr/local/bin/spin-boot runner --config 'ssm:///spin/runner-config?region=us-east-2'\n"
+    runner_user_data            = "{\"systemd.credentials\":[{\"name\":\"spin.role\",\"text\":\"runner\"},{\"name\":\"spin.config\",\"text\":\"ssm:///spin/runner-config?region=us-east-2\"}]}"
+    image                       = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
     boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
     standard_vcpus              = 8
     boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
@@ -66,11 +62,21 @@ run "a_runner_is_reached_by_nothing" {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"
   }
-  # What a runner's machine runs is the control plane module's, as it is: spin-boot over the
+  # What a runner's machine is told is the control plane module's, as it is: its role and the
   # runners' document, which says everything else.
   assert {
     condition     = base64decode(aws_launch_template.runner.user_data) == var.controlplane.runner_user_data
-    error_message = "a runner's machine runs something other than spin-boot over its document"
+    error_message = "a runner's machine is told something other than its role and its document"
+  }
+  # And it boots the control plane's image - the installation's release, the only one its control
+  # plane serves - on that image's root device; a new one replaces the group's hosts.
+  assert {
+    condition = (
+      aws_launch_template.runner.image_id == "ami-0123456789abcdef0" &&
+      anytrue([for b in aws_launch_template.runner.block_device_mappings : b.device_name == "/dev/xvda"]) &&
+      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling"
+    )
+    error_message = "a runner boots another image than the installation's, or keeps its image across a release"
   }
 }
 
@@ -83,7 +89,8 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
       subnet_ids                  = ["subnet-00000000000000000"]
       security_group_id           = "sg-00000000000000000"
       runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
-      runner_user_data            = "#!/bin/sh\n"
+      runner_user_data            = "{}"
+      image                       = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
       boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
       standard_vcpus              = 8
       boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"

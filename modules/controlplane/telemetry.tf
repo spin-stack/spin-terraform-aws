@@ -5,23 +5,15 @@
 # anywhere. Which traces and metrics are kept is the dashboard's (Admin -> Settings -> Telemetry).
 
 variable "collector" {
-  description = "The collector: how often metrics are pushed to it, and the Alloy package installed, checked against its SHA-256."
+  description = "The collector: how often metrics are pushed to it. Which Alloy it is, is the image's."
   type = object({
     metric_interval = optional(string, "60s")
-    alloy_version   = optional(string, "1.19.2")
-    # The SHA-256 of that version's alloy-<v>-1.amd64.deb, from the release's SHA256SUMS: the
-    # package is checked against it before it is installed.
-    alloy_sha256 = optional(string, "9872732d43c6d14996e1ad5a075086a93381ea6375c8c756820da68b85422eea")
   })
   default  = {}
   nullable = false
   validation {
     condition     = can(regex("^[0-9]+s$", var.collector.metric_interval))
     error_message = "collector.metric_interval is whole seconds, e.g. 60s."
-  }
-  validation {
-    condition     = can(regex("^[0-9a-f]{64}$", var.collector.alloy_sha256))
-    error_message = "collector.alloy_sha256 is the package's SHA-256, 64 hex digits."
   }
 }
 
