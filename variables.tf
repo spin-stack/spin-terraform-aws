@@ -76,7 +76,7 @@ variable "collector" {
 }
 
 variable "installation_config" {
-  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane makes its database match it at every start."
+  description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane seeds its database from it at start, and shows a later change to it in the dashboard to apply or dismiss."
   type        = string
   default     = null
 }

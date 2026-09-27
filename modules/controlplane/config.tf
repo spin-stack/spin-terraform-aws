@@ -4,9 +4,10 @@
 # (files/boot.sh.tftpl) - and spin-boot does the rest from what the document says.
 #
 # Beside the documents, the installation's own configuration (installation.yaml, as it would be
-# kept in git): what an administrator could change once the database is open. The control plane
-# makes its database match it every time it starts, before it serves, so a change to it is an
-# apply and the next start of a control plane - not a command somebody runs on a machine.
+# kept in git): where the installation starts, which an administrator changes from the dashboard
+# once the database is open. The control plane seeds its database from it when it starts, before
+# it serves; a later change to it is an apply and the next start, and reaches the installation as
+# a change for an administrator to apply or dismiss - never written over what they decided.
 #
 # A document holds no secret. Where one is, it says where (secrets.tf): the key, the CA's key and
 # the first administrator's password are parameters of their own, and only the control plane's
@@ -199,7 +200,7 @@ resource "aws_ssm_parameter" "runner_config" {
 # alone to read; and it grows, so it is not held to a standard parameter's 4 KiB.
 resource "aws_ssm_parameter" "installation" {
   name        = local.installation_parameter
-  description = "${var.name}'s configuration, which its control plane makes its database match at every start"
+  description = "${var.name}'s configuration, which its control plane seeds its database from"
   type        = "SecureString"
   tier        = "Intelligent-Tiering"
   value       = yamlencode(local.installation)

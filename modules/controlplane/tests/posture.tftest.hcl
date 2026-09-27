@@ -417,8 +417,8 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
     )
     error_message = "a document is not what its parameter holds"
   }
-  # The installation's own configuration is read by the control plane at every start, which makes
-  # the database match it: nothing applies it by hand on a machine.
+  # The installation's own configuration is read by the control plane at every start, which seeds
+  # the database from it: nothing applies it by hand on a machine.
   assert {
     condition = (
       local.controlplane_document.installation_at == "ssm:///spin/installation?region=us-east-2" &&

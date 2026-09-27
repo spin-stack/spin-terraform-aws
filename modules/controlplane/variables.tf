@@ -170,9 +170,9 @@ variable "installation_config" {
   description = <<-EOT
     The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds
     what it knows - the domain, who joins as a host, the autoscaling settings below - and writes
-    it where the control plane reads it at every start, which makes the database match it before
-    it serves. It is then the file's one author: a second one applied from elsewhere would remove
-    what this one declares, and this one what it does.
+    it where the control plane reads it at every start, which seeds the database from it before
+    it serves. What the file later says differently is shown in the dashboard to apply or
+    dismiss, and nothing is written over what an administrator decided.
   EOT
   type        = string
   default     = ""
