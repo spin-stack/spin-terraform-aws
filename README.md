@@ -173,11 +173,12 @@ What is left is the database's final snapshot. Install the next one under anothe
   role and the policy its machines start under (`runner_policy`: a spot reclaim announced by
   AWS and 100 seconds to empty itself). There is no token to mint, rotate or publish, and the
   runners' role reads its own document and nothing else.
-- **A runner installs its control plane's release**, asked of the control plane once it has
-  joined, not one this module is given: while an update replaces the control plane - or after
-  one is abandoned - a runner of the new release would be refused by the old. A `spin-boot` of
-  another release than the control plane's fetches that release's `spin-boot`, checked the same
-  way, and hands over to it.
+- **A runner runs its image's release**, and nothing else: its machine fetches nothing and hands
+  over to no other `spin-boot`. Whether the control plane serves a runner of that release is the
+  control plane's to say when the runner registers (spin's `internal/controlplane/compat`: a
+  host no older than the compatibility window, and none newer than itself), so while an update
+  replaces the control plane - or after one is abandoned - the old one may go on serving the
+  runners it can. A runner of another release is a runner of another image.
 - **No NAT gateway, no interface endpoints.** Every machine has a public address in a public
   subnet, and the bucket is reached through the S3 gateway endpoint, which is free. A NAT is
   $32 a month and a charge per GB before a workspace runs; an interface endpoint is $7 a
@@ -216,8 +217,9 @@ What is left is the database's final snapshot. Install the next one under anothe
   the certificates the last one had from their own bucket (versioned, no Object Lock), starts
   Caddy, and once Caddy answers points `proxy.` at itself and takes the elastic IP; its watch
   saves what Caddy issues every five minutes, following no link out of Caddy's directory. What
-  is lost is seconds of API and open connections, never a workspace. Canonical publishing a
-  newer image is such a change too: an apply after it rolls both machines onto it. A change to a
+  is lost is seconds of API and open connections, never a workspace. The image is the release's
+  Spin OS, found by its `spin:version` tag, so it moves only with `spin_version` (or `image_id`,
+  which names one outright): an image rebuilt under the same tag is not picked up. A change to a
   document alone reaches a machine when it next starts: `aws autoscaling
   start-instance-refresh` on its group.
 - **The proxy has subnets of its own**, and the control plane takes a browser's address only

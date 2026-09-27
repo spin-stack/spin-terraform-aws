@@ -92,3 +92,18 @@ output "next_steps" {
   description = "DNS, the first sign-in, and how to reach a machine: tofu output -raw next_steps"
   value       = module.spin.next_steps
 }
+
+output "name_servers" {
+  description = "What the domain's registrar points at."
+  value       = module.spin.name_servers
+}
+
+output "update_status" {
+  description = "After an apply that replaced a machine: how the replacement went (README, Updating)."
+  value       = module.spin.update_status
+}
+
+output "boot_log" {
+  description = "What every machine's boot said, including the ones that are gone."
+  value       = module.spin.boot_log
+}
