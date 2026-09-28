@@ -90,8 +90,12 @@ jobs:
           git commit -q -a -m "${title}" \
             -m "spin-stack/spin-terraform-aws at ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}, whose images.json has ${release} in ${REGION}. Read the plan before merging."
           git push -q --force origin "${branch}"
-          # Everything named, nothing inferred from the shallow clone.
-          if [ -z "$(gh pr list -R "${REPOSITORY}" --head "${branch}" --state open --json number --jq '.[].number')" ]; then
-            gh pr create -R "${REPOSITORY}" --head "${branch}" --base main --title "${title}" \
-              --body "Moves the installation to spin-stack/spin-terraform-aws at ${GITHUB_SHA} and spin ${release}, the newest release with an image in ${REGION}. Read the plan before merging; merging changes nothing until the apply is run."
+          # Everything named, nothing inferred from the shallow clone. A pull request open already
+          # was just rewritten: its title and body say what it holds now.
+          body="Moves the installation to spin-stack/spin-terraform-aws at ${ref} (${GITHUB_SHA}) and spin ${release}, the newest release with an image in ${REGION}. Read the plan before merging; merging changes nothing until the apply is run."
+          open=$(gh pr list -R "${REPOSITORY}" --head "${branch}" --state open --json number --jq '.[0].number // empty')
+          if [ -z "${open}" ]; then
+            gh pr create -R "${REPOSITORY}" --head "${branch}" --base main --title "${title}" --body "${body}"
+          else
+            gh pr edit "${open}" -R "${REPOSITORY}" --title "${title}" --body "${body}"
           fi
