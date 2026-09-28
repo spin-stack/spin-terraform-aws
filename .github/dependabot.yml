@@ -1,0 +1,49 @@
+# Every change to this file - a comment's too - starts a run of every ecosystem below, whatever
+# the schedule says: change it rarely. Each runs Monday morning, a week after a release
+# (cooldown), and rebase-strategy is disabled so a pull request is not remade each time main
+# moves: main's ruleset merges a branch only up to date with it, and "Update branch" or
+# `@dependabot rebase` brings one up when it is merged.
+#
+# The actions the workflows run, each by its commit, and the providers each root and module
+# locks. What an installation runs - spin's release, its image - is the deployment's, proposed by
+# propose.yml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Argentina/Buenos_Aires
+    rebase-strategy: disabled
+    # A release a week old has had a week for anybody to find it was not what it said.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: terraform
+    directories:
+      - /
+      - /bootstrap
+      - /modules/controlplane
+      - /modules/runners
+      - /examples/complete
+      - /examples/minimal
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Argentina/Buenos_Aires
+    rebase-strategy: disabled
+    cooldown:
+      default-days: 7
+    groups:
+      providers:
+        patterns: ["*"]
+    commit-message:
+      prefix: providers
