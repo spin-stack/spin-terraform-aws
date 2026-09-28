@@ -9,13 +9,19 @@
 # installation's key before it leaves the machine, so SSE-S3 is the second wrapping, as it is on
 # the volumes.
 #
-# Versioned, so a delete or an overwrite - by a machine that was taken, or a prune gone wrong - is
-# a version kept for two weeks rather than a database lost. No force_destroy: a destroy that took
-# the archive with it would take the database.
+# Versioned and under Object Lock, as spin opens every store it writes (its NewS3Store refuses a
+# bucket without both): a delete or an overwrite - by a machine that was taken, or a prune gone
+# wrong - is a version the lock holds for two weeks rather than a database lost. No force_destroy:
+# a destroy that took the archive with it would take the database.
+
+locals {
+  database_lock_days = 14
+}
 
 resource "aws_s3_bucket" "database" {
-  bucket = "${var.name}-database-${local.account}-${local.region}"
-  tags   = local.tags
+  bucket              = "${var.name}-database-${local.account}-${local.region}"
+  object_lock_enabled = true
+  tags                = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "database" {
@@ -23,6 +29,19 @@ resource "aws_s3_bucket_versioning" "database" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_object_lock_configuration" "database" {
+  bucket = aws_s3_bucket.database.id
+  rule {
+    default_retention {
+      # GOVERNANCE, as the volumes': COMPLIANCE is a bill nobody can stop, the account's root
+      # included.
+      mode = "GOVERNANCE"
+      days = local.database_lock_days
+    }
+  }
+  depends_on = [aws_s3_bucket_versioning.database]
 }
 
 resource "aws_s3_bucket_public_access_block" "database" {
@@ -49,8 +68,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "database" {
   }
 }
 
-# What a delete or an overwrite left behind lasts two weeks, then goes: the archive the database
-# restores from is the current versions, and a noncurrent one is only there to undo a mistake.
+# What a delete or an overwrite left behind goes a day after the lock that holds it lapses, as on
+# the volumes' bucket: asking before would read as an erasure and perform none. The archive the
+# database restores from is the current versions; a noncurrent one is only there to undo a mistake.
 resource "aws_s3_bucket_lifecycle_configuration" "database" {
   bucket = aws_s3_bucket.database.id
   rule {
@@ -66,7 +86,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "database" {
     status = "Enabled"
     filter {}
     noncurrent_version_expiration {
-      noncurrent_days = 14
+      noncurrent_days = local.database_lock_days + 1
     }
     expiration {
       expired_object_delete_marker = true

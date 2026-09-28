@@ -108,9 +108,10 @@ data "aws_iam_policy_document" "controlplane" {
   # The database's archive: the base backups and the WAL it ships, the restore that reads them
   # back, and the prune of what a newer base backup made unneeded. No version is read or deleted:
   # what a delete leaves is the bucket's to expire (database_bucket.tf), not this role's to erase.
+  # Its versioning and its lock are read, never written: spin opens no store without both.
   statement {
     sid       = "TheDatabasesArchive"
-    actions   = ["s3:ListBucket"]
+    actions   = ["s3:ListBucket", "s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration"]
     resources = [aws_s3_bucket.database.arn]
   }
   statement {

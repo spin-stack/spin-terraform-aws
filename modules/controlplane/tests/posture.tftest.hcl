@@ -754,11 +754,23 @@ run "the_databases_archive" {
       aws_s3_bucket_versioning.database.versioning_configuration[0].status == "Enabled" &&
       aws_s3_bucket.database.force_destroy != true &&
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
-      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 14])]) &&
+      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 15])]) &&
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
       length(r.abort_incomplete_multipart_upload) > 0])
     )
     error_message = "a delete in the archive cannot be undone, a destroy empties it, or what it replaced is kept for ever"
+  }
+  # spin opens no store that is not versioned under a lock with a default retention; the lifecycle
+  # asks for a replaced version only once the lock has let it go.
+  assert {
+    condition = (
+      aws_s3_bucket.database.object_lock_enabled &&
+      aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].mode == "GOVERNANCE" &&
+      aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].days == 14 &&
+      alltrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : alltrue([for n in r.noncurrent_version_expiration :
+      n.noncurrent_days > aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].days])])
+    )
+    error_message = "the archive is not under a GOVERNANCE lock of two weeks, or its lifecycle expires what the lock still holds"
   }
   assert {
     condition = alltrue([
@@ -776,12 +788,14 @@ run "the_databases_archive" {
     s.effect == "Deny" && anytrue([for c in s.condition : c.variable == "aws:SecureTransport"])])
     error_message = "the archive's objects are reached from outside the VPC's endpoint, or without TLS"
   }
-  # The control plane reads, writes and deletes what it ships, and lists it; no version of it.
+  # The control plane reads, writes and deletes what it ships, lists it, and reads its versioning
+  # and its lock; no version of it, and nothing of its configuration to write.
   assert {
     condition = toset(flatten([for s in data.aws_iam_policy_document.controlplane.statement : s.actions if s.effect != "Deny" && anytrue([for r in s.resources : startswith(r, "arn:aws:s3:::spin-database-")])])) == toset([
-      "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+      "s3:ListBucket", "s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration",
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
     ])
-    error_message = "the control plane is given more of its database's archive than reading, writing and deleting what it ships"
+    error_message = "the control plane is given more or less of its database's archive than spin opens it with and ships to it"
   }
   # Whatever any other role is given later, the boundary refuses it the archive; and no role
   # erases a version of it.

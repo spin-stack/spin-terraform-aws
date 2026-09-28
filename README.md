@@ -143,14 +143,14 @@ aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file
 tofu destroy
 ```
 
-It stops at the database's archive too, which a destroy does not empty: it is the database. Once
-nothing is to be restored from it, delete every version in it the same way, without the holds or
-the bypass, and destroy again:
+It stops at the database's archive too, which a destroy does not empty: it is the database, and
+under a lock of fourteen days. Once nothing is to be restored from it, delete every version in it
+the same way, bypassing the retention (there are no holds), and destroy again:
 
 ```bash
 B=<name>-database-<account>-<region>
 aws s3api list-object-versions --bucket $B --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}}' --output json > /tmp/v.json
-aws s3api delete-objects --bucket $B --delete file:///tmp/v.json
+aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file:///tmp/v.json
 tofu destroy
 ```
 
@@ -297,9 +297,10 @@ tofu destroy
   ships a base backup and every WAL segment as it is written to a bucket of its own,
   `<name>-database-<account>-<region>` (the `database_bucket` output), sealed under the
   installation's key before it leaves the machine; the machine that replaces it restores from
-  there before it serves. The bucket is versioned, and what a delete or an overwrite left is kept
-  fourteen days. Only the control plane's role reaches it - list, read, write and delete, and no
-  version - and the boundary refuses it to every other role and refuses every role the erasing of
+  there before it serves. The bucket is versioned under a GOVERNANCE Object Lock of fourteen
+  days, as spin requires of every store it opens, and what a delete or an overwrite left goes a
+  day after the lock lets it. Only the control plane's role reaches it - list, read, write and
+  delete, read its versioning and its lock, and no version - and the boundary refuses it to every other role and refuses every role the erasing of
   a version. It is never the volumes' bucket, whose credentials hosts hold, and where it is is in
   the control plane's document, since the database cannot say where its own backup is.
 - **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.medium` by default:

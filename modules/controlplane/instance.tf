@@ -184,7 +184,7 @@ resource "aws_autoscaling_group" "controlplane" {
     aws_s3_bucket_object_lock_configuration.volumes,
     # The database's archive, which the first boot starts and every later one restores from.
     aws_s3_bucket_policy.database,
-    aws_s3_bucket_versioning.database,
+    aws_s3_bucket_object_lock_configuration.database,
     aws_iam_role_policy.controlplane,
     aws_iam_role_policy.runner_scope,
     aws_route.internet,
