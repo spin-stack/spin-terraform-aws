@@ -12,7 +12,7 @@
 #
 # As the release app (spin-stack-release), so the deployment's plan runs on the pull request: one
 # opened with this run's own token would start none, and could not reach another repository.
-name: propose
+name: Propose
 # What shipset looks the run up by: one deployment and one module - a release's tag, or a commit.
 run-name: propose ${{ inputs.repository }} ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
 

@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint and test
+  # The check main's ruleset requires, named Gate in every spin-stack repository: lint and test.
+  gate:
+    name: Gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
