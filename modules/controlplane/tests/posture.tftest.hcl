@@ -936,7 +936,9 @@ run "the_machines_boot_the_releases_image" {
   }
 
   assert {
-    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "image-id" && f.values == toset(["ami-0f3eb68837a742631"])])
+    # Whatever id images.json holds for it - a pull request that publishes the release again
+    # changes that, and nothing here should have to follow.
+    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "image-id" && f.values == toset([jsondecode(file("${path.module}/../../images.json"))["v20260928.02"]["us-west-2"]])])
     error_message = "the image is not the one images.json names for the release in its region"
   }
   assert {
