@@ -95,12 +95,18 @@ tofu plan     # the image, the launch templates and the documents change, and no
 tofu apply
 ```
 
+This repository has releases of its own, `v<YYYYMMDD>.<N>` tags a person cuts
+(`gh release create`): an installation that pins one (`?ref=v20260929.01`) gets an update when
+somebody decides this module - its shapes and the images its `images.json` has - is ready for it,
+not when main moves. main is what spin-stack's own installation, spinbox.dev, runs first.
+
 For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
 of it is a workflow run, with its log: spin-stack/shipset, which coordinates them, dispatches
 spin-stack/ami's release workflow for each spin release, which builds and publishes its image and
 opens the pull request that adds it to `images.json` here; shipset merges that once its checks
-pass, and dispatches `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names,
-which opens - or rewrites - the pull request there that moves both. A person merges that, and
+pass, and dispatches `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names -
+on main for one that follows main, on the newest release's tag for one that follows the releases -
+which opens, or rewrites, the pull request there that moves both. A person merges that, and
 applies.
 
 The control plane and the proxy are each replaced beside themselves, and the old one serves until

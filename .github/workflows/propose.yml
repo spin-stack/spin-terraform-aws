@@ -1,17 +1,20 @@
-# What main is now, proposed to one installation made from it: a pull request in its deployment
-# repository that moves the module's ref to this commit and spin_version to the newest release
-# images.json has an image of in the installation's region - one pull request per deployment, on
-# a branch each run rewrites, so what waits there is always the newest. A person reads its plan,
-# merges it and applies; nothing here reaches an installation.
+# The module as it is at the ref this runs on - main, or a release's tag - proposed to one
+# installation made from it: a pull request in its deployment repository that moves the module's
+# ref to it (the commit, or the tag) and spin_version to the newest release images.json has an
+# image of there in the installation's region - one pull request per deployment, on a branch each
+# run rewrites, so what waits there is always the newest. A person reads its plan, merges it and
+# applies; nothing here reaches an installation.
 #
 # spin-stack/shipset, which coordinates a release's steps, dispatches this for each deployment its
-# shipset.yaml names that does not run main, and finds the run again by its name.
+# shipset.yaml names: on main for one that follows main (spinbox.dev, which dogfoods), on the
+# newest release's tag for one that follows the releases a person cuts here. It finds the run
+# again by its name.
 #
 # As the release app (spin-stack-release), so the deployment's plan runs on the pull request: one
 # opened with this run's own token would start none, and could not reach another repository.
 name: propose
-# What shipset looks the run up by: one deployment and one commit, one name.
-run-name: propose ${{ inputs.repository }} ${{ github.sha }}
+# What shipset looks the run up by: one deployment and one module - a release's tag, or a commit.
+run-name: propose ${{ inputs.repository }} ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
 
 on:
   workflow_dispatch:
@@ -57,7 +60,9 @@ jobs:
           REGION: ${{ inputs.region }}
         run: |
           set -euo pipefail
-          sha="${GITHUB_SHA::7}"
+          # The ref the deployment names: a release's tag, which is what its users follow, or the
+          # commit on main.
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then ref="${GITHUB_REF_NAME}"; else ref="${GITHUB_SHA::7}"; fi
           # The newest release with an image in the region: releases are v<YYYYMMDD>.<NN>, which
           # sort as text.
           release=$(jq -r --arg r "${REGION}" '[to_entries[] | select(.value[$r]) | .key] | sort | last // empty' images.json)
@@ -72,15 +77,15 @@ jobs:
 
           gh repo clone "${REPOSITORY}" deployment -- --quiet --depth 1
           cd deployment
-          sed -i -E "s|(github.com/spin-stack/spin-terraform-aws\?ref=)[0-9a-f]+|\1${sha}|" main.tf
+          sed -i -E "s|(github.com/spin-stack/spin-terraform-aws\?ref=)[^\"]+|\1${ref}|" main.tf
           sed -i -E "s|^(spin_version *= *)\"[^\"]*\"|\1\"${release}\"|" terraform.tfvars
           if git diff --quiet; then
-            echo "${REPOSITORY} is at ${sha} and ${release} already"; exit 0
+            echo "${REPOSITORY} is at ${ref} and ${release} already"; exit 0
           fi
 
           # One branch per deployment, rewritten by each run: the pull request on it is the newest.
           branch=spin-terraform-aws/next
-          title="module ${sha}, spin ${release}"
+          title="module ${ref}, spin ${release}"
           git checkout -q -b "${branch}"
           git commit -q -a -m "${title}" \
             -m "spin-stack/spin-terraform-aws at ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}, whose images.json has ${release} in ${REGION}. Read the plan before merging."
