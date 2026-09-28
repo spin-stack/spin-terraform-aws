@@ -71,7 +71,7 @@ resource "aws_iam_role" "github" {
 }
 
 # Plans read the account and open the state; an apply may do anything an installation makes -
-# roles, a network, a database - which is most of an account.
+# roles, a network, buckets - which is most of an account.
 resource "aws_iam_role_policy_attachment" "github" {
   for_each   = aws_iam_role.github
   role       = each.value.name

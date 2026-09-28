@@ -18,7 +18,6 @@ module "controlplane" {
   proxy_allowed_cidrs = var.proxy_allowed_cidrs
   instance_type       = var.instance_type
   proxy_instance_type = var.proxy_instance_type
-  database            = var.database
   collector           = var.collector
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes

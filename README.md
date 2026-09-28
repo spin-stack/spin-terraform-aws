@@ -19,7 +19,7 @@ The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
 not expose what an installation needs to decide:
 
-- **`modules/controlplane`** - the VPC, the bucket, the database on RDS, the control plane's
+- **`modules/controlplane`** - the VPC, the buckets, the database's archive, the control plane's
   machine, the proxy's on its own, the installation's CA and secrets, and the document each
   machine starts on.
 - **`modules/runners`** - an autoscaling group of runners that join by themselves, spot by
@@ -96,8 +96,8 @@ up. A change to anything else a machine starts on - `installation_config`, the a
 settings - rolls out the same way.
 
 A release older than the one that last started the database refuses to start on it: going back
-past a change to the schema is a restore of the database to a point before it (RDS's point in
-time recovery), not an update.
+past a change to the schema is a restore of the database from its archive to a point before it,
+not an update.
 
 ## Operating it
 
@@ -122,7 +122,6 @@ The encryption key and the CA refuse to be destroyed, because an apply that repl
 leave an installation nothing can open. To remove one on purpose:
 
 ```bash
-tofu apply -var 'database={deletion_protection=false}'
 tofu state rm module.spin.module.controlplane.aws_ssm_parameter.encryption_key \
   module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
 tofu destroy
@@ -144,7 +143,16 @@ aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file
 tofu destroy
 ```
 
-What is left is the database's final snapshot. Install the next one under another `name`.
+It stops at the database's archive too, which a destroy does not empty: it is the database. Once
+nothing is to be restored from it, delete every version in it the same way, without the holds or
+the bypass, and destroy again:
+
+```bash
+B=<name>-database-<account>-<region>
+aws s3api list-object-versions --bucket $B --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}}' --output json > /tmp/v.json
+aws s3api delete-objects --bucket $B --delete file:///tmp/v.json
+tofu destroy
+```
 
 ## What it decides, and why
 
@@ -153,7 +161,7 @@ What is left is the database's final snapshot. Install the next one under anothe
   which spin laid what its `release.yml` signed, checked against the signature when the image was
   built. A machine fetches nothing. Its user data is two systemd credentials - its role and the
   SSM parameter its document is in - which systemd-imds imports and nothing runs. Everything else -
-  the database, the name it takes, the collector - is in that document, and every step is
+  where the database's archive is, the name it takes, the collector - is in that document, and every step is
   `spin-boot`'s, in Go with tests (spin's `internal/installation/boot`); a document naming another
   release than the image's is refused. Nothing is a container: each role is a binary under systemd,
   as its own user.
@@ -228,7 +236,8 @@ What is left is the database's final snapshot. Install the next one under anothe
 - **No role can make itself more.** Every role both modules create carries one permissions
   boundary: none may write IAM or pass a role, assume any role but the runner scope, touch the
   VPC's network or a security group, write a parameter, run commands on another machine through
-  SSM, or lift the bucket's lock or the logs. A policy attached later, by mistake or from a
+  SSM, or lift the bucket's lock or the logs; and none but the control plane's reaches the
+  database's archive. A policy attached later, by mistake or from a
   machine that was taken, cannot grant past it.
 - **The control plane's secrets are its role's alone.** Session Manager is given as a policy of
   this module's - the agent's registration and its channels - and not AWS's
@@ -281,18 +290,21 @@ What is left is the database's final snapshot. Install the next one under anothe
   runner reads the lifecycle state from the metadata service and suspends its workspaces to
   the bucket, where they resume on the next host. A spot reclaim is the same with a two-minute
   notice, and capacity rebalancing starts the replacement first.
-- **The database is RDS, and the control plane's machine holds nothing it cannot get back.**
-  PostgreSQL 18 on `db.t4g.micro` (`database`), in subnets of its own with no route out of the
-  VPC, taking 5432 from the control plane's group alone, with a week of point in time recovery
-  that outlives a deleted instance, a final snapshot, and deletion protection: these are the
-  database's only backups, and the control plane writes no copy of its rows into the bucket. No
-  password of it is anywhere Terraform writes: the master's is RDS's, in Secrets Manager, read
-  once by the first boot to make the role `spin`, which signs in with an IAM token the machine's
-  role signs and owns the database.
-- **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.small` by default:
-  with the database on RDS, the control plane's machine holds the control plane, Alloy and the
-  store of logs and traces it runs (Quickwit), and the store is what needs the second gigabyte.
-  Two of them and the database are the whole standing cost when no runner is up.
+- **The database is the control plane's, on its machine, and outlives it through its archive.**
+  No managed database: PostgreSQL runs beside the control plane from binaries the release
+  carries, and nothing else opens it, so there is no port of it in any security group and no
+  password of it anywhere. Every release replaces that machine and its disk, so the control plane
+  ships a base backup and every WAL segment as it is written to a bucket of its own,
+  `<name>-database-<account>-<region>` (the `database_bucket` output), sealed under the
+  installation's key before it leaves the machine; the machine that replaces it restores from
+  there before it serves. The bucket is versioned, and what a delete or an overwrite left is kept
+  fourteen days. Only the control plane's role reaches it - list, read, write and delete, and no
+  version - and the boundary refuses it to every other role and refuses every role the erasing of
+  a version. It is never the volumes' bucket, whose credentials hosts hold, and where it is is in
+  the control plane's document, since the database cannot say where its own backup is.
+- **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.medium` by default:
+  the control plane's machine holds the control plane, its database, Alloy and the stores of logs,
+  traces and metrics it runs. Two of them are the whole standing cost when no runner is up.
 
 Hosts outside the group are still added the ordinary way - a one-time token from Admin → Hosts
 and `spin-install runner` - and are policed by the same control plane.

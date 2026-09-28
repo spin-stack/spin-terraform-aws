@@ -105,6 +105,19 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListBucket", "s3:GetBucketLocation"]
     resources = [aws_s3_bucket.logs.arn, "${aws_s3_bucket.logs.arn}/*"]
   }
+  # The database's archive: the base backups and the WAL it ships, the restore that reads them
+  # back, and the prune of what a newer base backup made unneeded. No version is read or deleted:
+  # what a delete leaves is the bucket's to expire (database_bucket.tf), not this role's to erase.
+  statement {
+    sid       = "TheDatabasesArchive"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.database.arn]
+  }
+  statement {
+    sid       = "TheDatabasesArchiveObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.database.arn}/*"]
+  }
   # The runners' group, which the runners module names ${name}-runners: the control plane
   # starts a host when a workspace waits for one and empties the group when nothing runs.
   # Describe has no resource-level permission; the resize is held to that one group.
@@ -131,12 +144,6 @@ data "aws_iam_policy_document" "controlplane" {
     resources = [for p in [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter] :
     "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
   }
-  # The database, as spin and as nobody else: an IAM token for that one database user.
-  statement {
-    sid       = "SignInToTheDatabase"
-    actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${local.region}:${local.account}:dbuser:${aws_db_instance.database.resource_id}/spin"]
-  }
   # Its own name in the internal zone, and nothing else there: what a new machine takes when it
   # takes the installation over.
   statement {
@@ -155,13 +162,6 @@ data "aws_iam_policy_document" "controlplane" {
     actions = ["autoscaling:CompleteLifecycleAction", "autoscaling:RecordLifecycleActionHeartbeat",
     "autoscaling:SetInstanceHealth"]
     resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.controlplane_group}"]
-  }
-  # The master's password, which the first boot uses to make that user. RDS keeps it and the
-  # machine reads it; nothing else of Secrets Manager.
-  statement {
-    sid       = "MakeTheDatabasesUser"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.database.master_user_secret[0].secret_arn]
   }
 }
 

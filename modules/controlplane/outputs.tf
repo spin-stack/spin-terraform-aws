@@ -107,6 +107,11 @@ output "bucket" {
   value = aws_s3_bucket.volumes.bucket
 }
 
+output "database_bucket" {
+  description = "The database's archive: the base backups and WAL the control plane ships as it writes, and restores from when its machine is replaced. Its role alone reaches it."
+  value       = aws_s3_bucket.database.bucket
+}
+
 output "controlplane_group" {
   description = "The control plane's group of one. `aws autoscaling start-instance-refresh --auto-scaling-group-name <this>` replaces its machine beside itself; its machine is reached with `aws ssm start-session`, as the proxy's is."
   value       = aws_autoscaling_group.controlplane.name

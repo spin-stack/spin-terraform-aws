@@ -1,6 +1,7 @@
-# One machine that holds nothing the installation cannot lose. The database is RDS (rds.tf), and
-# the key and the CA are in SSM (secrets.tf): a replaced instance reads its document, installs the
-# same release and serves the same database.
+# One machine that holds nothing the installation cannot lose. The database runs on it and is
+# archived as it is written to a bucket of its own (database_bucket.tf), and the key and the CA are
+# in SSM (secrets.tf): a replaced instance reads its document, restores the database from the
+# archive and serves it.
 
 # Spin OS of this installation's release (spin-stack/ami): the image is the release - a machine of
 # it runs that release and no other, from a root it cannot write - so the release names the image,
@@ -181,10 +182,12 @@ resource "aws_autoscaling_group" "controlplane" {
     # the bucket answers only through the endpoint.
     aws_s3_bucket_policy.volumes,
     aws_s3_bucket_object_lock_configuration.volumes,
+    # The database's archive, which the first boot starts and every later one restores from.
+    aws_s3_bucket_policy.database,
+    aws_s3_bucket_versioning.database,
     aws_iam_role_policy.controlplane,
     aws_iam_role_policy.runner_scope,
     aws_route.internet,
     aws_vpc_endpoint.s3,
-    aws_vpc_security_group_egress_rule.controlplane_to_database,
   ]
 }

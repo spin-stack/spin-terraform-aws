@@ -42,7 +42,7 @@ variable "proxy_allowed_cidrs" {
 }
 
 variable "instance_type" {
-  description = "The control plane's machine; modules/controlplane's default is t8i.small."
+  description = "The control plane's machine; modules/controlplane's default is t8i.medium."
   type        = string
   default     = null
 }
@@ -50,12 +50,6 @@ variable "instance_type" {
 variable "proxy_instance_type" {
   description = "The proxy's machine; modules/controlplane's default is t8i.micro."
   type        = string
-  default     = null
-}
-
-variable "database" {
-  description = "The database's RDS instance, as modules/controlplane's database object: engine_version, instance_class, storage_gb, max_storage_gb, multi_az, backup_retention_days, deletion_protection, apply_immediately, insights."
-  type        = any
   default     = null
 }
 

@@ -115,12 +115,29 @@ data "aws_iam_policy_document" "boundary" {
       "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning",
       "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
       "cloudtrail:*", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "ec2:DeleteFlowLogs",
-      # The database, and what would bring it back: a taken machine signs in to it as
-      # the control plane does, and no further.
-      "rds:Delete*", "rds:Modify*", "rds:Reboot*", "rds:Stop*", "rds:RestoreDB*", "rds:CopyDBSnapshot",
-      "rds:ModifyDBSnapshotAttribute",
     ]
     resources = ["*"]
+  }
+  # The database's archive is the database: whoever writes it decides what a restore brings back,
+  # who administers the installation among it. The control plane's role alone reaches it.
+  statement {
+    sid       = "TheDatabasesArchiveIsTheControlPlanes"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.database.arn, "${aws_s3_bucket.database.arn}/*"]
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.controlplane_role_arn]
+    }
+  }
+  # And not even it erases a version: what a delete or an overwrite left is there to undo it until
+  # the bucket's lifecycle expires it, whatever policy the role is given later.
+  statement {
+    sid       = "NoVersionOfTheArchiveErased"
+    effect    = "Deny"
+    actions   = ["s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.database.arn}/*"]
   }
 }
 

@@ -58,41 +58,15 @@ variable "availability_zones" {
   nullable    = false
   validation {
     condition     = var.availability_zones >= 2 && var.availability_zones <= 8
-    error_message = "availability_zones is 2 to 8: RDS takes a subnet in two zones at least, and the VPC's range has room for eight."
+    error_message = "availability_zones is 2 to 8: a spot group needs a second zone to go to when one runs out, and the VPC's range has room for eight."
   }
 }
 
 variable "instance_type" {
-  description = "The control plane's machine: the control plane, the collector, and the store of logs and traces it runs (Quickwit). Its database is RDS; the store is what sizes it."
+  description = "The control plane's machine: the control plane, its database (PostgreSQL), the collector, and the stores of logs, traces and metrics it runs."
   type        = string
-  default     = "t8i.small"
+  default     = "t8i.medium"
   nullable    = false
-}
-
-variable "database" {
-  description = <<-EOT
-    The database's RDS instance. db.t4g.micro and 20 GB are the free tier's where the account has
-    one; the database is rows about workspaces and volumes, not their data, which is the bucket's.
-    deletion_protection keeps a destroy from taking it: turn it off, apply, then destroy.
-    apply_immediately makes a change to the instance - its class, its version - during the apply
-    that asks for it, a minute or two of the database restarting; false leaves it for RDS's
-    maintenance window.
-    insights keeps seven days of Performance Insights: which statements take the time, and what
-    they wait on.
-  EOT
-  type = object({
-    engine_version        = optional(string, "18")
-    instance_class        = optional(string, "db.t4g.micro")
-    storage_gb            = optional(number, 20)
-    max_storage_gb        = optional(number, 100)
-    multi_az              = optional(bool, false)
-    backup_retention_days = optional(number, 7)
-    deletion_protection   = optional(bool, true)
-    apply_immediately     = optional(bool, true)
-    insights              = optional(bool, true)
-  })
-  default  = {}
-  nullable = false
 }
 
 variable "admin_email" {

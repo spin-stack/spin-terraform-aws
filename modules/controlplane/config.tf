@@ -49,11 +49,13 @@ locals {
   controlplane_document = {
     # The platform (spin's internal/provider): hosts join by who they are, with their IAM role.
     provider = "aws"
+    # The database is on this machine; what outlives the machine is its archive, which the
+    # database cannot name for itself. No endpoint: AWS's S3, through the VPC's endpoint.
     database = {
-      url = local.database_url
-      # An RDS token signed per connection by this machine's role: the database has no password
-      # to keep anywhere.
-      auth = "aws-iam"
+      archive = {
+        bucket = aws_s3_bucket.database.bucket
+        region = local.region
+      }
     }
     encryption_key_at = local.ssm.key
     # The names its certificate must cover, and the CA it issues it under.
@@ -81,12 +83,6 @@ locals {
           name      = local.cp_host
           ttl       = local.internal_record_ttl
         }
-      }
-      # The role the control plane signs in as, made by RDS's master user, whose password RDS
-      # keeps in Secrets Manager: read once by the first boot, never by the control plane.
-      database_admin = {
-        user   = aws_db_instance.database.username
-        secret = aws_db_instance.database.master_user_secret[0].secret_arn
       }
       # The collector, which is the image's Alloy: where it sends is the installation's, set in the
       # dashboard (telemetry.tf).

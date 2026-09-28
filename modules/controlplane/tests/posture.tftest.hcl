@@ -59,14 +59,20 @@ override_resource {
   values = { arn = "arn:aws:iam::123456789012:role/spin-runner-scope" }
 }
 
+# The buckets' ARNs, so what each role is given of which bucket can be read at plan.
 override_resource {
-  target = aws_db_instance.database
-  values = {
-    address            = "spin-catalog.c1a2b3c4d5e6.us-east-2.rds.amazonaws.com"
-    port               = 5432
-    resource_id        = "db-ABCDEFGHIJKLMNOP"
-    master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc", kms_key_id = "", secret_status = "active" }]
-  }
+  target = aws_s3_bucket.database
+  values = { arn = "arn:aws:s3:::spin-database-123456789012-us-east-2" }
+}
+
+override_resource {
+  target = aws_s3_bucket.volumes
+  values = { arn = "arn:aws:s3:::spin-volumes-123456789012-us-east-2" }
+}
+
+override_resource {
+  target = aws_s3_bucket.logs
+  values = { arn = "arn:aws:s3:::spin-logs-123456789012-us-east-2" }
 }
 
 # What the machines' user data names, known here so it can be read at plan.
@@ -163,7 +169,7 @@ run "the_machines" {
   }
   assert {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
-    t.block_device_mappings[0].ebs[0].encrypted == "true"]) && aws_db_instance.database.storage_encrypted
+    t.block_device_mappings[0].ebs[0].encrypted == "true"])
     error_message = "a disk is not encrypted"
   }
   # The proxy in subnets of its own, which are what the control plane trusts a browser's
@@ -171,7 +177,7 @@ run "the_machines" {
   # installation's configuration rather than installed on the machine, so the day this edge
   # changes is an apply.
   assert {
-    condition     = length(setintersection(toset(aws_subnet.edge[*].cidr_block), toset(concat(aws_subnet.public[*].cidr_block, aws_subnet.database[*].cidr_block)))) == 0
+    condition     = length(setintersection(toset(aws_subnet.edge[*].cidr_block), toset(aws_subnet.public[*].cidr_block))) == 0
     error_message = "the proxy's subnets are not its own"
   }
   assert {
@@ -397,8 +403,7 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
 
   assert {
     condition = (
-      local.controlplane_document.database.auth == "aws-iam" &&
-      !can(regex("password", local.controlplane_document.database.url)) &&
+      local.controlplane_document.database == { archive = { bucket = "spin-database-123456789012-us-east-2", region = "us-east-2" } } &&
       local.controlplane_document.production &&
       local.controlplane_document.tls.extra_sans == ["cp.spin.internal"]
     )
@@ -727,46 +732,77 @@ run "the_collector" {
   }
 }
 
-# The database is RDS where only the control plane reaches it, and no password of it is in the
-# plan: the master's is RDS's own in Secrets Manager, and the control plane signs in with a token.
-run "the_database" {
+# The database is on the control plane's machine, and outlives it through its archive: a bucket of
+# its own, versioned, which the control plane's role alone reaches - the volumes' bucket, whose
+# credentials hosts hold, never.
+run "the_databases_archive" {
   command = plan
 
   assert {
-    condition     = !aws_db_instance.database.publicly_accessible && aws_db_instance.database.manage_master_user_password && aws_db_instance.database.iam_database_authentication_enabled && aws_db_instance.database.password == null
-    error_message = "the database is reachable from outside, or has a password this plan knows"
+    condition = (
+      aws_s3_bucket.database.bucket == "spin-database-123456789012-us-east-2" &&
+      aws_s3_bucket.database.bucket != aws_s3_bucket.volumes.bucket &&
+      aws_s3_bucket.database.bucket != aws_s3_bucket.logs.bucket &&
+      local.controlplane_document.database.archive.bucket == aws_s3_bucket.database.bucket &&
+      local.controlplane_document.database.archive.region == "us-east-2" &&
+      !contains(keys(local.controlplane_document.database.archive), "endpoint")
+    )
+    error_message = "the control plane is not told where its database's archive is, or it is another bucket's"
   }
-  # The first boot makes the role the control plane signs in as, as RDS's master, whose password
-  # RDS keeps: the document names the secret, and the control plane's role alone reads it.
   assert {
     condition = (
-      local.controlplane_document.install.database_admin.user == "spin_admin" &&
-      local.controlplane_document.install.database_admin.secret == "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc" &&
-      anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
-      s.actions == toset(["secretsmanager:GetSecretValue"]) && s.resources == toset(["arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!db-abc"])])
+      aws_s3_bucket_versioning.database.versioning_configuration[0].status == "Enabled" &&
+      aws_s3_bucket.database.force_destroy != true &&
+      anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
+      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 14])]) &&
+      anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
+      length(r.abort_incomplete_multipart_upload) > 0])
     )
-    error_message = "the first boot cannot make the database's role, or reads more of Secrets Manager than the master's password"
+    error_message = "a delete in the archive cannot be undone, a destroy empties it, or what it replaced is kept for ever"
   }
   assert {
-    condition     = length(aws_subnet.database) >= 2 && alltrue([for s in aws_subnet.database : !s.map_public_ip_on_launch])
-    error_message = "the database's subnets give out public addresses, or are fewer than the two zones RDS takes"
+    condition = alltrue([
+      aws_s3_bucket_public_access_block.database.block_public_acls,
+      aws_s3_bucket_public_access_block.database.block_public_policy,
+      aws_s3_bucket_public_access_block.database.ignore_public_acls,
+      aws_s3_bucket_public_access_block.database.restrict_public_buckets,
+      aws_s3_bucket_ownership_controls.database.rule[0].object_ownership == "BucketOwnerEnforced",
+    ])
+    error_message = "the archive may be made public, or hold an object its account does not own"
   }
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.database_from_controlplane.from_port == 5432 && aws_vpc_security_group_ingress_rule.database_from_controlplane.cidr_ipv4 == null
-    error_message = "the database takes connections from an address range rather than the control plane"
+    condition = anytrue([for s in data.aws_iam_policy_document.database_bucket.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:GetObject*") && anytrue([for c in s.condition : c.variable == "aws:SourceVpce"])]) && anytrue([for s in data.aws_iam_policy_document.database_bucket.statement :
+    s.effect == "Deny" && anytrue([for c in s.condition : c.variable == "aws:SecureTransport"])])
+    error_message = "the archive's objects are reached from outside the VPC's endpoint, or without TLS"
+  }
+  # The control plane reads, writes and deletes what it ships, and lists it; no version of it.
+  assert {
+    condition = toset(flatten([for s in data.aws_iam_policy_document.controlplane.statement : s.actions if s.effect != "Deny" && anytrue([for r in s.resources : startswith(r, "arn:aws:s3:::spin-database-")])])) == toset([
+      "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+    ])
+    error_message = "the control plane is given more of its database's archive than reading, writing and deleting what it ships"
+  }
+  # Whatever any other role is given later, the boundary refuses it the archive; and no role
+  # erases a version of it.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:*") &&
+      s.resources == toset(["arn:aws:s3:::spin-database-123456789012-us-east-2", "arn:aws:s3:::spin-database-123456789012-us-east-2/*"]) &&
+      anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
+    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
+    error_message = "a role other than the control plane's can reach the database's archive"
   }
   assert {
-    condition     = aws_db_instance.database.deletion_protection && !aws_db_instance.database.skip_final_snapshot && aws_db_instance.database.backup_retention_period >= 7
-    error_message = "the database can be destroyed without a snapshot, or keeps less than a week to restore to"
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:DeleteObjectVersion") && length(s.condition) == 0 &&
+    contains(s.resources, "arn:aws:s3:::spin-database-123456789012-us-east-2/*")])
+    error_message = "a role can erase a version of the database's archive"
   }
   assert {
-    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
-    contains(s.actions, "rds-db:connect") && s.resources == toset(["arn:aws:rds-db:us-east-2:123456789012:dbuser:db-ABCDEFGHIJKLMNOP/spin"])])
-    error_message = "the control plane signs in to the database as something other than spin"
-  }
-  assert {
-    condition     = local.controlplane_document.database.auth == "aws-iam" && strcontains(local.controlplane_document.database.url, "sslmode=verify-full")
-    error_message = "the control plane signs in with a password, or does not check the database's certificate"
+    condition = !anytrue([for d in [data.aws_iam_policy_document.proxy, data.aws_iam_policy_document.runner_scope] :
+    anytrue([for s in d.statement : anytrue([for r in s.resources : startswith(r, "arn:aws:s3:::spin-database-")])])])
+    error_message = "the proxy's role or the runners' credential is given the database's archive"
   }
 }
 
