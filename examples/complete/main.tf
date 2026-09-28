@@ -91,6 +91,8 @@ output "dashboard" {
 output "next_steps" {
   description = "DNS, the first sign-in, and how to reach a machine: tofu output -raw next_steps"
   value       = module.spin.next_steps
+  # Not a secret: so that no plan - a destroy's above all - prints it (the module's outputs.tf).
+  sensitive = true
 }
 
 output "name_servers" {
@@ -104,6 +106,6 @@ output "update_status" {
 }
 
 output "boot_log" {
-  description = "What every machine's boot said, including the ones that are gone."
+  description = "By role, the command that reads what its machines' boots said, the ones that are gone included."
   value       = module.spin.boot_log
 }

@@ -91,8 +91,8 @@ cannot take a release in place - its root is read-only and verified - so the run
 too, one at a time with the new one first, each old one leaving by its drain: its workspaces
 suspended and resumed on another host. How it
 went is `tofu output update_status`: `Successful`; or `RollbackSuccessful` with the reason, in which
-case the old machine is still serving and `tofu output boot_log` says why the new one did not come
-up. A change to anything else a machine starts on - `installation_config`, the autoscaling
+case the old machine is still serving and `tofu output boot_log` - one command per role, since a
+role's machines are one stream prefix - says why the new one did not come up. A change to anything else a machine starts on - `installation_config`, the autoscaling
 settings - rolls out the same way.
 
 A release older than the one that last started the database refuses to start on it: going back

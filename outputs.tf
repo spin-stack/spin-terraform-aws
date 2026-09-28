@@ -17,8 +17,13 @@ locals {
   # A machine is reached through Session Manager - no port 22 and no key - and the one to reach is
   # the one in service, not whichever the group lists first.
   session = "${local.aws} ssm start-session --target $(${local.aws} autoscaling describe-auto-scaling-groups --auto-scaling-group-names %s --query \"AutoScalingGroups[0].Instances[?LifecycleState=='InService'] | [0].InstanceId\" --output text)"
-  # What each machine's boot said, kept after the machine is gone.
-  boot_log = "${local.aws} logs tail ${module.controlplane.boot_log_group} --since 1h --follow"
+  # What each machine's boot said, kept after the machine is gone: a role's machines are a stream
+  # prefix (spin's boot names a stream <role>/<step>/<instance>), so one role is read without an
+  # instance to look up, and --follow keeps reading as the next one boots.
+  boot_log_of = "${local.aws} logs tail ${module.controlplane.boot_log_group} --log-stream-name-prefix %s/ --since 1h --follow"
+  boot_log = {
+    for role in ["control-plane", "proxy", "runner"] : role => format(local.boot_log_of, role)
+  }
 
   next_steps = join("\n", concat(
     [
@@ -34,7 +39,8 @@ locals {
       "     ${format(local.status, module.controlplane.controlplane_group)}",
       "     ${format(local.status, module.controlplane.proxy_group)}",
       "   If one is not, what went wrong is in its boot's log, and in what its group last did:",
-      "     ${local.boot_log}",
+      "     ${local.boot_log["control-plane"]}",
+      "     ${local.boot_log["proxy"]}",
       "     ${format(local.why, module.controlplane.controlplane_group)}",
       "",
       "3. Sign in at ${local.sign_in.url} as ${local.sign_in.user}, with the one-time password:",
@@ -61,6 +67,10 @@ locals {
 output "next_steps" {
   description = "What to do now that the apply is done, in order: DNS, the first sign-in, what the runners do, and how to reach a machine. Read it with `tofu output -raw next_steps`."
   value       = local.next_steps
+  # Nothing in it is a secret. Marked so that no plan prints it - a destroy's listed it as an
+  # output going away, forty lines of what to do next under a plan that removes everything - and
+  # it is read when it is wanted, with -raw, which prints it as it is.
+  sensitive = true
 }
 
 output "dashboard" {
@@ -97,7 +107,7 @@ output "update_status" {
 }
 
 output "boot_log" {
-  description = "What every machine's boot said, including the ones that are gone."
+  description = "By role, the command that reads what its machines' boots said - the ones that are gone included - and follows the next one's."
   value       = local.boot_log
 }
 
