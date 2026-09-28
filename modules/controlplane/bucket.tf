@@ -7,7 +7,9 @@
 resource "aws_s3_bucket" "volumes" {
   bucket              = "${var.name}-volumes-${local.account}-${local.region}"
   object_lock_enabled = true
-  tags                = local.tags
+  # Only when the installation is being removed (var.decommission): every workspace's disk is here.
+  force_destroy = var.decommission
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "volumes" {
@@ -122,7 +124,10 @@ data "aws_iam_policy_document" "bucket" {
   }
 }
 
+# None while the installation is being removed: it refuses every object write from outside the
+# VPC, the root account's included, and a destroy runs from outside it (var.decommission).
 resource "aws_s3_bucket_policy" "volumes" {
+  count      = var.decommission ? 0 : 1
   bucket     = aws_s3_bucket.volumes.id
   policy     = data.aws_iam_policy_document.bucket.json
   depends_on = [aws_s3_bucket_public_access_block.volumes]

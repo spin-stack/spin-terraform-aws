@@ -536,6 +536,45 @@ run "the_bucket" {
   }
 }
 
+# An installation keeps its data past a destroy unless it is being removed: no bucket that holds
+# it is emptied by one, and every bucket refuses objects from outside the VPC.
+run "a_destroy_keeps_the_data" {
+  command = plan
+
+  assert {
+    condition = (
+      !aws_s3_bucket.volumes.force_destroy && !aws_s3_bucket.database.force_destroy && !aws_s3_bucket.logs.force_destroy &&
+      length(aws_s3_bucket_policy.volumes) == 1 && length(aws_s3_bucket_policy.database) == 1 &&
+      length(aws_s3_bucket_policy.logs) == 1 && length(aws_s3_bucket_policy.certificates) == 1
+    )
+    error_message = "a destroy empties a bucket of data, or a bucket answers from outside the VPC"
+  }
+}
+
+# Removed on purpose, applied first: the buckets lose the policies that refuse the destroy's
+# deletes - it runs from outside the VPC, as the root account - and a destroy empties every one.
+run "an_installation_being_removed_is_emptied_by_its_destroy" {
+  command = plan
+  variables {
+    decommission = true
+  }
+
+  assert {
+    condition = (
+      aws_s3_bucket.volumes.force_destroy && aws_s3_bucket.database.force_destroy &&
+      aws_s3_bucket.logs.force_destroy && aws_s3_bucket.certificates.force_destroy
+    )
+    error_message = "a bucket stops the destroy of an installation being removed"
+  }
+  assert {
+    condition = (
+      length(aws_s3_bucket_policy.volumes) == 0 && length(aws_s3_bucket_policy.database) == 0 &&
+      length(aws_s3_bucket_policy.logs) == 0 && length(aws_s3_bucket_policy.certificates) == 0
+    )
+    error_message = "a bucket still refuses the destroy's deletes from outside the VPC"
+  }
+}
+
 run "the_logs_bucket" {
   command = plan
 

@@ -118,41 +118,41 @@ next workspace that waits starts one.
 
 ## Removing an installation
 
-The encryption key and the CA refuse to be destroyed, because an apply that replaced either would
-leave an installation nothing can open. To remove one on purpose:
+An installation keeps its data past a plain `tofu destroy`: the volumes, the database's archive
+and the logs are in buckets a destroy does not empty, and every bucket refuses object writes and
+deletes from outside the VPC - the root account's included, so they cannot be emptied from a
+laptop either. Removing one is said first, applied, and only then destroyed:
+
+1. Set `decommission = true` on the module and apply. Nothing but the buckets changes: their
+   VPC-only policies go, and each is marked to be emptied by a destroy - every version, legal
+   holds lifted, the GOVERNANCE retention bypassed.
+
+   ```bash
+   tofu apply   # with decommission = true in module "spin"
+   ```
+
+2. The encryption key and the CA refuse to be destroyed, because an apply that replaced either
+   would leave an installation nothing can open. Take them out of the state, destroy, and delete
+   the key's parameter:
+
+   ```bash
+   tofu state rm module.spin.module.controlplane.aws_ssm_parameter.encryption_key \
+     module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
+   tofu destroy
+   aws ssm delete-parameter --name /<name>/controlplane-encryption-key
+   ```
+
+The apply has to come first: a destroy empties a bucket as its state says, so `decommission`
+set only on the destroy changes nothing. A destroy that already stopped at a bucket takes the same
+apply, limited to the buckets so nothing it removed is made again:
 
 ```bash
-tofu state rm module.spin.module.controlplane.aws_ssm_parameter.encryption_key \
-  module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
-tofu destroy
-aws ssm delete-parameter --name /<name>/controlplane-encryption-key
-```
-
-The destroy stops at the volumes' bucket: every object in it is under Object Lock, and spin puts
-a legal hold on what it publishes. To remove it now rather than when the retention
-(`object_lock_days`) runs out, lift the holds and delete every version bypassing the governance
-retention - with credentials allowed `s3:PutObjectLegalHold` and `s3:BypassGovernanceRetention` -
-then destroy again:
-
-```bash
-B=<name>-volumes-<account>-<region>
-aws s3api list-object-versions --bucket $B --query 'Versions[].[Key,VersionId]' --output text |
-  while IFS=$'\t' read -r k v; do aws s3api put-object-legal-hold --bucket $B --key "$k" --version-id "$v" --legal-hold Status=OFF; done
-aws s3api list-object-versions --bucket $B --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}}' --output json > /tmp/v.json
-aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file:///tmp/v.json
+tofu apply $(for b in volumes database logs certificates; do
+  printf -- '-target=module.spin.module.controlplane.aws_s3_bucket.%s -target=module.spin.module.controlplane.aws_s3_bucket_policy.%s ' $b $b; done)
 tofu destroy
 ```
 
-It stops at the database's archive too, which a destroy does not empty: it is the database, and
-under a lock of fourteen days. Once nothing is to be restored from it, delete every version in it
-the same way, bypassing the retention (there are no holds), and destroy again:
-
-```bash
-B=<name>-database-<account>-<region>
-aws s3api list-object-versions --bucket $B --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}}' --output json > /tmp/v.json
-aws s3api delete-objects --bucket $B --bypass-governance-retention --delete file:///tmp/v.json
-tofu destroy
-```
+The installation's state bucket and key (`bootstrap/`) are removed apart, after this.
 
 ## What it decides, and why
 

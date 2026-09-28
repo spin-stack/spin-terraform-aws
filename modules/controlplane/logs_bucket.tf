@@ -13,7 +13,9 @@
 
 resource "aws_s3_bucket" "logs" {
   bucket = "${var.name}-logs-${local.account}-${local.region}"
-  tags   = local.tags
+  # The installation's logs and metrics are kept past a destroy unless it is being removed.
+  force_destroy = var.decommission
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "logs" {
@@ -89,7 +91,9 @@ data "aws_iam_policy_document" "logs_bucket" {
   }
 }
 
+# None while the installation is being removed, as the volumes' (bucket.tf).
 resource "aws_s3_bucket_policy" "logs" {
+  count      = var.decommission ? 0 : 1
   bucket     = aws_s3_bucket.logs.id
   policy     = data.aws_iam_policy_document.logs_bucket.json
   depends_on = [aws_s3_bucket_public_access_block.logs]

@@ -194,7 +194,10 @@ data "aws_iam_policy_document" "certificates" {
   }
 }
 
+# None while the installation is being removed, as the volumes' (bucket.tf): force_destroy alone
+# empties a bucket whose policy refuses the destroy's deletes, the root account's included.
 resource "aws_s3_bucket_policy" "certificates" {
+  count      = var.decommission ? 0 : 1
   bucket     = aws_s3_bucket.certificates.id
   policy     = data.aws_iam_policy_document.certificates.json
   depends_on = [aws_s3_bucket_public_access_block.certificates]

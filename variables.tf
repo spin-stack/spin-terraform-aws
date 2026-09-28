@@ -119,6 +119,12 @@ variable "max_runners" {
   default     = null
 }
 
+variable "decommission" {
+  description = "Set to true and apply before `tofu destroy`: the buckets lose their VPC-only policies and a destroy empties them, data included (README.md, \"Removing an installation\"). modules/controlplane's default is false."
+  type        = bool
+  default     = null
+}
+
 variable "tags" {
   description = "Tags on everything both modules create."
   type        = map(string)

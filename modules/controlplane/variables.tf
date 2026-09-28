@@ -119,6 +119,13 @@ variable "proxy_instance_type" {
   nullable    = false
 }
 
+variable "decommission" {
+  description = "Set to true, and applied, before destroying the installation: its buckets lose the policies that refuse every object write from outside the VPC - the destroy runs from outside it - and a destroy empties every bucket, data included, lifting legal holds and bypassing the GOVERNANCE retention. Never set on an installation that is to keep its data."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "object_lock_days" {
   description = "The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and the bucket's lifecycle (bucket.tf) removes them a day after."
   type        = number

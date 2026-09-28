@@ -11,8 +11,9 @@
 #
 # Versioned and under Object Lock, as spin opens every store it writes (its NewS3Store refuses a
 # bucket without both): a delete or an overwrite - by a machine that was taken, or a prune gone
-# wrong - is a version the lock holds for two weeks rather than a database lost. No force_destroy:
-# a destroy that took the archive with it would take the database.
+# wrong - is a version the lock holds for two weeks rather than a database lost. No force_destroy
+# but while the installation is being removed (var.decommission): a destroy that took the archive
+# with it would take the database.
 
 locals {
   database_lock_days = 14
@@ -21,6 +22,7 @@ locals {
 resource "aws_s3_bucket" "database" {
   bucket              = "${var.name}-database-${local.account}-${local.region}"
   object_lock_enabled = true
+  force_destroy       = var.decommission
   tags                = local.tags
 }
 
@@ -129,7 +131,9 @@ data "aws_iam_policy_document" "database_bucket" {
   }
 }
 
+# None while the installation is being removed, as the volumes' (bucket.tf).
 resource "aws_s3_bucket_policy" "database" {
+  count      = var.decommission ? 0 : 1
   bucket     = aws_s3_bucket.database.id
   policy     = data.aws_iam_policy_document.database_bucket.json
   depends_on = [aws_s3_bucket_public_access_block.database]
