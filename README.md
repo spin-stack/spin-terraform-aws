@@ -143,12 +143,13 @@ laptop either. Removing one is said first, applied, and only then destroyed:
    ```
 
 The apply has to come first: a destroy empties a bucket as its state says, so `decommission`
-set only on the destroy changes nothing. A destroy that already stopped at a bucket takes the same
-apply, limited to the buckets so nothing it removed is made again:
+set only on the destroy changes nothing - it stops with `BucketNotEmpty`. A destroy that already
+stopped takes the same apply, limited to the buckets and policies the state still has: a bucket
+named that the destroy already removed would be made again. Its plan is those buckets'
+`force_destroy` turned on and their policies removed, and nothing else:
 
 ```bash
-tofu apply $(for b in volumes database logs certificates; do
-  printf -- '-target=module.spin.module.controlplane.aws_s3_bucket.%s -target=module.spin.module.controlplane.aws_s3_bucket_policy.%s ' $b $b; done)
+tofu apply $(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])?$' | sed 's/^/-target=/')
 tofu destroy
 ```
 
