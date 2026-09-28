@@ -14,6 +14,13 @@ vars:
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners
+  # D2, as spin-stack/ami pins it, and its flags there: one light theme, each diagram its own size.
+  # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
+  # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests.
+  D2: terrastruct/d2@sha256:0f9237e0213338415de5ef7436c92450ddd04e0e6e7df2db3f41387322df97b9
+  D2_FLAGS: >-
+    --layout elk --elk-nodeNodeBetweenLayers 56 --elk-edgeNodeBetweenLayers 20
+    --elk-padding '[top=40,left=24,bottom=24,right=24]' --theme 0 --pad 16 --scale 1
 
 tasks:
   tools:tofu:
@@ -67,6 +74,26 @@ tasks:
       - for: {var: DOCUMENTED, split: ' '}
         cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml {{.ITEM}}"
 
+  diagrams:
+    desc: Render docs/diagrams/*.d2 into the SVGs beside them, the icons inside each.
+    cmds:
+      - >-
+        for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
+        docker run --rm -u $(id -u):$(id -g) -v {{.ROOT_DIR}}:/work -w /work -e HOME=/tmp
+        {{.D2}} {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
+
+  # A picture nothing in a build reads is the one that drifts unnoticed: each SVG is rendered again
+  # and has to be the one committed, byte for byte (D2 lays out the same source the same way).
+  diagrams:check:
+    desc: Fail when a committed SVG is not what its .d2 renders to.
+    cmds:
+      - >-
+        tmp=$(mktemp -d); trap 'rm -rf $tmp' EXIT;
+        for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
+        docker run --rm -u $(id -u):$(id -g) -v {{.ROOT_DIR}}:/work -v $tmp:/out -w /work -e HOME=/tmp
+        {{.D2}} {{.D2_FLAGS}} "$d" "/out/$(basename ${d%.d2}).svg" >/dev/null || exit 1;
+        cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: task diagrams"; exit 1; }; done
+
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
     deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs]
@@ -90,6 +117,7 @@ tasks:
       - "{{.TOOLS_BIN}}/trivy config --quiet --exit-code 1 --cache-dir {{.ROOT_DIR}}/.tools/trivy-cache --skip-dirs .tools ."
       - for: {var: DOCUMENTED, split: ' '}
         cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml --output-check {{.ITEM}} >/dev/null || { echo '{{.ITEM}}/README.md is not what its variables and outputs say: task docs'; exit 1; }"
+      - task: diagrams:check
       # What each module promises about who reaches what - the proxy the only machine the
       # internet reaches, no role able to write IAM or read another's secrets - asserted
       # against its plan, with no account.

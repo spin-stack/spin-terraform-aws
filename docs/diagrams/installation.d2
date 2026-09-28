@@ -1,0 +1,117 @@
+# An installation as this repository makes it: what runs where, who reaches what, and what is kept
+# outside the machines so that any of them can be replaced. The README's "What it decides, and why"
+# is the reasoning; this is the map. Only the traffic is drawn as arrows; the services beside the
+# VPC say in their names who writes and who reads them.
+...@_style
+direction: right
+
+outside: "" {
+  style: {fill: transparent; stroke: transparent}
+  direction: down
+  users: "Users\nbrowser, spin CLI, SSH" {class: aws-icon; icon: icons/users.svg}
+  acme: "Let's Encrypt" {class: brand-icon; icon: icons/letsencrypt.svg}
+}
+
+aws: "AWS" {
+  class: aws-cloud
+  icon: icons/aws-cloud.svg
+
+  region: "Region" {
+    class: region
+    icon: icons/region.svg
+    direction: right
+
+    vpc: "VPC - no NAT: every machine has its own way out" {
+      class: vpc
+      icon: icons/vpc.svg
+      direction: right
+
+      igw: "Internet\ngateway" {class: aws-icon; icon: icons/internet-gateway.svg}
+
+      edge: "edge subnets\nthe proxy's alone" {
+        class: subnet
+        icon: icons/public-subnet.svg
+        direction: down
+        eip: "Elastic IP\napp., tunnel.app., *.ws." {class: aws-icon; icon: icons/elastic-ip.svg}
+        proxy: "proxy, a group of one" {
+          class: asg
+          icon: icons/auto-scaling-group.svg
+          caddy: "Caddy\nTLS and the relay" {class: brand-icon; icon: icons/caddy.svg}
+        }
+        eip -> proxy.caddy
+      }
+
+      public: "public subnets, one per zone" {
+        class: subnet
+        icon: icons/public-subnet.svg
+        direction: down
+
+        controlplane: "control plane\na group of one, replaced beside itself" {
+          class: asg
+          icon: icons/auto-scaling-group.svg
+          machine: "" {
+            class: instance
+            icon: icons/ec2-instance.svg
+            grid-columns: 2
+            grid-gap: 16
+            cp: "spin\ncontrol plane" {class: process}
+            pg: "PostgreSQL" {class: brand-icon; icon: icons/postgresql.svg}
+            vm: "VictoriaMetrics\nQuickwit, Alloy" {class: brand-icon; icon: icons/victoriametrics.svg}
+            grafana: "Grafana" {class: brand-icon; icon: icons/grafana.svg}
+          }
+        }
+
+        runners: "runners\n0 to max_runners spot hosts,\nsized by the control plane" {
+          class: asg
+          icon: icons/auto-scaling-group.svg
+          host: "" {
+            class: instance
+            icon: icons/ec2-instance.svg
+            direction: right
+            runner: "spin runner\nnftables per workspace" {class: process}
+            vms: "workspace VMs\nQEMU/KVM" {class: guest}
+            runner -> vms
+          }
+        }
+
+        runners.host.runner -> controlplane.machine.cp: "8080, dialled out"
+      }
+
+      endpoint: "S3 gateway\nendpoint" {class: aws-icon; icon: icons/vpc-endpoint.svg}
+
+      igw -> edge.eip: "443, and 80\nfor the challenge"
+      edge.proxy.caddy -> public.controlplane.machine.cp: "8080"
+      edge.proxy.caddy <-> public.runners.host.runner: "the relay:\nthe runner dials 443"
+      igw -> public.runners: "nothing listens on a runner" {class: refused}
+      public -> endpoint: "volumes: an hour's\nminted credential"
+    }
+
+    services: "" {
+      style: {fill: transparent; stroke: transparent}
+      grid-columns: 4
+      grid-gap: 32
+      buckets: "S3 - only through the endpoint\nvolumes (Object Lock), the database's\nsealed archive, logs, certificates" {class: aws-icon; icon: icons/s3-bucket.svg}
+      ssm: "Parameter Store - written by the apply\na document per role; the key, the CA,\nthe first password: the control plane's alone" {class: aws-icon; icon: icons/parameter-store.svg}
+      zones: "Route 53\n<domain>, which its registrar points at,\nand spin.internal, whose records\nthe machines write" {class: aws-icon; icon: icons/hosted-zone.svg}
+      iam: "IAM\na role per machine,\none permissions boundary" {class: aws-icon; icon: icons/iam-role.svg}
+      ami: "Spin OS AMI\nthe release, read-only root" {class: aws-icon; icon: icons/ami.svg}
+      logs: "CloudWatch Logs\nevery boot, the VPC's flows" {class: aws-icon; icon: icons/cloudwatch-logs.svg}
+      session: "Session Manager\nthe only shell" {class: aws-icon; icon: icons/session-manager.svg}
+      state: "OpenTofu state\nS3, encrypted with KMS" {class: aws-icon; icon: icons/kms.svg}
+    }
+  }
+}
+
+operator: "" {
+  style: {fill: transparent; stroke: transparent}
+  direction: down
+  ami: "spin-stack/ami\ntask release" {class: brand-icon; icon: icons/github.svg}
+  images: "images.json\nrelease → region → AMI" {class: external}
+  tofu: "operator\ntofu apply, or\nGitHub Actions" {class: brand-icon; icon: icons/opentofu.svg}
+  ami -> images: "pull request"
+  images -> tofu
+}
+
+outside.users -> aws.region.vpc.igw: "443"
+outside.acme -> aws.region.vpc.igw: "80"
+operator.tofu -> aws.region.services: "the network, the machines' groups,\ntheir documents and secrets"

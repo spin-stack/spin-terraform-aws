@@ -1,0 +1,59 @@
+# The palette the diagrams import (...@_style), spin-stack/ami's: one colour per kind of thing,
+# each fill with its own dark font, so a diagram reads on a light page and a dark one.
+classes: {
+  group: {
+    style: {fill: "#FFFFFF"; stroke: "#CBD5E1"; font-color: "#0F172A"; border-radius: 16; stroke-width: 1; bold: true}
+  }
+  external: {
+    style: {fill: "#F8FAFC"; stroke: "#94A3B8"; font-color: "#334155"; border-radius: 10; stroke-width: 2; stroke-dash: 4}
+  }
+  process: {
+    style: {fill: "#EEF2FF"; stroke: "#6366F1"; font-color: "#312E81"; border-radius: 10; stroke-width: 2}
+  }
+  guest: {
+    style: {fill: "#F0F9FF"; stroke: "#0EA5E9"; font-color: "#0C4A6E"; border-radius: 10; stroke-width: 2}
+  }
+  refused: {
+    style: {stroke: "#EF4444"; font-color: "#B91C1C"; stroke-dash: 5; stroke-width: 2; italic: true}
+  }
+  # An icon with its name under it, as AWS's architecture diagrams draw a service or a resource.
+  aws-icon: {
+    shape: image
+    width: 52
+    height: 52
+    style.font-color: "#232F3E"
+    style.font-size: 18
+  }
+  brand-icon: {
+    shape: image
+    width: 44
+    height: 44
+    style.font-color: "#0F172A"
+    style.font-size: 18
+  }
+  aws-cloud: {
+    style: {fill: "#FFFFFF"; stroke: "#232F3E"; font-color: "#232F3E"; stroke-width: 2; bold: true}
+  }
+  region: {
+    style: {fill: "#FFFFFF"; stroke: "#00A4A6"; font-color: "#00A4A6"; stroke-dash: 4; stroke-width: 2}
+  }
+  vpc: {
+    style: {fill: "#FFFFFF"; stroke: "#8C4FFF"; font-color: "#8C4FFF"; stroke-width: 2}
+  }
+  subnet: {
+    style: {fill: "#F2F6E8"; stroke: "#7AA116"; font-color: "#248814"; stroke-width: 1}
+  }
+  asg: {
+    style: {fill: "#FFFFFF"; stroke: "#ED7100"; font-color: "#ED7100"; stroke-dash: 4; stroke-width: 2}
+  }
+  instance: {
+    style: {fill: "#FFFFFF"; stroke: "#ED7100"; font-color: "#232F3E"; stroke-width: 2}
+  }
+  service: {
+    style: {fill: "#F8FAFC"; stroke: "#CBD5E1"; font-color: "#232F3E"; border-radius: 10; stroke-width: 1}
+  }
+}
+
+(** -> **)[*].style.stroke: "#64748B"
+(** -> **)[*].style.font-color: "#334155"
+(** -> **)[*].style.stroke-width: 2

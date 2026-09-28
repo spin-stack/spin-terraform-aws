@@ -2,6 +2,8 @@
 
 A [spin](https://github.com/spin-stack/spin) installation on AWS, as one module:
 
+![An installation: the proxy, the control plane and the runners in one VPC, and what is kept beside it](docs/diagrams/installation.svg)
+
 ```hcl
 module "spin" {
   source       = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
