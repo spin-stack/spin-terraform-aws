@@ -101,12 +101,6 @@ override_resource {
   values = { arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/proxy-config" }
 }
 
-# The image the release's machines boot, which is known once it is applied.
-override_resource {
-  target = terraform_data.image
-  values = { output = "ami-0123456789abcdef0" }
-}
-
 # The CA's certificate, which the proxy's and the runners' documents carry.
 override_resource {
   target = tls_self_signed_cert.ca
@@ -116,6 +110,9 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
+  # A release images.json does not have, in a region it has none in: the image is named. The runs
+  # of the machines' image ask images.json.
+  image_id = "ami-0123456789abcdef0"
 }
 
 run "the_internet_reaches_the_proxy_alone" {
@@ -127,8 +124,8 @@ run "the_internet_reaches_the_proxy_alone" {
     error_message = "the control plane takes something from an address range, or on a port other than 8080"
   }
   assert {
-    condition     = alltrue([for r in aws_vpc_security_group_egress_rule.controlplane : contains([80, 443], r.from_port) && r.ip_protocol == "tcp"])
-    error_message = "the control plane reaches out on something other than 80 and 443"
+    condition     = aws_vpc_security_group_egress_rule.controlplane.from_port == 443 && aws_vpc_security_group_egress_rule.controlplane.to_port == 443 && aws_vpc_security_group_egress_rule.controlplane.ip_protocol == "tcp"
+    error_message = "the control plane reaches the internet on something other than 443"
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.proxy_http.from_port == 80 && aws_vpc_security_group_ingress_rule.proxy_http.to_port == 80
@@ -143,7 +140,7 @@ run "the_internet_reaches_the_proxy_alone" {
     error_message = "the runners' relay rule is wider than the VPC"
   }
   assert {
-    condition     = alltrue([for r in aws_vpc_security_group_egress_rule.proxy_web : contains([80, 443], r.from_port)]) && aws_vpc_security_group_egress_rule.proxy_to_controlplane.from_port == 8080
+    condition     = aws_vpc_security_group_egress_rule.proxy_web.from_port == 443 && aws_vpc_security_group_egress_rule.proxy_web.to_port == 443 && aws_vpc_security_group_egress_rule.proxy_to_controlplane.from_port == 8080
     error_message = "the proxy reaches out on something other than the control plane's 8080 and the web"
   }
 }
@@ -171,6 +168,12 @@ run "the_machines" {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
     t.block_device_mappings[0].ebs[0].encrypted == "true"])
     error_message = "a disk is not encrypted"
+  }
+  # The database and the stores are on the control plane's own disk, which is the operator's to
+  # size; the proxy holds Caddy and nothing else.
+  assert {
+    condition     = aws_launch_template.controlplane.block_device_mappings[0].ebs[0].volume_size == var.root_volume_gb && aws_launch_template.proxy.block_device_mappings[0].ebs[0].volume_size == 20
+    error_message = "the control plane's disk is not the size asked for"
   }
   # The proxy in subnets of its own, which are what the control plane trusts a browser's
   # address from: a runner or the control plane itself is never among them. Declared in the
@@ -277,11 +280,6 @@ run "an_update_stands_the_new_machine_beside_the_old" {
       alltrue([for g in [aws_autoscaling_group.controlplane, aws_autoscaling_group.proxy] : g.instance_refresh[0].preferences[0].auto_rollback])
     )
     error_message = "a change to a document reaches no machine until something replaces it, or a failed update is left as the group's template"
-  }
-  # The image is the one of the release, not the newest on whatever day an apply runs.
-  assert {
-    condition     = aws_launch_template.controlplane.image_id == terraform_data.image.output && aws_launch_template.proxy.image_id == terraform_data.image.output
-    error_message = "the machines boot an image an unrelated apply picked"
   }
   # Each machine takes its own name, in the installation's zone, and the proxy its address.
   assert {
@@ -924,18 +922,22 @@ run "the_databases_archive" {
 
 # Every machine boots the release's image: Spin OS, into which spin-boot laid what the release's
 # workflow signed, checked against its signature, and whose root the kernel checks every block of.
-# The image is found by the release it carries, among this account's own - one shared into the
-# account with the same tag is not picked up - and nothing is fetched by a machine.
+# Which image that is, region by region, is images.json: an id this commit names, so an image
+# published again reaches an installation by its module's ref moving and by nothing else.
 run "the_machines_boot_the_releases_image" {
   command = plan
+  variables {
+    spin_version = "v20260928.02"
+    image_id     = ""
+  }
+  override_data {
+    target = data.aws_region.current
+    values = { region = "us-west-2", name = "us-west-2" }
+  }
 
   assert {
-    condition     = length(data.aws_ami.spin_os.owners) == 1 && contains(data.aws_ami.spin_os.owners, "self")
-    error_message = "the release's image is looked for outside this account"
-  }
-  assert {
-    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "tag:spin:version" && length(f.values) == 1 && contains(f.values, var.spin_version)])
-    error_message = "the image is not found by the release it carries"
+    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "image-id" && f.values == toset(["ami-0f3eb68837a742631"])])
+    error_message = "the image is not the one images.json names for the release in its region"
   }
   assert {
     condition     = aws_launch_template.controlplane.image_id == local.image && aws_launch_template.proxy.image_id == local.image
@@ -945,6 +947,75 @@ run "the_machines_boot_the_releases_image" {
     condition     = output.image.id == local.image && output.image.root_device == "/dev/xvda"
     error_message = "the runners are not handed the release's image and its root device"
   }
+}
+
+# A release with no image in the region is refused at plan, naming where it has one.
+run "a_release_with_no_image_here_is_refused" {
+  command = plan
+  variables {
+    # images.json has it in us-west-2; the tests' region is us-east-2.
+    spin_version = "v20260928.02"
+    image_id     = ""
+  }
+  expect_failures = [data.aws_ami.spin_os]
+}
+
+# What the ami repository's pull request writes is what this module reads: a dated release, a
+# region, an AMI id.
+run "images_json_is_releases_regions_and_amis" {
+  command = plan
+
+  assert {
+    condition = length(local.images) > 0 && alltrue([for release, regions in local.images :
+      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(regions) > 0 && alltrue([for region, ami in regions :
+    can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", region)) && can(regex("^ami-[0-9a-f]{17}$", ami))])])
+    error_message = "images.json is not { <release>: { <region>: <ami-id> } }"
+  }
+}
+
+# Every ARN is of the provider's partition, so the module runs in GovCloud and China as it does
+# in aws.
+run "the_arns_are_the_partitions" {
+  command = plan
+  override_data {
+    target = data.aws_partition.current
+    values = { partition = "aws-us-gov" }
+  }
+
+  assert {
+    condition = (
+      local.controlplane_role_arn == "arn:aws-us-gov:iam::123456789012:role/spin-us-east-2-controlplane" &&
+      anytrue([for s in data.aws_iam_policy_document.controlplane.statement : s.sid == "SizeTheRunners" &&
+      alltrue([for r in s.resources : startswith(r, "arn:aws-us-gov:autoscaling:")])]) &&
+      anytrue([for s in data.aws_iam_policy_document.boundary.statement : s.sid == "OnlyTheProxysAddress" &&
+      alltrue([for r in s.not_resources : startswith(r, "arn:aws-us-gov:ec2:")])])
+    )
+    error_message = "an ARN this module spells is of another partition than the provider's"
+  }
+  # An ARN spelled with the partition written out is one the assertion above misses until it is
+  # among those it names; none is.
+  assert {
+    condition     = alltrue([for f in fileset(path.module, "*.tf") : !strcontains(file("${path.module}/${f}"), "\"arn:aws:")])
+    error_message = "a file spells an ARN in the aws partition: it is local.arn"
+  }
+}
+
+# A Local Zone or a Wavelength Zone the account opted into is not one the installation's subnets go in.
+run "the_subnets_are_in_the_regions_own_zones" {
+  command = plan
+
+  assert {
+    condition     = anytrue([for f in data.aws_availability_zones.available.filter : f.name == "opt-in-status" && f.values == toset(["opt-in-not-required"])])
+    error_message = "a subnet may be made in a zone the account opted into, where none of the machines exist"
+  }
+}
+
+run "a_vpc_range_the_subnets_do_not_fit_is_refused" {
+  command = plan
+  variables {
+    vpc_cidr = "10.42.0.0/20"
+  }
+  expect_failures = [var.vpc_cidr]
 }
 
 run "the_logs" {

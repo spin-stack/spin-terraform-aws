@@ -18,7 +18,6 @@ variable "controlplane" {
     boot_log_policy_arn         = string
     standard_vcpus              = number
     boundary_arn                = string
-    collector                   = string
     session_manager_policy_arn  = string
   })
 }

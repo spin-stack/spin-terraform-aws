@@ -11,9 +11,12 @@ module "spin" {
 ```
 
 Every machine boots **Spin OS** of that release: the image
-[spin-stack/ami](https://github.com/spin-stack/ami) builds and publishes into this account
-(`task build publish` there, with `SPIN_VERSION` set), tagged `spin:version`. Publish it before
-the apply that names the release.
+[spin-stack/ami](https://github.com/spin-stack/ami) builds and publishes. Where each release's
+image is, region by region, is [`images.json`](images.json) - `{ "<release>": { "<region>":
+"<ami-id>" } }` - which the ami repository's publish updates here by a pull request. A module ref
+is then a set of releases with their images: a release with none in the installation's region is
+refused at plan, naming the regions it has one in, and `image_id` names an image of your own
+build instead.
 
 The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
@@ -29,7 +32,11 @@ not expose what an installation needs to decide:
 
 A variable of the root left unset is the module's own default: each defaults to null, which
 the modules read as their default, so a default is said once. `examples/complete` is an
-installation, and what `task lint` validates the modules through.
+installation, `examples/minimal` the least one is (a release and a domain), and each module's
+inputs and outputs are in its own README. `task lint` validates both examples, lints with TFLint,
+scans with Trivy - each finding this installation decides against is ignored at its resource, with
+the reason - checks those READMEs against the code (`task docs` writes them), and runs each
+module's tests against its plan.
 
 ## Before you start
 
@@ -245,8 +252,9 @@ The installation's state bucket and key (`bootstrap/`) are removed apart, after 
   Caddy, and once Caddy answers points `proxy.` at itself and takes the elastic IP; its watch
   saves what Caddy issues every five minutes, following no link out of Caddy's directory. What
   is lost is seconds of API and open connections, never a workspace. The image is the release's
-  Spin OS, found by its `spin:version` tag, so it moves only with `spin_version` (or `image_id`,
-  which names one outright): an image rebuilt under the same tag is not picked up. A change to a
+  Spin OS, the id `images.json` names, so it moves only with `spin_version`, the module's ref, or
+  `image_id`: an image published again for a release reaches an installation by a reviewed change
+  to that file and by nothing else. A change to a
   document alone reaches a machine when it next starts: `aws autoscaling
   start-instance-refresh` on its group.
 - **The proxy has subnets of its own**, and the control plane takes a browser's address only

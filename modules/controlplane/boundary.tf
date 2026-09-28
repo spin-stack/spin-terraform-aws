@@ -64,9 +64,9 @@ data "aws_iam_policy_document" "boundary" {
     effect  = "Deny"
     actions = ["ec2:*Address*"]
     not_resources = [
-      "arn:aws:ec2:${local.region}:${local.account}:elastic-ip/${aws_eip.proxy.allocation_id}",
-      "arn:aws:ec2:${local.region}:${local.account}:instance/*",
-      "arn:aws:ec2:${local.region}:${local.account}:network-interface/*",
+      "${local.arn}:ec2:${local.region}:${local.account}:elastic-ip/${aws_eip.proxy.allocation_id}",
+      "${local.arn}:ec2:${local.region}:${local.account}:instance/*",
+      "${local.arn}:ec2:${local.region}:${local.account}:network-interface/*",
     ]
   }
   # The control plane's secrets are its role's alone, whatever policy a role is given later: the
@@ -79,7 +79,7 @@ data "aws_iam_policy_document" "boundary" {
     effect  = "Deny"
     actions = ["ssm:GetParameter*"]
     resources = [for p in [local.key_parameter, local.ca_parameter, local.admin_password_parameter, local.installation_parameter] :
-    "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
+    "${local.arn}:ssm:${local.region}:${local.account}:parameter${p}"]
     condition {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"

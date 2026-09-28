@@ -4,7 +4,7 @@
 #
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
-#   (the Spin OS image of that release in this account: spin-stack/ami, task build publish)
+#   (a release images.json has an image of in the region)
 #   tofu apply -var spin_version=v20260921.02 -var domain=spin.example.com
 #
 # From elsewhere, the source is this repository at a tag:
@@ -56,16 +56,19 @@ variable "name" {
 }
 
 variable "region" {
-  type    = string
-  default = "us-west-2"
+  description = "The region: the one bootstrap/ was applied in, and one images.json has the release's image in."
+  type        = string
+  default     = "us-west-2"
 }
 
 variable "spin_version" {
-  type = string
+  description = "The release, v<YYYYMMDD>.<N>: one images.json has an image of in this region."
+  type        = string
 }
 
 variable "domain" {
-  type = string
+  description = "The domain the installation answers on: the dashboard is app.<domain>."
+  type        = string
 }
 
 provider "aws" {
@@ -85,7 +88,8 @@ module "spin" {
 }
 
 output "dashboard" {
-  value = module.spin.dashboard
+  description = "The installation's dashboard: https://app.<domain>."
+  value       = module.spin.dashboard
 }
 
 output "next_steps" {

@@ -19,6 +19,8 @@ module "controlplane" {
   instance_type       = var.instance_type
   proxy_instance_type = var.proxy_instance_type
   collector           = var.collector
+  root_volume_gb      = var.controlplane_volume_gb
+  image_id            = var.image_id
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes
   quiet_hours         = var.quiet_hours

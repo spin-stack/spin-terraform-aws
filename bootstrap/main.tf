@@ -32,6 +32,8 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+data "aws_partition" "current" {}
+
 locals {
   # Named for the account and region, which is what makes a bucket's name unique; the key by an
   # alias every installation's configuration names the same way.
@@ -53,6 +55,9 @@ resource "aws_kms_alias" "state" {
   target_key_id = aws_kms_key.state.key_id
 }
 
+# No access log: another bucket, for a handful of reads per apply; CloudTrail's data events are the
+# account's to turn on.
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "state" {
   bucket = local.bucket
   lifecycle {

@@ -4,15 +4,25 @@
 # archive and serves it.
 
 # Spin OS of this installation's release (spin-stack/ami): the image is the release - a machine of
-# it runs that release and no other, from a root it cannot write - so the release names the image,
-# by the spin:version tag the image was published with. Only this account's images: one shared
-# into it with the same tag is not picked up. image_id names one outright.
+# it runs that release and no other, from a root it cannot write - so the release names the image.
+# Where each release's image is, region by region, is images.json at this repository's root, which
+# spin-stack/ami's publish updates by a pull request: an id this module's commit names, so an image
+# published again for a release reaches an installation by the module's ref moving, never by
+# whatever apply happens to follow it. image_id names one outright - a build of your own.
+locals {
+  images         = jsondecode(file("${path.module}/../../images.json"))
+  released_image = try(local.images[var.spin_version][local.region], "")
+  image_wanted   = var.image_id != "" ? var.image_id : local.released_image
+}
+
+# No owners: the image is named by its id, which a reviewed images.json or the operator gives -
+# there is no search whose result an owner would narrow.
+#trivy:ignore:AWS-0344
 data "aws_ami" "spin_os" {
-  most_recent = true
-  owners      = ["self"]
+  include_deprecated = true
   filter {
-    name   = var.image_id != "" ? "image-id" : "tag:spin:version"
-    values = [var.image_id != "" ? var.image_id : var.spin_version]
+    name   = "image-id"
+    values = [local.image_wanted]
   }
   filter {
     name   = "architecture"
@@ -22,19 +32,16 @@ data "aws_ami" "spin_os" {
     name   = "boot-mode"
     values = ["uefi"]
   }
-}
-
-# The image the machines boot, kept until the release changes: an image published again for the
-# same release - a rebuilt kernel, a package patched - is picked up by the next update, not by
-# whatever apply happens to follow it, which would replace every machine for a change nobody asked
-# for.
-resource "terraform_data" "image" {
-  input            = data.aws_ami.spin_os.id
-  triggers_replace = [var.spin_version, var.image_id]
+  lifecycle {
+    precondition {
+      condition     = local.image_wanted != ""
+      error_message = "${var.spin_version} has no Spin OS image in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name one with image_id."
+    }
+  }
 }
 
 locals {
-  image = terraform_data.image.output
+  image = data.aws_ami.spin_os.id
   # The image's root device, where a machine's root volume is sized: Spin OS's is /dev/xvda.
   root_device = data.aws_ami.spin_os.root_device_name
 
@@ -88,7 +95,7 @@ resource "aws_launch_template" "controlplane" {
     device_name = local.root_device
     ebs {
       volume_type           = "gp3"
-      volume_size           = 20
+      volume_size           = var.root_volume_gb
       encrypted             = true
       delete_on_termination = true
     }

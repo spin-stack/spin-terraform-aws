@@ -34,9 +34,14 @@ variables {
     boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
     standard_vcpus              = 8
     boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
-    collector                   = ""
     session_manager_policy_arn  = "arn:aws:iam::123456789012:policy/spin-session-manager"
   }
+}
+
+# The template's version, which a plan knows only once it is applied.
+override_resource {
+  target = aws_launch_template.runner
+  values = { id = "lt-00000000000000000", latest_version = 7 }
 }
 
 run "a_runner_is_reached_by_nothing" {
@@ -48,8 +53,8 @@ run "a_runner_is_reached_by_nothing" {
     error_message = "the runners module opens something other than the control plane's 8080 to the runners"
   }
   assert {
-    condition     = length(aws_vpc_security_group_ingress_rule.collector_from_runners) == 0
-    error_message = "the collector's port is opened on an installation with no collector"
+    condition     = aws_vpc_security_group_ingress_rule.collector_from_runners.from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_runners.security_group_id == "sg-00000000000000000" && aws_vpc_security_group_ingress_rule.collector_from_runners.cidr_ipv4 == null
+    error_message = "the collector's port is not opened to the runners alone"
   }
   assert {
     condition     = aws_launch_template.runner.metadata_options[0].http_tokens == "required" && aws_launch_template.runner.metadata_options[0].http_put_response_hop_limit == 1
@@ -70,39 +75,17 @@ run "a_runner_is_reached_by_nothing" {
     error_message = "a runner's machine is told something other than its role and its document"
   }
   # And it boots the control plane's image - the installation's release, the only one its control
-  # plane serves - on that image's root device; a new one replaces the group's hosts.
+  # plane serves - on that image's root device; a new one replaces the group's hosts. The group
+  # names the template's version by number: a new image is then a change to the group, which is
+  # what starts a refresh, where "$Latest" is the same string before and after.
   assert {
     condition = (
       aws_launch_template.runner.image_id == "ami-0123456789abcdef0" &&
       anytrue([for b in aws_launch_template.runner.block_device_mappings : b.device_name == "/dev/xvda"]) &&
-      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling"
+      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling" &&
+      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version == "7"
     )
     error_message = "a runner boots another image than the installation's, or keeps its image across a release"
-  }
-}
-
-run "a_runner_pushes_to_the_collector_where_there_is_one" {
-  command = plan
-  variables {
-    controlplane = {
-      name                        = "spin"
-      iam_name                    = "spin-us-east-2"
-      vpc_id                      = "vpc-00000000000000000"
-      subnet_ids                  = ["subnet-00000000000000000"]
-      security_group_id           = "sg-00000000000000000"
-      runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
-      runner_user_data            = "{}"
-      image                       = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
-      boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
-      standard_vcpus              = 8
-      boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
-      collector                   = "cp.spin.internal:4317"
-      session_manager_policy_arn  = "arn:aws:iam::123456789012:policy/spin-session-manager"
-    }
-  }
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.collector_from_runners[0].from_port == 4317 && aws_vpc_security_group_ingress_rule.collector_from_runners[0].security_group_id == "sg-00000000000000000"
-    error_message = "the collector's port is not opened to the runners"
   }
 }
 

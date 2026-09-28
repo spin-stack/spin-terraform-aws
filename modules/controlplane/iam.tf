@@ -58,9 +58,9 @@ resource "aws_iam_role_policy_attachment" "controlplane_ssm" {
 locals {
   # Spelled out rather than read off the roles: the boundary names them, and the roles carry
   # the boundary.
-  runner_scope_arn      = "arn:aws:iam::${local.account}:role/${local.iam_name}-runner-scope"
-  controlplane_role_arn = "arn:aws:iam::${local.account}:role/${local.iam_name}-controlplane"
-  runner_role_arn       = "arn:aws:iam::${local.account}:role/${local.iam_name}-runner"
+  runner_scope_arn      = "${local.arn}:iam::${local.account}:role/${local.iam_name}-runner-scope"
+  controlplane_role_arn = "${local.arn}:iam::${local.account}:role/${local.iam_name}-controlplane"
+  runner_role_arn       = "${local.arn}:iam::${local.account}:role/${local.iam_name}-runner"
 }
 
 data "aws_iam_policy_document" "controlplane" {
@@ -125,7 +125,7 @@ data "aws_iam_policy_document" "controlplane" {
   statement {
     sid       = "SizeTheRunners"
     actions   = ["autoscaling:SetDesiredCapacity"]
-    resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.runner_group}"]
+    resources = ["${local.arn}:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.runner_group}"]
   }
   statement {
     sid       = "SeeTheRunners"
@@ -143,7 +143,7 @@ data "aws_iam_policy_document" "controlplane" {
     sid     = "ItsDocumentAndSecrets"
     actions = ["ssm:GetParameter"]
     resources = [for p in [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter] :
-    "arn:aws:ssm:${local.region}:${local.account}:parameter${p}"]
+    "${local.arn}:ssm:${local.region}:${local.account}:parameter${p}"]
   }
   # Its own name in the internal zone, and nothing else there: what a new machine takes when it
   # takes the installation over.
@@ -162,7 +162,7 @@ data "aws_iam_policy_document" "controlplane" {
     sid = "ItsGroup"
     actions = ["autoscaling:CompleteLifecycleAction", "autoscaling:RecordLifecycleActionHeartbeat",
     "autoscaling:SetInstanceHealth"]
-    resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.controlplane_group}"]
+    resources = ["${local.arn}:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.controlplane_group}"]
   }
 }
 

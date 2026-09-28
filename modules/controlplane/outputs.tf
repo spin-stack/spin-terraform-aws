@@ -54,7 +54,7 @@ output "image" {
 }
 
 output "boot_log_group" {
-  description = "The CloudWatch log group every machine's boot writes to, a stream per instance."
+  description = "The CloudWatch log group every machine's boot writes to, a stream per <role>/<step>/<instance-id>: a role's machines are one stream prefix."
   value       = aws_cloudwatch_log_group.boot.name
 }
 
@@ -109,7 +109,8 @@ output "proxy_group" {
 }
 
 output "bucket" {
-  value = aws_s3_bucket.volumes.bucket
+  description = "The volumes' bucket: every workspace's disk, versioned under Object Lock, reached only through the VPC's endpoint."
+  value       = aws_s3_bucket.volumes.bucket
 }
 
 output "database_bucket" {

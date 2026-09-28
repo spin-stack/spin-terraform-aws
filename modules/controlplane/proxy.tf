@@ -11,6 +11,7 @@
 # The proxy's own subnets, one per zone, where nothing else runs: the range the control plane
 # takes a browser's address from (--trusted-proxy). A runner, in the public subnets, cannot
 # claim to be a proxy by being in the VPC.
+#trivy:ignore:AWS-0164
 resource "aws_subnet" "edge" {
   count                   = length(local.zones)
   vpc_id                  = aws_vpc.this.id
@@ -66,12 +67,12 @@ data "aws_iam_policy_document" "proxy" {
   statement {
     sid       = "TheAddress"
     actions   = ["ec2:AssociateAddress"]
-    resources = ["arn:aws:ec2:${local.region}:${local.account}:elastic-ip/${aws_eip.proxy.allocation_id}"]
+    resources = ["${local.arn}:ec2:${local.region}:${local.account}:elastic-ip/${aws_eip.proxy.allocation_id}"]
   }
   statement {
     sid       = "OntoAProxy"
     actions   = ["ec2:AssociateAddress"]
-    resources = ["arn:aws:ec2:${local.region}:${local.account}:instance/*", "arn:aws:ec2:${local.region}:${local.account}:network-interface/*"]
+    resources = ["${local.arn}:ec2:${local.region}:${local.account}:instance/*", "${local.arn}:ec2:${local.region}:${local.account}:network-interface/*"]
     condition {
       test     = "StringEquals"
       variable = "aws:ResourceTag/spin:role"
@@ -95,7 +96,7 @@ data "aws_iam_policy_document" "proxy" {
   statement {
     sid       = "InService"
     actions   = ["autoscaling:CompleteLifecycleAction", "autoscaling:RecordLifecycleActionHeartbeat"]
-    resources = ["arn:aws:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.proxy_group}"]
+    resources = ["${local.arn}:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.proxy_group}"]
   }
 }
 
@@ -119,6 +120,8 @@ resource "aws_eip" "proxy" {
 # Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock -
 # a certificate is replaced every sixty days and an old one is worth nothing. Reached, like the
 # volumes' bucket, only through the VPC's endpoint.
+# No access log, as the volumes'.
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "certificates" {
   bucket        = "${local.name}-proxy-${local.account}-${local.region}"
   force_destroy = true
@@ -159,6 +162,8 @@ resource "aws_s3_bucket_ownership_controls" "certificates" {
   }
 }
 
+# SSE-S3: only the proxy's role reaches the bucket, and a KMS key would keep out no second reader.
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "certificates" {
   bucket = aws_s3_bucket.certificates.id
   rule {

@@ -21,6 +21,10 @@ resource "aws_security_group" "runner" {
   tags        = merge(local.tags, { Name = "${local.name}-runner" })
 }
 
+# Everything out: a workspace's egress is the installation's policy, enforced per machine by spin's
+# nftables on the host (spin's docs/network), which a security group cannot tell one guest from
+# another for.
+#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "runner" {
   security_group_id = aws_security_group.runner.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -28,9 +32,9 @@ resource "aws_vpc_security_group_egress_rule" "runner" {
   description       = "the control plane, the relay, the bucket, and the egress of workspaces, which spin filters"
 }
 
-# The collector's port, where the installation has one.
+# The collector's port: every process of the installation pushes to it (the control plane
+# module's telemetry.tf).
 resource "aws_vpc_security_group_ingress_rule" "collector_from_runners" {
-  count                        = var.controlplane.collector == "" ? 0 : 1
   security_group_id            = var.controlplane.security_group_id
   referenced_security_group_id = aws_security_group.runner.id
   ip_protocol                  = "tcp"
@@ -186,7 +190,10 @@ resource "aws_autoscaling_group" "runner" {
     launch_template {
       launch_template_specification {
         launch_template_id = aws_launch_template.runner.id
-        version            = "$Latest"
+        # The version by number: a new image is a new version, and a new version is a change to
+        # this group, which is what starts the refresh below. "$Latest" never changes, so the group
+        # would never see one, and its hosts would keep the old release until it next emptied.
+        version = aws_launch_template.runner.latest_version
       }
       dynamic "override" {
         for_each = var.instance_types

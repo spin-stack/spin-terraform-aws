@@ -1,9 +1,10 @@
 # An installation applied from GitHub Actions rather than from somebody's machine: each repository
 # named here gets two roles, assumed with GitHub's OIDC token, so no key is kept in GitHub.
 #
-#   <name>-plan   a pull request's plan: read everything, open the state, write nothing. Only a
-#                 pull_request run of that repository assumes it, and it plans with -lock=false,
-#                 since it may not take the state's lock.
+#   <name>-plan   a pull request's plan: read everything but the installation's two secrets that
+#                 are not in the state, open the state, write nothing. Only a pull_request run of
+#                 that repository assumes it, and it plans with -lock=false, since it may not take
+#                 the state's lock, and -refresh=false (plan_opens, below).
 #   <name>-apply  the apply: anything an installation makes. Only a job of that repository's
 #                 `production` environment, running on main, assumes it.
 #
@@ -75,25 +76,28 @@ resource "aws_iam_role" "github" {
 resource "aws_iam_role_policy_attachment" "github" {
   for_each   = aws_iam_role.github
   role       = each.value.name
-  policy_arn = endswith(each.key, "-plan") ? "arn:aws:iam::aws:policy/ReadOnlyAccess" : "arn:aws:iam::aws:policy/AdministratorAccess"
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/${endswith(each.key, "-plan") ? "ReadOnlyAccess" : "AdministratorAccess"}"
 }
 
-# ReadOnlyAccess reads no SecureString and opens no state: the key that encrypts the state, and
-# the account's SSM key through SSM alone, which a plan's refresh of the installation's parameters
-# needs.
+# ReadOnlyAccess opens no state: the key that encrypts it.
+#
+# It does read every SecureString under the account's aws/ssm key - that key's policy lets any
+# principal of the account decrypt through SSM - and the two secrets an installation keeps out of
+# its state are among them: the encryption key its database is sealed under and the first
+# administrator's password. Whoever can open a pull request would read both. A plan is refused them
+# here, so a pull request's plan does not refresh (`tofu plan -refresh=false`): a refresh reads each
+# parameter back, decrypted. The apply's own plan refreshes, under the apply role.
 data "aws_iam_policy_document" "plan_opens" {
   statement {
     actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = [aws_kms_key.state.arn]
   }
   statement {
-    actions   = ["kms:Decrypt"]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["ssm.${var.region}.amazonaws.com"]
-    }
+    sid     = "NotTheSecretsTheStateHasNot"
+    effect  = "Deny"
+    actions = ["ssm:GetParameter*"]
+    resources = [for p in ["controlplane-encryption-key", "bootstrap-password"] :
+    "arn:${data.aws_partition.current.partition}:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/spin/*/${p}"]
   }
 }
 

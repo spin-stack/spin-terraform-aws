@@ -11,14 +11,16 @@
 #
 # Versioned and under Object Lock, as spin opens every store it writes (its NewS3Store refuses a
 # bucket without both): a delete or an overwrite - by a machine that was taken, or a prune gone
-# wrong - is a version the lock holds for two weeks rather than a database lost. No force_destroy
-# but while the installation is being removed (var.decommission): a destroy that took the archive
-# with it would take the database.
+# wrong - is a version the lock holds for database_lock_days rather than a database lost. No
+# force_destroy but while the installation is being removed (var.decommission): a destroy that took
+# the archive with it would take the database.
 
 locals {
-  database_lock_days = 14
+  database_lock_days = var.database_lock_days
 }
 
+# No access log, as the volumes'.
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "database" {
   bucket              = "${local.name}-database-${local.account}-${local.region}"
   object_lock_enabled = true
@@ -61,6 +63,8 @@ resource "aws_s3_bucket_ownership_controls" "database" {
   }
 }
 
+# SSE-S3, the second wrapping of what spin sealed (above).
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "database" {
   bucket = aws_s3_bucket.database.id
   rule {

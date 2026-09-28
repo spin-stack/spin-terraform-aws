@@ -1,8 +1,12 @@
 # What each machine's boot says, kept after the machine is gone: a boot that fails abandons its
 # launch, the group terminates the machine, and a log on its disk would go with it. One stream per
-# instance; the machines may add to their own streams and read nothing, and nothing but the
-# retention removes what they wrote (the boundary refuses the rest).
+# role, step and instance (<role>/<step>/<instance-id>, spin's boot names it), so a role's machines
+# are one prefix; the machines may add to streams and read nothing, and nothing but the retention
+# removes what they wrote (the boundary refuses the rest).
 
+# CloudWatch's own encryption and no KMS key: a boot says what it does, never a secret, and who
+# reads it is IAM's.
+#trivy:ignore:AWS-0017
 resource "aws_cloudwatch_log_group" "boot" {
   name              = "/spin/${local.name}/boot"
   retention_in_days = var.log_retention_days

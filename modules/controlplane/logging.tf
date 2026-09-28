@@ -6,6 +6,9 @@
 # each is its own switch: the query log is Route 53 Resolver's, which an installation keeping
 # its DNS elsewhere may not want to pay for at all.
 
+# CloudWatch's own encryption, as the boot log's: who reads the flows and the names is IAM's, and a
+# KMS key would be one more policy for the same readers.
+#trivy:ignore:AWS-0017
 resource "aws_cloudwatch_log_group" "flow" {
   count             = var.flow_logs ? 1 : 0
   name              = "/spin/${local.name}/vpc-flow"
@@ -62,6 +65,7 @@ resource "aws_flow_log" "vpc" {
   tags                     = local.tags
 }
 
+#trivy:ignore:AWS-0017
 resource "aws_cloudwatch_log_group" "resolver" {
   count             = var.dns_query_logs ? 1 : 0
   name              = "/spin/${local.name}/resolver-queries"
@@ -88,7 +92,7 @@ data "aws_iam_policy_document" "resolver" {
     condition {
       test     = "ArnLike"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:route53resolver:${local.region}:${local.account}:resolver-query-log-config/*"]
+      values   = ["${local.arn}:route53resolver:${local.region}:${local.account}:resolver-query-log-config/*"]
     }
   }
 }

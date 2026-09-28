@@ -54,9 +54,23 @@ variable "proxy_instance_type" {
 }
 
 variable "collector" {
-  description = "The collector, as modules/controlplane's collector object: the metric interval and the Alloy package pinned. Where it sends is set in the dashboard."
-  type        = any
-  default     = {}
+  description = "The collector, as modules/controlplane's collector object: how often metrics are pushed to it; modules/controlplane's default is 60s. Where it sends is set in the dashboard."
+  type = object({
+    metric_interval = optional(string)
+  })
+  default = null
+}
+
+variable "controlplane_volume_gb" {
+  description = "The control plane's disk, which /var - the database and the stores - takes all of past the OS; modules/controlplane's default is 40."
+  type        = number
+  default     = null
+}
+
+variable "image_id" {
+  description = "A Spin OS AMI of your own for every machine, instead of the one images.json names for spin_version in this region."
+  type        = string
+  default     = null
 }
 
 variable "installation_config" {

@@ -4,6 +4,9 @@
 # every write to the bucket's configuration (iam.tf, boundary.tf), because one able to write the
 # lifecycle could expire every volume in it without touching an object.
 
+# No access log: another bucket for every request a host makes, where CloudTrail's data events are
+# the account's to turn on for the buckets it wants them for.
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "volumes" {
   bucket              = "${local.name}-volumes-${local.account}-${local.region}"
   object_lock_enabled = true
@@ -77,6 +80,7 @@ resource "aws_s3_bucket_ownership_controls" "volumes" {
   }
 }
 
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "volumes" {
   bucket = aws_s3_bucket.volumes.id
   rule {

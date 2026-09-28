@@ -1,0 +1,23 @@
+# Each module's inputs and outputs, generated from their descriptions into its README between the
+# markers, and checked by `task lint`: a variable added, renamed or described anew is a README that
+# no longer matches until `task docs` writes it again. The prose around the markers is the module's.
+formatter: markdown table
+
+output:
+  file: README.md
+  mode: inject
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: false
+  default: true
+  escape: true
+  hide-empty: true
+  html: false
+  indent: 2
+  lockfile: false
+  required: true
+  type: true

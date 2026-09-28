@@ -11,6 +11,9 @@
 # its metastore naming splits that are gone. What a lifecycle does do here is clear uploads a
 # machine abandoned halfway.
 
+# Unversioned on purpose (above); no access log, as the volumes'.
+#trivy:ignore:AWS-0090
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "logs" {
   bucket = "${local.name}-logs-${local.account}-${local.region}"
   # The installation's logs and metrics are kept past a destroy unless it is being removed.
@@ -33,6 +36,7 @@ resource "aws_s3_bucket_ownership_controls" "logs" {
   }
 }
 
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
   bucket = aws_s3_bucket.logs.id
   rule {

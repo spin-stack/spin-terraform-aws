@@ -48,14 +48,20 @@ variable "acme_email" {
 }
 
 variable "vpc_cidr" {
-  description = "The VPC's range. One /20 public subnet per availability zone is carved from it."
+  description = "The VPC's range, a /16. One /20 public subnet per availability zone is carved from its first half, and one /24 for the proxy per zone from x.x.136.0 on."
   type        = string
   default     = "10.42.0.0/16"
   nullable    = false
+  # The subnets are carved at fixed offsets (network.tf, proxy.tf): from a /16 they never overlap
+  # and all fit; from anything else they overlap, or fall outside it.
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr)) && endswith(var.vpc_cidr, "/16")
+    error_message = "vpc_cidr is an IPv4 /16, e.g. 10.42.0.0/16."
+  }
 }
 
 variable "availability_zones" {
-  description = "How many zones to make subnets in. The control plane uses the first; runners spread across all, which is what gives a spot group somewhere to go when one zone runs out."
+  description = "How many zones to make subnets in. The control plane, the proxy and the runners may each be started in any of them, which is what gives a group somewhere to go when a zone runs out."
   type        = number
   default     = 3
   nullable    = false
@@ -70,6 +76,17 @@ variable "instance_type" {
   type        = string
   default     = "t8i.medium"
   nullable    = false
+}
+
+variable "root_volume_gb" {
+  description = "The control plane's disk: beside the read-only OS, /var takes the rest - the database, the logs' and metrics' stores and their caches. A new size is a new machine, replaced beside the old."
+  type        = number
+  default     = 40
+  nullable    = false
+  validation {
+    condition     = var.root_volume_gb >= 20
+    error_message = "root_volume_gb is at least 20: the OS alone takes some of it."
+  }
 }
 
 variable "admin_email" {
@@ -87,7 +104,7 @@ variable "flow_logs" {
 }
 
 variable "dns_query_logs" {
-  description = "Keep the VPC resolver's query log in CloudWatch: every name looked up, a workspace's included. It is Route 53 Resolver's, and off unless asked for."
+  description = "Keep the VPC resolver's query log in CloudWatch: every name looked up, a workspace's included. It is Route 53 Resolver's, and off unless asked for. Each installation that turns it on takes one of the ten CloudWatch Logs resource policies a region of an account may have."
   type        = bool
   default     = false
   nullable    = false
@@ -134,6 +151,17 @@ variable "object_lock_days" {
   type        = number
   default     = 30
   nullable    = false
+}
+
+variable "database_lock_days" {
+  description = "The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database_bucket.tf)."
+  type        = number
+  default     = 14
+  nullable    = false
+  validation {
+    condition     = var.database_lock_days >= 1
+    error_message = "database_lock_days is at least one."
+  }
 }
 
 variable "runner_policy" {
@@ -196,7 +224,7 @@ variable "tags" {
 }
 
 variable "image_id" {
-  description = "A Spin OS AMI of this account for every machine, instead of the newest one tagged spin:version = spin_version. It must carry that release: a machine refuses a document of another."
+  description = "A Spin OS AMI for every machine, instead of the one images.json names for spin_version in this region: a build of your own. It must carry that release: a machine refuses a document of another."
   type        = string
   default     = ""
   nullable    = false

@@ -2,10 +2,18 @@ version: '3'
 
 vars:
   TOOLS_BIN: '{{.ROOT_DIR}}/.tools/bin'
-  # OpenTofu, a release zip checked against this digest: the one in the release's
-  # tofu_<version>_SHA256SUMS.
+  # Each tool is a release archive checked against this digest: the one in the release's own
+  # checksums file.
   TOFU_VERSION: 1.12.6
   TOFU_SHA256: 5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
+  TFLINT_VERSION: 0.64.0
+  TFLINT_SHA256: cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+  TRIVY_VERSION: 0.74.0
+  TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+  TFDOCS_VERSION: 0.24.0
+  TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+  # The modules whose inputs and outputs terraform-docs writes into their README.
+  DOCUMENTED: modules/controlplane modules/runners
 
 tasks:
   tools:tofu:
@@ -19,9 +27,49 @@ tasks:
       - unzip -oq {{.TOOLS_BIN}}/tofu.zip tofu -d {{.TOOLS_BIN}}
       - rm {{.TOOLS_BIN}}/tofu.zip
 
+  tools:tflint:
+    desc: Install the pinned TFLint.
+    status:
+      - test -x {{.TOOLS_BIN}}/tflint && {{.TOOLS_BIN}}/tflint --version | grep -q 'version {{.TFLINT_VERSION}}$'
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/tflint.zip https://github.com/terraform-linters/tflint/releases/download/v{{.TFLINT_VERSION}}/tflint_linux_amd64.zip
+      - echo "{{.TFLINT_SHA256}}  {{.TOOLS_BIN}}/tflint.zip" | sha256sum --check --quiet
+      - unzip -oq {{.TOOLS_BIN}}/tflint.zip tflint -d {{.TOOLS_BIN}}
+      - rm {{.TOOLS_BIN}}/tflint.zip
+
+  tools:trivy:
+    desc: Install the pinned Trivy.
+    status:
+      - "test -x {{.TOOLS_BIN}}/trivy && {{.TOOLS_BIN}}/trivy --version | grep -q 'Version: {{.TRIVY_VERSION}}$'"
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v{{.TRIVY_VERSION}}/trivy_{{.TRIVY_VERSION}}_Linux-64bit.tar.gz
+      - echo "{{.TRIVY_SHA256}}  {{.TOOLS_BIN}}/trivy.tgz" | sha256sum --check --quiet
+      - tar -xzf {{.TOOLS_BIN}}/trivy.tgz -C {{.TOOLS_BIN}} trivy
+      - rm {{.TOOLS_BIN}}/trivy.tgz
+
+  tools:terraform-docs:
+    desc: Install the pinned terraform-docs.
+    status:
+      - test -x {{.TOOLS_BIN}}/terraform-docs && {{.TOOLS_BIN}}/terraform-docs --version | grep -q 'v{{.TFDOCS_VERSION}} '
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/terraform-docs.tgz https://github.com/terraform-docs/terraform-docs/releases/download/v{{.TFDOCS_VERSION}}/terraform-docs-v{{.TFDOCS_VERSION}}-linux-amd64.tar.gz
+      - echo "{{.TFDOCS_SHA256}}  {{.TOOLS_BIN}}/terraform-docs.tgz" | sha256sum --check --quiet
+      - tar -xzf {{.TOOLS_BIN}}/terraform-docs.tgz -C {{.TOOLS_BIN}} terraform-docs
+      - rm {{.TOOLS_BIN}}/terraform-docs.tgz
+
+  docs:
+    desc: Write each module's inputs and outputs into its README.
+    deps: [tools:terraform-docs]
+    cmds:
+      - for: {var: DOCUMENTED, split: ' '}
+        cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml {{.ITEM}}"
+
   lint:
-    desc: Format-check and validate the module and the example, and hold each module to its tests.
-    deps: [tools:tofu]
+    desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
+    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs]
     # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
@@ -31,8 +79,17 @@ tasks:
       - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
-      - for: ['.', examples/complete, bootstrap]
+      - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
+      # What validate does not know (.tflint.hcl), against one configuration for every directory:
+      # an absolute path, since a relative one is looked for in each directory it walks into.
+      - "{{.TOOLS_BIN}}/tflint --init --config={{.ROOT_DIR}}/.tflint.hcl >/dev/null"
+      - "{{.TOOLS_BIN}}/tflint --recursive --config={{.ROOT_DIR}}/.tflint.hcl --format compact"
+      # AWS's misconfigurations, each one this installation decides against ignored at its
+      # resource with the reason (#trivy:ignore), so a new one fails here.
+      - "{{.TOOLS_BIN}}/trivy config --quiet --exit-code 1 --cache-dir {{.ROOT_DIR}}/.tools/trivy-cache --skip-dirs .tools ."
+      - for: {var: DOCUMENTED, split: ' '}
+        cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml --output-check {{.ITEM}} >/dev/null || { echo '{{.ITEM}}/README.md is not what its variables and outputs say: task docs'; exit 1; }"
       # What each module promises about who reaches what - the proxy the only machine the
       # internet reaches, no role able to write IAM or read another's secrets - asserted
       # against its plan, with no account.
