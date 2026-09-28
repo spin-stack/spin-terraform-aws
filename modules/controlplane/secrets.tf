@@ -11,9 +11,9 @@
 # encryption block), and the key is in SSM for the control plane alone.
 
 locals {
-  key_parameter            = "/${var.name}/controlplane-encryption-key"
-  ca_parameter             = "/${var.name}/controlplane-ca"
-  admin_password_parameter = "/${var.name}/bootstrap-password"
+  key_parameter            = "/spin/${local.name}/controlplane-encryption-key"
+  ca_parameter             = "/spin/${local.name}/controlplane-ca"
+  admin_password_parameter = "/spin/${local.name}/bootstrap-password"
   admin_email              = var.admin_email != "" ? var.admin_email : "admin@${var.domain}"
 }
 
@@ -29,7 +29,7 @@ resource "aws_ssm_parameter" "encryption_key" {
   # parameter is a PutParameter, which carries a value, and the value is write-only - an
   # ephemeral password made again at every apply. An apply that rewrote the description could
   # write a new key, and a new key is a database nothing can open.
-  description = "The encryption key of ${var.name}: with the catalog, the installation"
+  description = "The encryption key of ${local.name}: with the catalog, the installation"
   type        = "SecureString"
   # Thirty-two bytes, as base64: what the control plane's key is.
   value_wo         = base64sha256(ephemeral.random_password.encryption_key.result)
@@ -59,7 +59,7 @@ resource "tls_private_key" "ca" {
 resource "tls_self_signed_cert" "ca" {
   private_key_pem = tls_private_key.ca.private_key_pem
   subject {
-    common_name  = "${var.name} spin CA"
+    common_name  = "${local.name} spin CA"
     organization = "spin"
   }
   is_ca_certificate     = true
@@ -75,7 +75,7 @@ resource "tls_self_signed_cert" "ca" {
 # in their documents.
 resource "aws_ssm_parameter" "ca" {
   name        = local.ca_parameter
-  description = "The CA of ${var.name}: its certificate and key, for the control plane alone"
+  description = "The CA of ${local.name}: its certificate and key, for the control plane alone"
   type        = "SecureString"
   value       = "${tls_self_signed_cert.ca.cert_pem}${tls_private_key.ca.private_key_pem}"
   tags        = local.tags
@@ -91,7 +91,7 @@ ephemeral "random_password" "admin" {
 
 resource "aws_ssm_parameter" "admin_password" {
   name             = local.admin_password_parameter
-  description      = "The one-time password of ${local.admin_email}, the first administrator of ${var.name}"
+  description      = "The one-time password of ${local.admin_email}, the first administrator of ${local.name}"
   type             = "SecureString"
   value_wo         = ephemeral.random_password.admin.result
   value_wo_version = 1

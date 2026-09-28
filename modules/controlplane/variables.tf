@@ -2,13 +2,16 @@
 # this one - the repository's root - passes what it was given without restating what it means.
 
 variable "name" {
-  description = "Prefix for every resource, and the SSM path (/<name>/...) each machine's document is at."
+  description = "The installation's name, one per region of an account: every resource's prefix, the SSM path (/spin/<name>/...) each machine's document is at, and - with the region - every IAM name. Two installations of one account may share a name in two regions, and not in one (claim.tf)."
   type        = string
   default     = "spin"
   nullable    = false
+  # Twenty-six at most: the longest name made of it is a bucket, "<name>-database-<account>-<region>",
+  # and a bucket's is 63 characters with a region of 14 (ap-southeast-4). No dash at either end and
+  # none doubled, as a bucket's name may not have them.
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.name))
-    error_message = "name is lowercase letters, digits and dashes, starting with a letter: it names a bucket and an SSM path."
+    condition     = length(var.name) >= 2 && length(var.name) <= 26 && can(regex("^[a-z](-?[a-z0-9])*$", var.name))
+    error_message = "name is 2 to 26 lowercase letters, digits and single dashes, starting with a letter and not ending with a dash: it names buckets, IAM roles and an SSM path."
   }
 }
 

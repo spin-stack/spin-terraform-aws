@@ -11,7 +11,7 @@
 # force_destroy, because a destroy would otherwise refuse the records it did not make.
 resource "aws_route53_zone" "internal" {
   name          = var.internal_zone
-  comment       = "${var.name}: its components, to each other"
+  comment       = "${local.name}: its components, to each other"
   force_destroy = true
   vpc {
     vpc_id = aws_vpc.this.id
@@ -30,7 +30,7 @@ locals {
 # internal zone's.
 resource "aws_route53_zone" "public" {
   name          = var.domain
-  comment       = "${var.name}: the installation, to the internet"
+  comment       = "${local.name}: the installation, to the internet"
   force_destroy = true
   tags          = local.tags
 }

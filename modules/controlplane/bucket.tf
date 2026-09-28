@@ -5,7 +5,7 @@
 # lifecycle could expire every volume in it without touching an object.
 
 resource "aws_s3_bucket" "volumes" {
-  bucket              = "${var.name}-volumes-${local.account}-${local.region}"
+  bucket              = "${local.name}-volumes-${local.account}-${local.region}"
   object_lock_enabled = true
   # Only when the installation is being removed (var.decommission): every workspace's disk is here.
   force_destroy = var.decommission

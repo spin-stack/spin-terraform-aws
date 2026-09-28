@@ -14,10 +14,10 @@
 # role reads them.
 
 locals {
-  config_parameter       = "/${var.name}/controlplane-config"
-  proxy_parameter        = "/${var.name}/proxy-config"
-  runner_parameter       = "/${var.name}/runner-config"
-  installation_parameter = "/${var.name}/installation"
+  config_parameter       = "/spin/${local.name}/controlplane-config"
+  proxy_parameter        = "/spin/${local.name}/proxy-config"
+  runner_parameter       = "/spin/${local.name}/runner-config"
+  installation_parameter = "/spin/${local.name}/installation"
 
   # A parameter, as spin reads one: with its region, which a machine's SDK does not otherwise
   # know.
@@ -37,8 +37,9 @@ locals {
   heartbeat_timeout = 300
 
   # Which installation a runner's signed request is for (spin's internal/domain/hostjoin): the
-  # account and the name, so a request signed for another installation is not one this takes.
-  join_audience = "spin:${local.account}:${var.name}"
+  # account, the region and the name, so a request signed for another installation - one of the
+  # same name in another region too - is not one this takes.
+  join_audience = "spin:${local.account}:${local.region}:${local.name}"
 
   telemetry_of = {
     enabled         = true
@@ -169,7 +170,7 @@ locals {
 
 resource "aws_ssm_parameter" "controlplane_config" {
   name        = local.config_parameter
-  description = "What ${var.name}'s control plane machines start on"
+  description = "What ${local.name}'s control plane machines start on"
   type        = "String"
   value       = yamlencode(local.controlplane_document)
   tags        = local.tags
@@ -177,7 +178,7 @@ resource "aws_ssm_parameter" "controlplane_config" {
 
 resource "aws_ssm_parameter" "proxy_config" {
   name        = local.proxy_parameter
-  description = "What ${var.name}'s proxy machines start on"
+  description = "What ${local.name}'s proxy machines start on"
   type        = "String"
   value       = yamlencode(local.proxy_document)
   tags        = local.tags
@@ -185,7 +186,7 @@ resource "aws_ssm_parameter" "proxy_config" {
 
 resource "aws_ssm_parameter" "runner_config" {
   name        = local.runner_parameter
-  description = "What ${var.name}'s runners start on"
+  description = "What ${local.name}'s runners start on"
   type        = "String"
   value       = yamlencode(local.runner_document)
   tags        = local.tags
@@ -195,7 +196,7 @@ resource "aws_ssm_parameter" "runner_config" {
 # alone to read; and it grows, so it is not held to a standard parameter's 4 KiB.
 resource "aws_ssm_parameter" "installation" {
   name        = local.installation_parameter
-  description = "${var.name}'s configuration, which its control plane seeds its database from"
+  description = "${local.name}'s configuration, which its control plane seeds its database from"
   type        = "SecureString"
   tier        = "Intelligent-Tiering"
   value       = yamlencode(local.installation)

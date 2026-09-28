@@ -142,8 +142,8 @@ data "aws_iam_policy_document" "boundary" {
 }
 
 resource "aws_iam_policy" "boundary" {
-  name        = "${var.name}-boundary"
-  description = "The most any role of the ${var.name} installation may do"
+  name        = "${local.iam_name}-boundary"
+  description = "The most any role of the ${local.name} installation in ${local.region} may do"
   policy      = data.aws_iam_policy_document.boundary.json
   tags        = local.tags
 }

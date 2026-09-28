@@ -116,6 +116,24 @@ Drain it first if it still runs workspaces you want kept. With nothing waiting f
 control plane may have sized the group to zero already, and then there is nothing to replace: the
 next workspace that waits starts one.
 
+## Several installations in one account
+
+An account holds as many installations as it has names and regions for: two of different names in
+one region, and two of one name in two regions. `name` is what tells them apart within a region -
+every regional name is under it: the buckets (`<name>-volumes-<account>-<region>`), the groups,
+the security groups, and the parameters and log groups under `/spin/<name>/`. IAM is the account's
+and not a region's, so what it names carries the region too (`<name>-<region>-controlplane`), and so
+does the audience a runner signs its join for.
+
+One name in one region is one installation. The name is claimed before anything is made under it
+(`/spin/<name>/claim`): a second installation of that name in that region stops at the claim, with
+nothing of it made. A name is 2 to 26 characters, which keeps the longest bucket name within S3's
+63.
+
+What the account has once, the installations share: the Spin OS image of a release (read, never
+changed, by each), and the EC2 vCPU quota of a region, which each installation's `request_quota`
+checks against its own runners alone - where several share a region, leave it to one of them.
+
 ## Removing an installation
 
 An installation keeps its data past a plain `tofu destroy`: the volumes, the database's archive
@@ -139,7 +157,7 @@ laptop either. Removing one is said first, applied, and only then destroyed:
    tofu state rm module.spin.module.controlplane.aws_ssm_parameter.encryption_key \
      module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
    tofu destroy
-   aws ssm delete-parameter --name /<name>/controlplane-encryption-key
+   aws ssm delete-parameter --name /spin/<name>/controlplane-encryption-key
    ```
 
 The apply has to come first: a destroy empties a bucket as its state says, so `decommission`

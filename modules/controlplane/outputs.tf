@@ -1,6 +1,11 @@
 output "name" {
-  description = "The installation's name, which the runners' group, role and SSM path are named for."
-  value       = var.name
+  description = "The installation's name, claimed in its region (claim.tf), which the runners' group and security group are named for."
+  value       = local.name
+}
+
+output "iam_name" {
+  description = "What the installation's IAM names begin with: its name and its region, since IAM is the account's and two regions may each have an installation of one name. The runners' role and instance profile are named for it."
+  value       = local.iam_name
 }
 
 output "vpc_id" {

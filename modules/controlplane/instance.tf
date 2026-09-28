@@ -52,11 +52,11 @@ locals {
   url        = "https://${local.cp_host}:8080"
 
   # The groups of one each machine is in, by name, so a machine can speak for itself to its own.
-  controlplane_group = "${var.name}-controlplane"
-  proxy_group        = "${var.name}-proxy"
+  controlplane_group = "${local.name}-controlplane"
+  proxy_group        = "${local.name}-proxy"
 
   # The group the runners module makes; its name is the contract between the two modules.
-  runner_group = "${var.name}-runners"
+  runner_group = "${local.name}-runners"
 }
 
 data "aws_ec2_instance_type" "controlplane" {
@@ -68,7 +68,7 @@ data "aws_ec2_instance_type" "proxy" {
 }
 
 resource "aws_launch_template" "controlplane" {
-  name_prefix            = "${var.name}-controlplane-"
+  name_prefix            = "${local.name}-controlplane-"
   image_id               = local.image
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.controlplane.id]
@@ -96,11 +96,11 @@ resource "aws_launch_template" "controlplane" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.tags, { Name = "${var.name}-controlplane", "spin:role" = "controlplane", "spin:starts-on" = local.controlplane_starts_on })
+    tags          = merge(local.tags, { Name = "${local.name}-controlplane", "spin:role" = "controlplane", "spin:starts-on" = local.controlplane_starts_on })
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${var.name}-controlplane" })
+    tags          = merge(local.tags, { Name = "${local.name}-controlplane" })
   }
   tags = local.tags
 }
@@ -163,7 +163,7 @@ resource "aws_autoscaling_group" "controlplane" {
   }
 
   dynamic "tag" {
-    for_each = merge(local.tags, { Name = "${var.name}-controlplane" })
+    for_each = merge(local.tags, { Name = "${local.name}-controlplane" })
     content {
       key                 = tag.key
       value               = tag.value

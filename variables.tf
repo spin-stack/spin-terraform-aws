@@ -9,7 +9,7 @@ variable "domain" {
 }
 
 variable "name" {
-  description = "Prefix for every resource and the SSM path; modules/controlplane's default is spin."
+  description = "The installation's name, one per region of an account (two regions may share it): every resource's prefix, the SSM path /spin/<name>/, and with the region every IAM name. 2 to 26 characters; modules/controlplane's default is spin."
   type        = string
   default     = null
 }

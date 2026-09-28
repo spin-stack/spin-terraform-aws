@@ -15,14 +15,14 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "controlplane" {
-  name                 = "${var.name}-controlplane"
+  name                 = "${local.iam_name}-controlplane"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = aws_iam_policy.boundary.arn
   tags                 = local.tags
 }
 
 resource "aws_iam_instance_profile" "controlplane" {
-  name = "${var.name}-controlplane"
+  name = "${local.iam_name}-controlplane"
   role = aws_iam_role.controlplane.name
   tags = local.tags
 }
@@ -44,8 +44,8 @@ data "aws_iam_policy_document" "session_manager" {
 }
 
 resource "aws_iam_policy" "session_manager" {
-  name        = "${var.name}-session-manager"
-  description = "Session Manager into a machine of the ${var.name} installation, and nothing else of SSM"
+  name        = "${local.iam_name}-session-manager"
+  description = "Session Manager into a machine of the ${local.name} installation in ${local.region}, and nothing else of SSM"
   policy      = data.aws_iam_policy_document.session_manager.json
   tags        = local.tags
 }
@@ -58,9 +58,9 @@ resource "aws_iam_role_policy_attachment" "controlplane_ssm" {
 locals {
   # Spelled out rather than read off the roles: the boundary names them, and the roles carry
   # the boundary.
-  runner_scope_arn      = "arn:aws:iam::${local.account}:role/${var.name}-runner-scope"
-  controlplane_role_arn = "arn:aws:iam::${local.account}:role/${var.name}-controlplane"
-  runner_role_arn       = "arn:aws:iam::${local.account}:role/${var.name}-runner"
+  runner_scope_arn      = "arn:aws:iam::${local.account}:role/${local.iam_name}-runner-scope"
+  controlplane_role_arn = "arn:aws:iam::${local.account}:role/${local.iam_name}-controlplane"
+  runner_role_arn       = "arn:aws:iam::${local.account}:role/${local.iam_name}-runner"
 }
 
 data "aws_iam_policy_document" "controlplane" {
@@ -183,7 +183,7 @@ data "aws_iam_policy_document" "runner_scope_trust" {
 }
 
 resource "aws_iam_role" "runner_scope" {
-  name                 = "${var.name}-runner-scope"
+  name                 = "${local.iam_name}-runner-scope"
   assume_role_policy   = data.aws_iam_policy_document.runner_scope_trust.json
   permissions_boundary = aws_iam_policy.boundary.arn
   # A runner's credential lasts an hour (StorageCredentialTTL), which is also the most a role

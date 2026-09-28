@@ -17,7 +17,7 @@ resource "aws_subnet" "edge" {
   availability_zone       = local.zones[count.index]
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, 136 + count.index)
   map_public_ip_on_launch = true
-  tags                    = merge(local.tags, { Name = "${var.name}-edge-${local.zones[count.index]}" })
+  tags                    = merge(local.tags, { Name = "${local.name}-edge-${local.zones[count.index]}" })
 }
 
 resource "aws_route_table_association" "edge" {
@@ -27,7 +27,7 @@ resource "aws_route_table_association" "edge" {
 }
 
 resource "aws_iam_role" "proxy" {
-  name                 = "${var.name}-proxy"
+  name                 = "${local.iam_name}-proxy"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = aws_iam_policy.boundary.arn
   tags                 = local.tags
@@ -77,6 +77,13 @@ data "aws_iam_policy_document" "proxy" {
       variable = "aws:ResourceTag/spin:role"
       values   = ["proxy"]
     }
+    # This installation's proxy: another installation's in the account is a proxy too, and its
+    # address is not this one's to take.
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/spin:installation"
+      values   = [local.name]
+    }
   }
   # Which machine had the address, to give it back to when this one fails its launch. Describe
   # has no resource to scope it to.
@@ -99,21 +106,21 @@ resource "aws_iam_role_policy" "proxy" {
 }
 
 resource "aws_iam_instance_profile" "proxy" {
-  name = "${var.name}-proxy"
+  name = "${local.iam_name}-proxy"
   role = aws_iam_role.proxy.name
   tags = local.tags
 }
 
 resource "aws_eip" "proxy" {
   domain = "vpc"
-  tags   = merge(local.tags, { Name = "${var.name}-proxy" })
+  tags   = merge(local.tags, { Name = "${local.name}-proxy" })
 }
 
 # Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock -
 # a certificate is replaced every sixty days and an old one is worth nothing. Reached, like the
 # volumes' bucket, only through the VPC's endpoint.
 resource "aws_s3_bucket" "certificates" {
-  bucket        = "${var.name}-proxy-${local.account}-${local.region}"
+  bucket        = "${local.name}-proxy-${local.account}-${local.region}"
   force_destroy = true
   tags          = local.tags
 }
@@ -204,7 +211,7 @@ resource "aws_s3_bucket_policy" "certificates" {
 }
 
 resource "aws_launch_template" "proxy" {
-  name_prefix            = "${var.name}-proxy-"
+  name_prefix            = "${local.name}-proxy-"
   image_id               = local.image
   instance_type          = var.proxy_instance_type
   vpc_security_group_ids = [aws_security_group.proxy.id]
@@ -232,11 +239,11 @@ resource "aws_launch_template" "proxy" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.tags, { Name = "${var.name}-proxy", "spin:role" = "proxy", "spin:starts-on" = local.proxy_starts_on })
+    tags          = merge(local.tags, { Name = "${local.name}-proxy", "spin:role" = "proxy", "spin:starts-on" = local.proxy_starts_on })
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${var.name}-proxy" })
+    tags          = merge(local.tags, { Name = "${local.name}-proxy" })
   }
   tags = local.tags
 }
@@ -284,7 +291,7 @@ resource "aws_autoscaling_group" "proxy" {
   }
 
   dynamic "tag" {
-    for_each = merge(local.tags, { Name = "${var.name}-proxy" })
+    for_each = merge(local.tags, { Name = "${local.name}-proxy" })
     content {
       key                 = tag.key
       value               = tag.value

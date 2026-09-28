@@ -4,7 +4,7 @@
 # retention removes what they wrote (the boundary refuses the rest).
 
 resource "aws_cloudwatch_log_group" "boot" {
-  name              = "/${var.name}/boot"
+  name              = "/spin/${local.name}/boot"
   retention_in_days = var.log_retention_days
   tags              = local.tags
 }
@@ -18,7 +18,7 @@ data "aws_iam_policy_document" "boot_log" {
 }
 
 resource "aws_iam_policy" "boot_log" {
-  name        = "${var.name}-boot-log"
+  name        = "${local.iam_name}-boot-log"
   description = "Write a machine's boot to ${aws_cloudwatch_log_group.boot.name}, and nothing else"
   policy      = data.aws_iam_policy_document.boot_log.json
   tags        = local.tags

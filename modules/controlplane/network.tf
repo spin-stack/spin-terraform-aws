@@ -18,19 +18,24 @@ locals {
   zones   = slice(data.aws_availability_zones.available.names, 0, var.availability_zones)
   region  = data.aws_region.current.region
   account = data.aws_caller_identity.current.account_id
-  tags    = merge({ "spin:installation" = var.name }, var.tags)
+  # Every name is read through the claim (claim.tf), so nothing is made before it.
+  name = aws_ssm_parameter.claim.insecure_value
+  # IAM names are the account's and not the region's: the same name in two regions of one account
+  # is two installations, and their roles, instance profiles and policies carry the region.
+  iam_name = "${local.name}-${local.region}"
+  tags     = merge({ "spin:installation" = local.name }, var.tags)
 }
 
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags                 = merge(local.tags, { Name = var.name })
+  tags                 = merge(local.tags, { Name = local.name })
 }
 
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
-  tags   = merge(local.tags, { Name = var.name })
+  tags   = merge(local.tags, { Name = local.name })
 }
 
 resource "aws_subnet" "public" {
@@ -39,12 +44,12 @@ resource "aws_subnet" "public" {
   availability_zone       = local.zones[count.index]
   cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index)
   map_public_ip_on_launch = true
-  tags                    = merge(local.tags, { Name = "${var.name}-${local.zones[count.index]}" })
+  tags                    = merge(local.tags, { Name = "${local.name}-${local.zones[count.index]}" })
 }
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
-  tags   = merge(local.tags, { Name = "${var.name}-public" })
+  tags   = merge(local.tags, { Name = "${local.name}-public" })
 }
 
 resource "aws_route" "internet" {
@@ -66,14 +71,14 @@ resource "aws_vpc_endpoint" "s3" {
   service_name      = "com.amazonaws.${local.region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = [aws_route_table.public.id]
-  tags              = merge(local.tags, { Name = "${var.name}-s3" })
+  tags              = merge(local.tags, { Name = "${local.name}-s3" })
 }
 
 resource "aws_security_group" "controlplane" {
-  name        = "${var.name}-controlplane"
+  name        = "${local.name}-controlplane"
   description = "spin control plane: 8080 from the proxy and runners only, nothing from the internet"
   vpc_id      = aws_vpc.this.id
-  tags        = merge(local.tags, { Name = "${var.name}-controlplane" })
+  tags        = merge(local.tags, { Name = "${local.name}-controlplane" })
 }
 
 # The control plane takes nothing from the internet: its public address is only a way out, and
@@ -104,10 +109,10 @@ resource "aws_vpc_security_group_egress_rule" "controlplane" {
 # redirect, 443 for the dashboard, workspaces and the relay runners dial out to
 # (tunnel.app.<domain>).
 resource "aws_security_group" "proxy" {
-  name        = "${var.name}-proxy"
+  name        = "${local.name}-proxy"
   description = "spin proxy: 80 and 443 from anywhere; out to the control plane and the web"
   vpc_id      = aws_vpc.this.id
-  tags        = merge(local.tags, { Name = "${var.name}-proxy" })
+  tags        = merge(local.tags, { Name = "${local.name}-proxy" })
 }
 
 # 80 from anywhere: Let's Encrypt's HTTP challenge comes from addresses it does not publish, and

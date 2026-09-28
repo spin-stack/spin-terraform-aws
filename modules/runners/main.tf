@@ -9,7 +9,9 @@
 
 locals {
   name = var.controlplane.name
-  tags = merge({ "spin:installation" = local.name }, var.tags)
+  # IAM's names carry the region (the control plane module's iam_name), as the control plane's do.
+  iam_name = var.controlplane.iam_name
+  tags     = merge({ "spin:installation" = local.name }, var.tags)
 }
 
 resource "aws_security_group" "runner" {
@@ -57,7 +59,7 @@ data "aws_iam_policy_document" "ec2_assume" {
 }
 
 resource "aws_iam_role" "runner" {
-  name                 = "${local.name}-runner"
+  name                 = "${local.iam_name}-runner"
   assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
   permissions_boundary = var.controlplane.boundary_arn
   tags                 = local.tags
@@ -92,7 +94,7 @@ resource "aws_iam_role_policy_attachment" "runner_ssm" {
 }
 
 resource "aws_iam_instance_profile" "runner" {
-  name = "${local.name}-runner"
+  name = "${local.iam_name}-runner"
   role = aws_iam_role.runner.name
   tags = local.tags
 }

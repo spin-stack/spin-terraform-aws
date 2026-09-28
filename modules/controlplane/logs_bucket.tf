@@ -12,7 +12,7 @@
 # machine abandoned halfway.
 
 resource "aws_s3_bucket" "logs" {
-  bucket = "${var.name}-logs-${local.account}-${local.region}"
+  bucket = "${local.name}-logs-${local.account}-${local.region}"
   # The installation's logs and metrics are kept past a destroy unless it is being removed.
   force_destroy = var.decommission
   tags          = local.tags

@@ -8,7 +8,7 @@
 
 resource "aws_cloudwatch_log_group" "flow" {
   count             = var.flow_logs ? 1 : 0
-  name              = "/spin/${var.name}/vpc-flow"
+  name              = "/spin/${local.name}/vpc-flow"
   retention_in_days = var.log_retention_days
   tags              = local.tags
 }
@@ -30,7 +30,7 @@ data "aws_iam_policy_document" "flow_assume" {
 
 resource "aws_iam_role" "flow" {
   count                = var.flow_logs ? 1 : 0
-  name                 = "${var.name}-vpc-flow"
+  name                 = "${local.iam_name}-vpc-flow"
   assume_role_policy   = data.aws_iam_policy_document.flow_assume.json
   permissions_boundary = aws_iam_policy.boundary.arn
   tags                 = local.tags
@@ -64,7 +64,7 @@ resource "aws_flow_log" "vpc" {
 
 resource "aws_cloudwatch_log_group" "resolver" {
   count             = var.dns_query_logs ? 1 : 0
-  name              = "/spin/${var.name}/resolver-queries"
+  name              = "/spin/${local.name}/resolver-queries"
   retention_in_days = var.log_retention_days
   tags              = local.tags
 }
@@ -95,13 +95,13 @@ data "aws_iam_policy_document" "resolver" {
 
 resource "aws_cloudwatch_log_resource_policy" "resolver" {
   count           = var.dns_query_logs ? 1 : 0
-  policy_name     = "${var.name}-resolver-queries"
+  policy_name     = "${local.name}-resolver-queries"
   policy_document = data.aws_iam_policy_document.resolver[0].json
 }
 
 resource "aws_route53_resolver_query_log_config" "this" {
   count           = var.dns_query_logs ? 1 : 0
-  name            = var.name
+  name            = local.name
   destination_arn = aws_cloudwatch_log_group.resolver[0].arn
   tags            = local.tags
   depends_on      = [aws_cloudwatch_log_resource_policy.resolver]

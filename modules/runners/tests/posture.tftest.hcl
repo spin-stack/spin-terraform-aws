@@ -24,6 +24,7 @@ override_data {
 variables {
   controlplane = {
     name                        = "spin"
+    iam_name                    = "spin-us-east-2"
     vpc_id                      = "vpc-00000000000000000"
     subnet_ids                  = ["subnet-00000000000000000"]
     security_group_id           = "sg-00000000000000000"
@@ -85,6 +86,7 @@ run "a_runner_pushes_to_the_collector_where_there_is_one" {
   variables {
     controlplane = {
       name                        = "spin"
+      iam_name                    = "spin-us-east-2"
       vpc_id                      = "vpc-00000000000000000"
       subnet_ids                  = ["subnet-00000000000000000"]
       security_group_id           = "sg-00000000000000000"
@@ -121,7 +123,7 @@ run "a_runners_role_reads_its_document" {
   # The role's name is the one the installation's configuration names as a host's
   # (modules/controlplane, host_join): a runner of another role joins nothing.
   assert {
-    condition     = aws_iam_role.runner.name == "spin-runner"
+    condition     = aws_iam_role.runner.name == "spin-us-east-2-runner" && aws_iam_instance_profile.runner.name == "spin-us-east-2-runner"
     error_message = "the runners' role is not the one the installation lets join"
   }
   # Session Manager by the control plane module's own policy, which is a session and no more:

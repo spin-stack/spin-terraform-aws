@@ -20,7 +20,7 @@ locals {
 }
 
 resource "aws_s3_bucket" "database" {
-  bucket              = "${var.name}-database-${local.account}-${local.region}"
+  bucket              = "${local.name}-database-${local.account}-${local.region}"
   object_lock_enabled = true
   force_destroy       = var.decommission
   tags                = local.tags

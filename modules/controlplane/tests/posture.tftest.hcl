@@ -46,17 +46,17 @@ override_data {
 # data, which names the runner scope and the data volume.
 override_resource {
   target = aws_iam_policy.boundary
-  values = { arn = "arn:aws:iam::123456789012:policy/spin-boundary" }
+  values = { arn = "arn:aws:iam::123456789012:policy/spin-us-east-2-boundary" }
 }
 
 override_resource {
   target = aws_iam_policy.session_manager
-  values = { arn = "arn:aws:iam::123456789012:policy/spin-session-manager" }
+  values = { arn = "arn:aws:iam::123456789012:policy/spin-us-east-2-session-manager" }
 }
 
 override_resource {
   target = aws_iam_role.runner_scope
-  values = { arn = "arn:aws:iam::123456789012:role/spin-runner-scope" }
+  values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope" }
 }
 
 # The buckets' ARNs, so what each role is given of which bucket can be read at plan.
@@ -98,7 +98,7 @@ override_resource {
 
 override_resource {
   target = aws_ssm_parameter.proxy_config
-  values = { arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/proxy-config" }
+  values = { arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/proxy-config" }
 }
 
 # The image the release's machines boot, which is known once it is applied.
@@ -200,7 +200,7 @@ run "a_machines_user_data_is_its_role_and_its_document" {
   assert {
     condition = alltrue([for role, u in local.user_data : jsondecode(u) == { "systemd.credentials" = [
       { name = "spin.role", text = role },
-      { name = "spin.config", text = "ssm:///spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2" },
+      { name = "spin.config", text = "ssm:///spin/spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2" },
     ] }])
     error_message = "a machine's user data is more than its role and its document, as systemd credentials"
   }
@@ -340,7 +340,7 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
       tls_self_signed_cert.ca.is_ca_certificate && contains(tls_self_signed_cert.ca.allowed_uses, "cert_signing") &&
       tls_self_signed_cert.ca.early_renewal_hours == 0 &&
       aws_ssm_parameter.ca.type == "SecureString" &&
-      local.controlplane_document.tls.ca_at == "ssm:///spin/controlplane-ca?region=us-east-2" &&
+      local.controlplane_document.tls.ca_at == "ssm:///spin/spin/controlplane-ca?region=us-east-2" &&
       !strcontains(yamlencode(local.proxy_document), "PRIVATE KEY") && !strcontains(yamlencode(local.runner_document), "PRIVATE KEY")
     )
     error_message = "the CA cannot sign, would be made again by an apply, or its key is in a document another role reads"
@@ -348,8 +348,8 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
   # Named in the control plane's document and read by it; nothing reads them on a machine's behalf.
   assert {
     condition = (
-      local.controlplane_document.encryption_key_at == "ssm:///spin/controlplane-encryption-key?region=us-east-2" &&
-      local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/bootstrap-password?region=us-east-2" &&
+      local.controlplane_document.encryption_key_at == "ssm:///spin/spin/controlplane-encryption-key?region=us-east-2" &&
+      local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/spin/bootstrap-password?region=us-east-2" &&
       local.controlplane_document.bootstrap_admin.email == "admin@example.com" &&
       !contains(keys(local.controlplane_document), "encryption_key")
     )
@@ -421,7 +421,7 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
   # the database from it: nothing applies it by hand on a machine.
   assert {
     condition = (
-      local.controlplane_document.installation_at == "ssm:///spin/installation?region=us-east-2" &&
+      local.controlplane_document.installation_at == "ssm:///spin/spin/installation?region=us-east-2" &&
       aws_ssm_parameter.installation.value == yamlencode(local.installation) &&
       aws_ssm_parameter.installation.type == "SecureString"
     )
@@ -449,9 +449,9 @@ run "a_runner_joins_by_its_role" {
 
   assert {
     condition = (
-      local.installation.host_join.audience == "spin:123456789012:spin" &&
+      local.installation.host_join.audience == "spin:123456789012:us-east-2:spin" &&
       local.runner_document.install.join.audience == local.installation.host_join.audience &&
-      local.installation.host_join.aws == [{ role = "arn:aws:iam::123456789012:role/spin-runner", shutdown_grace = "100s", preemption_source = "aws" }]
+      local.installation.host_join.aws == [{ role = "arn:aws:iam::123456789012:role/spin-us-east-2-runner", shutdown_grace = "100s", preemption_source = "aws" }]
     )
     error_message = "a runner joins for another installation than the one that names its role, or under no policy"
   }
@@ -575,6 +575,69 @@ run "an_installation_being_removed_is_emptied_by_its_destroy" {
   }
 }
 
+# An account may hold several installations: of different names in one region, and of one name in
+# several regions. IAM is the account's, so what it names carries the region; the regional names
+# are under the installation's; and the name is claimed in its region before anything is made
+# under it - which holds only while every name is read through the claim, so no file but the
+# claim's reads the variable.
+run "an_account_holds_several_installations" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_iam_role.controlplane.name == "spin-us-east-2-controlplane" &&
+      aws_iam_instance_profile.controlplane.name == "spin-us-east-2-controlplane" &&
+      aws_iam_role.proxy.name == "spin-us-east-2-proxy" &&
+      aws_iam_instance_profile.proxy.name == "spin-us-east-2-proxy" &&
+      aws_iam_role.runner_scope.name == "spin-us-east-2-runner-scope" &&
+      aws_iam_role.flow[0].name == "spin-us-east-2-vpc-flow" &&
+      aws_iam_policy.boundary.name == "spin-us-east-2-boundary" &&
+      aws_iam_policy.session_manager.name == "spin-us-east-2-session-manager" &&
+      aws_iam_policy.boot_log.name == "spin-us-east-2-boot-log"
+    )
+    error_message = "an IAM name does not carry the region, so an installation of this name in another region of the account takes it"
+  }
+  assert {
+    condition = alltrue([for n in [
+      aws_ssm_parameter.claim.name, aws_ssm_parameter.encryption_key.name, aws_ssm_parameter.ca.name,
+      aws_ssm_parameter.admin_password.name, aws_ssm_parameter.controlplane_config.name, aws_ssm_parameter.proxy_config.name,
+      aws_ssm_parameter.runner_config.name, aws_ssm_parameter.installation.name,
+      aws_cloudwatch_log_group.boot.name, aws_cloudwatch_log_group.flow[0].name,
+    ] : startswith(n, "/spin/spin/")])
+    error_message = "a parameter or a log group is not under the installation's /spin/<name>/"
+  }
+  assert {
+    condition     = aws_ssm_parameter.claim.name == "/spin/spin/claim" && aws_ssm_parameter.claim.insecure_value == "spin"
+    error_message = "the name is not claimed in its region"
+  }
+  assert {
+    condition = alltrue([for f in fileset(path.module, "*.tf") :
+    !strcontains(file("${path.module}/${f}"), "var.name") if !contains(["claim.tf", "variables.tf"], f)])
+    error_message = "a name is read from the variable and not through the claim: it can be made before the claim refuses the installation"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.proxy.statement : s.sid == "OntoAProxy" &&
+    anytrue([for c in s.condition : c.variable == "aws:ResourceTag/spin:installation" && toset(c.values) == toset(["spin"])])])
+    error_message = "a proxy may take its address onto another installation's proxy"
+  }
+}
+
+run "a_name_that_would_make_a_bucket_too_long_is_refused" {
+  command = plan
+  variables {
+    name = "abcdefghijklmnopqrstuvwxyza"
+  }
+  expect_failures = [var.name]
+}
+
+run "a_name_a_bucket_could_not_have_is_refused" {
+  command = plan
+  variables {
+    name = "spin--dev"
+  }
+  expect_failures = [var.name]
+}
+
 run "the_logs_bucket" {
   command = plan
 
@@ -620,7 +683,7 @@ run "the_roles" {
       aws_iam_role.controlplane.permissions_boundary, aws_iam_role.runner_scope.permissions_boundary,
       aws_iam_role.proxy.permissions_boundary,
       aws_iam_role.flow[0].permissions_boundary,
-    ] : arn == "arn:aws:iam::123456789012:policy/spin-boundary"])
+    ] : arn == "arn:aws:iam::123456789012:policy/spin-us-east-2-boundary"])
     error_message = "a role carries no boundary"
   }
   assert {
@@ -630,7 +693,7 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-runner-scope"])])
+    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope"])])
     error_message = "the boundary lets a role become another than the runner scope"
   }
   assert {
@@ -711,9 +774,9 @@ run "no_machine_reads_the_control_planes_secrets" {
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") &&
-      contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-encryption-key") &&
+      contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/controlplane-encryption-key") &&
       anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
-    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
+    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])])])
     error_message = "a role other than the control plane's can read the encryption key"
   }
   # The CA's key, the first administrator's password and the installation's configuration are
@@ -721,9 +784,9 @@ run "no_machine_reads_the_control_planes_secrets" {
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") && length(setintersection(s.resources, toset([
-        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/controlplane-ca",
-        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/bootstrap-password",
-        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/installation",
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/controlplane-ca",
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/bootstrap-password",
+        "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/installation",
     ]))) == 3])
     error_message = "a role other than the control plane's can read the CA's key, the administrator's password or the installation's configuration"
   }
@@ -843,7 +906,7 @@ run "the_databases_archive" {
       s.effect == "Deny" && contains(s.actions, "s3:*") &&
       s.resources == toset(["arn:aws:s3:::spin-database-123456789012-us-east-2", "arn:aws:s3:::spin-database-123456789012-us-east-2/*"]) &&
       anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
-    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-controlplane"])])])
+    toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])])])
     error_message = "a role other than the control plane's can reach the database's archive"
   }
   assert {
