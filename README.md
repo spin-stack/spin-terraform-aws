@@ -95,14 +95,20 @@ tofu plan     # the image, the launch templates and the documents change, and no
 tofu apply
 ```
 
-Each machine is replaced beside itself, and the old one serves until the new one does. A machine
-cannot take a release in place - its root is read-only and verified - so the runners are replaced
-too, one at a time with the new one first, each old one leaving by its drain: its workspaces
-suspended and resumed on another host. How it
-went is `tofu output update_status`: `Successful`; or `RollbackSuccessful` with the reason, in which
-case the old machine is still serving and `tofu output boot_log` - one command per role, since a
-role's machines are one stream prefix - says why the new one did not come up. A change to anything else a machine starts on - `installation_config`, the autoscaling
-settings - rolls out the same way.
+The control plane and the proxy are each replaced beside themselves, and the old one serves until
+the new one does. How it went is `tofu output update_status`: `Successful`; or
+`RollbackSuccessful` with the reason, in which case the old machine is still serving and
+`tofu output boot_log` - one command per role, since a role's machines are one stream prefix - says
+why the new one did not come up. A change to anything else a machine starts on -
+`installation_config`, the autoscaling settings - rolls out the same way.
+
+A runner cannot take a release in place either - its root is read-only and verified - and how it
+gets one is `runner_rollout`. `idle`, the default, moves no workspace for it: the control plane
+empties the group once nothing runs, starts or is still being saved to the bucket, and the next
+host it starts boots the new release; until then a host keeps the old one, which its control plane
+serves for 90 days (spin's `compat.Window`). `rolling` is for a fleet that never empties: the hosts
+are replaced at once, one at a time with the new one first, each old one leaving by its drain - its
+workspaces suspended to the bucket and resumed on another host.
 
 A release older than the one that last started the database refuses to start on it: going back
 past a change to the schema is a restore of the database from its archive to a point before it,

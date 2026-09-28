@@ -74,19 +74,48 @@ run "a_runner_is_reached_by_nothing" {
     condition     = base64decode(aws_launch_template.runner.user_data) == var.controlplane.runner_user_data
     error_message = "a runner's machine is told something other than its role and its document"
   }
-  # And it boots the control plane's image - the installation's release, the only one its control
-  # plane serves - on that image's root device; a new one replaces the group's hosts. The group
-  # names the template's version by number: a new image is then a change to the group, which is
-  # what starts a refresh, where "$Latest" is the same string before and after.
+  # And it boots the control plane's image - the installation's release - on that image's root
+  # device. The group names the template's version by number: a new image is a change to the group
+  # the plan shows, where "$Latest" is the same string before and after.
   assert {
     condition = (
       aws_launch_template.runner.image_id == "ami-0123456789abcdef0" &&
       anytrue([for b in aws_launch_template.runner.block_device_mappings : b.device_name == "/dev/xvda"]) &&
-      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling" &&
       aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version == "7"
     )
-    error_message = "a runner boots another image than the installation's, or keeps its image across a release"
+    error_message = "a runner boots another image than the installation's, or the group cannot tell a new one"
   }
+  # A release moves no workspace unless the installation says so: nothing refreshes the group, and
+  # the next host it starts once the control plane has emptied it boots the new image.
+  assert {
+    condition     = length(aws_autoscaling_group.runner.instance_refresh) == 0
+    error_message = "a new release replaces the runners under their workspaces"
+  }
+}
+
+# Rolling, for a fleet that never empties: the new release replaces the hosts at once, one at a
+# time and the new one first, each old one's workspaces leaving by the drain.
+run "a_rolling_fleet_is_replaced_at_once" {
+  command = plan
+  variables {
+    rollout = "rolling"
+  }
+  assert {
+    condition = (
+      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling" &&
+      aws_autoscaling_group.runner.instance_refresh[0].preferences[0].min_healthy_percentage == 100 &&
+      aws_autoscaling_group.runner.instance_refresh[0].preferences[0].max_healthy_percentage == 200
+    )
+    error_message = "a rolling fleet keeps its old release, or loses a host before its replacement is up"
+  }
+}
+
+run "a_rollout_that_is_neither_is_refused" {
+  command = plan
+  variables {
+    rollout = "nightly"
+  }
+  expect_failures = [var.rollout]
 }
 
 # A runner joins by who it is, so its role reads its document and nothing else: no token, and no

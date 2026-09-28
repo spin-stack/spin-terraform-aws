@@ -190,9 +190,8 @@ resource "aws_autoscaling_group" "runner" {
     launch_template {
       launch_template_specification {
         launch_template_id = aws_launch_template.runner.id
-        # The version by number: a new image is a new version, and a new version is a change to
-        # this group, which is what starts the refresh below. "$Latest" never changes, so the group
-        # would never see one, and its hosts would keep the old release until it next emptied.
+        # The version by number, so a new image is a change to this group the plan shows - and,
+        # rolling, the change that starts the refresh below, which "$Latest" never is.
         version = aws_launch_template.runner.latest_version
       }
       dynamic "override" {
@@ -204,18 +203,23 @@ resource "aws_autoscaling_group" "runner" {
     }
   }
 
-  # A new release is a new image, and a runner cannot take one in place: its root is read-only,
-  # and a runner of another release than its control plane's is refused. So a change of image
-  # replaces the group's hosts, one at a time and the new one first, each old one leaving by the
-  # termination hook below - its workspaces suspended to resume on another host - rather than
-  # restarting a runner under them.
-  instance_refresh {
-    strategy = "Rolling"
-    preferences {
-      min_healthy_percentage = 100
-      max_healthy_percentage = 200
-      # The grace a host has to boot and join before the group judges it.
-      instance_warmup = 600
+  # A new release is a new image, and a runner cannot take one in place: its root is read-only.
+  # Idle, nothing replaces a host: the next one the group starts - after the control plane has
+  # emptied it, once no workspace runs, starts or is still being saved - boots the new image, and
+  # the old one serves until then, which its control plane allows for compat.Window (spin's
+  # internal/controlplane/compat). Rolling, the group replaces its hosts now, one at a time and the
+  # new one first, each old one leaving by the termination hook below: its workspaces suspended to
+  # the bucket and resumed on another host.
+  dynamic "instance_refresh" {
+    for_each = var.rollout == "rolling" ? [1] : []
+    content {
+      strategy = "Rolling"
+      preferences {
+        min_healthy_percentage = 100
+        max_healthy_percentage = 200
+        # The grace a host has to boot and join before the group judges it.
+        instance_warmup = 600
+      }
     }
   }
 

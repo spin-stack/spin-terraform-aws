@@ -78,6 +78,17 @@ variable "max_hosts" {
   }
 }
 
+variable "rollout" {
+  description = "How a new release reaches the runners. idle: when the fleet next empties - no workspace running, starting or being saved - the next host boots it, and no workspace is moved for it; a host keeps the old release until then, which its control plane allows for 90 days. rolling: the hosts are replaced at once, one at a time, each old one's workspaces suspended to the bucket and resumed on the new one - for a fleet that never empties."
+  type        = string
+  default     = "idle"
+  nullable    = false
+  validation {
+    condition     = contains(["idle", "rolling"], var.rollout)
+    error_message = "rollout is idle or rolling."
+  }
+}
+
 variable "drain_seconds" {
   description = "How long a host the group is taking away is held while it empties itself: the termination hook's timeout. At least the pool token's --shutdown-grace; the hook is left to expire, so this is also how long each scale-in takes."
   type        = number

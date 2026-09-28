@@ -133,6 +133,12 @@ variable "max_runners" {
   default     = null
 }
 
+variable "runner_rollout" {
+  description = "How a new release reaches the runners: idle, when the fleet next empties, moving no workspace (modules/runners' default); or rolling, replacing them at once, their workspaces suspended and resumed on the new hosts."
+  type        = string
+  default     = null
+}
+
 variable "decommission" {
   description = "Set to true and apply before `tofu destroy`: the buckets lose their VPC-only policies and a destroy empties them, data included (README.md, \"Removing an installation\"). modules/controlplane's default is false."
   type        = bool
