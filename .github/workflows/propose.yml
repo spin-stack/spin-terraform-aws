@@ -1,0 +1,92 @@
+# What main is now, proposed to one installation made from it: a pull request in its deployment
+# repository that moves the module's ref to this commit and spin_version to the newest release
+# images.json has an image of in the installation's region - one pull request per deployment, on
+# a branch each run rewrites, so what waits there is always the newest. A person reads its plan,
+# merges it and applies; nothing here reaches an installation.
+#
+# spin-stack/shipset, which coordinates a release's steps, dispatches this for each deployment its
+# shipset.yaml names that does not run main, and finds the run again by its name.
+#
+# As the release app (spin-stack-release), so the deployment's plan runs on the pull request: one
+# opened with this run's own token would start none, and could not reach another repository.
+name: propose
+# What shipset looks the run up by: one deployment and one commit, one name.
+run-name: propose ${{ inputs.repository }} ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'The deployment repository in spin-stack, e.g. spinbox.dev-deploy.'
+        required: true
+      region:
+        description: 'Its installation region, e.g. us-west-2.'
+        required: true
+
+concurrency:
+  group: propose-${{ inputs.repository }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Without this run's read-only token left in git's configuration, where it would be sent
+      # ahead of the app's on the push to the deployment (spin's machine.yml was refused so).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: ${{ inputs.repository }}
+
+      - name: Propose this commit
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          REPOSITORY: spin-stack/${{ inputs.repository }}
+          REGION: ${{ inputs.region }}
+        run: |
+          set -euo pipefail
+          sha="${GITHUB_SHA::7}"
+          # The newest release with an image in the region: releases are v<YYYYMMDD>.<NN>, which
+          # sort as text.
+          release=$(jq -r --arg r "${REGION}" '[to_entries[] | select(.value[$r]) | .key] | sort | last // empty' images.json)
+          if [ -z "${release}" ]; then
+            echo "images.json has no release with an image in ${REGION}"; exit 1
+          fi
+
+          gh auth setup-git
+          id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config --global user.name "${APP_SLUG}[bot]"
+          git config --global user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          gh repo clone "${REPOSITORY}" deployment -- --quiet --depth 1
+          cd deployment
+          sed -i -E "s|(github.com/spin-stack/spin-terraform-aws\?ref=)[0-9a-f]+|\1${sha}|" main.tf
+          sed -i -E "s|^(spin_version *= *)\"[^\"]*\"|\1\"${release}\"|" terraform.tfvars
+          if git diff --quiet; then
+            echo "${REPOSITORY} is at ${sha} and ${release} already"; exit 0
+          fi
+
+          # One branch per deployment, rewritten by each run: the pull request on it is the newest.
+          branch=spin-terraform-aws/next
+          title="module ${sha}, spin ${release}"
+          git checkout -q -b "${branch}"
+          git commit -q -a -m "${title}" \
+            -m "spin-stack/spin-terraform-aws at ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}, whose images.json has ${release} in ${REGION}. Read the plan before merging."
+          git push -q --force origin "${branch}"
+          # Everything named, nothing inferred from the shallow clone.
+          if [ -z "$(gh pr list -R "${REPOSITORY}" --head "${branch}" --state open --json number --jq '.[].number')" ]; then
+            gh pr create -R "${REPOSITORY}" --head "${branch}" --base main --title "${title}" \
+              --body "Moves the installation to spin-stack/spin-terraform-aws at ${GITHUB_SHA} and spin ${release}, the newest release with an image in ${REGION}. Read the plan before merging; merging changes nothing until the apply is run."
+          fi

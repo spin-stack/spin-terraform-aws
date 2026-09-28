@@ -95,10 +95,13 @@ tofu plan     # the image, the launch templates and the documents change, and no
 tofu apply
 ```
 
-For the installations spin-stack runs, that edit is a pull request nobody writes: spin-stack/shipset
-builds and publishes each spin release's image, proposes it to `images.json` here, and then
-proposes the module and the release to each deployment repository its `shipset.yaml` names. A
-person merges the deployment's, and applies.
+For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
+of it is a workflow run, with its log: spin-stack/shipset, which coordinates them, dispatches
+spin-stack/ami's release workflow for each spin release, which builds and publishes its image and
+opens the pull request that adds it to `images.json` here; shipset merges that once its checks
+pass, and dispatches `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names,
+which opens - or rewrites - the pull request there that moves both. A person merges that, and
+applies.
 
 The control plane and the proxy are each replaced beside themselves, and the old one serves until
 the new one does. How it went is `tofu output update_status`: `Successful`; or
