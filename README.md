@@ -113,7 +113,9 @@ The control plane and the proxy are each replaced beside themselves, and the old
 the new one does. How it went is `tofu output update_status`: `Successful`; or
 `RollbackSuccessful` with the reason, in which case the old machine is still serving and
 `tofu output boot_log` - one command per role, since a role's machines are one stream prefix - says
-why the new one did not come up. A change to anything else a machine starts on -
+why the new one did not come up. Until the launch hook gives up on a new machine that never comes
+up, the refresh holds the group and an apply that changes it is refused; `tofu output update_abort`,
+by group, is the command that rolls it back now. A change to anything else a machine starts on -
 `installation_config`, the autoscaling settings - rolls out the same way.
 
 A runner cannot take a release in place either - its root is read-only and verified - and how it

@@ -106,6 +106,22 @@ output "update_status" {
   }
 }
 
+# The group keeps its old launch template until a refresh succeeds, so a machine launched from any
+# other is the refresh's. It waits on the launch hook until its heartbeat times out; abandoning it
+# ends that wait now, and the rollback, asked for first, keeps the refresh from launching another.
+output "update_abort" {
+  description = "After an apply whose new machine will not come up: the command that stops waiting for it - rolls the refresh back and abandons the launch the hook still holds - so the next apply can change the group (task update:abort)."
+  value = {
+    for g in [module.controlplane.controlplane_group, module.controlplane.proxy_group] :
+    g => join(" ", [
+      "v=$(${local.aws} autoscaling describe-auto-scaling-groups --auto-scaling-group-names ${g} --query 'AutoScalingGroups[0].LaunchTemplate.Version' --output text);",
+      "${local.aws} autoscaling rollback-instance-refresh --auto-scaling-group-name ${g};",
+      "for i in $(${local.aws} autoscaling describe-auto-scaling-groups --auto-scaling-group-names ${g} --query \"AutoScalingGroups[0].Instances[?LifecycleState=='Pending:Wait' && LaunchTemplate.Version!='$v'].InstanceId\" --output text);",
+      "do ${local.aws} autoscaling complete-lifecycle-action --auto-scaling-group-name ${g} --lifecycle-hook-name ready --lifecycle-action-result ABANDON --instance-id $i; done",
+    ])
+  }
+}
+
 output "boot_log" {
   description = "By role, the command that reads what its machines' boots said - the ones that are gone included - and follows the next one's."
   value       = local.boot_log

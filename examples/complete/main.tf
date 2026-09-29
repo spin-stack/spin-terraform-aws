@@ -109,6 +109,11 @@ output "update_status" {
   value       = module.spin.update_status
 }
 
+output "update_abort" {
+  description = "By group, the command that rolls back a replacement whose new machine will not come up, so the next apply can change the group (README, Updating)."
+  value       = module.spin.update_abort
+}
+
 output "boot_log" {
   description = "By role, the command that reads what its machines' boots said, the ones that are gone included."
   value       = module.spin.boot_log
