@@ -59,6 +59,11 @@ override_resource {
   values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope" }
 }
 
+override_resource {
+  target = aws_kms_key.identity
+  values = { arn = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001" }
+}
+
 # The buckets' ARNs, so what each role is given of which bucket can be read at plan.
 override_resource {
   target = aws_s3_bucket.database
@@ -750,6 +755,39 @@ run "the_roles" {
     condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
     anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2")])])
     error_message = "the proxy's role reaches a bucket other than its certificates'"
+  }
+}
+
+# The workspaces' identity is signed by a key KMS keeps: P-256, made to sign, which the control
+# plane may ask to sign digests with ES256 and nothing else may use at all - and its document names
+# that key.
+run "a_workspaces_identity_is_signed_by_a_key_nothing_takes_out" {
+  command = plan
+
+  assert {
+    condition     = aws_kms_key.identity.customer_master_key_spec == "ECC_NIST_P256" && aws_kms_key.identity.key_usage == "SIGN_VERIFY"
+    error_message = "the identity key is not a P-256 key made to sign"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      toset(s.actions) == toset(["kms:Sign", "kms:GetPublicKey"]) && s.resources == toset([aws_kms_key.identity.arn]) &&
+      anytrue([for c in s.condition : c.variable == "kms:SigningAlgorithm" && toset(c.values) == toset(["ECDSA_SHA_256"])]) &&
+    anytrue([for c in s.condition : c.variable == "kms:MessageType" && toset(c.values) == toset(["DIGEST"])])])
+    error_message = "the control plane may not sign with the identity key, or may sign more than ES256 digests with it"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    !anytrue([for a in s.actions : startswith(a, "kms:") && !contains(["kms:Sign", "kms:GetPublicKey"], a)])])
+    error_message = "the control plane is granted more of KMS than signing"
+  }
+  assert {
+    condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
+    anytrue([for a in s.actions : startswith(a, "kms:")])])
+    error_message = "the proxy may use a KMS key"
+  }
+  assert {
+    condition     = local.controlplane_document.identity == { kms_key = aws_kms_key.identity.arn }
+    error_message = "the control plane's document does not name the identity key"
   }
 }
 

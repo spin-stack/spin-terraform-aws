@@ -51,6 +51,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_role_policy_attachment.proxy_boot_log](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.proxy_ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_internet_gateway.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway) | resource |
+| [aws_kms_key.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_launch_template.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_launch_template.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_route.internet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
@@ -186,12 +187,15 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | database\_bucket | The database's archive: the base backups and WAL the control plane ships as it writes, and restores from when its machine is replaced. Its role alone reaches it. |
 | domain | The base domain; the runners' relay is tunnel.app.<domain>, dialled at relay\_dial. |
 | iam\_name | What the installation's IAM names begin with: its name and its region, since IAM is the account's and two regions may each have an installation of one name. The runners' role and instance profile are named for it. |
+| identity\_documents | The command that writes the identity issuer's discovery document and key set from the key, for modules/identity-issuer to publish: run it with any credentials that may read the key's public half, and commit what it writes. |
+| identity\_key\_arn | The KMS key the control plane signs its workspaces' identity tokens with. |
 | image | The Spin OS image of the installation's release, which the runners boot too: its id and its root device. |
 | internal\_zone\_id | The private zone the components reach each other by, cp.<internal\_zone> and proxy.<internal\_zone>. |
 | name | The installation's name, claimed in its region (claim.tf), which the runners' group and security group are named for. |
 | name\_servers | The domain's public zone's nameservers, which its registrar points at. |
 | proxy\_group | The proxy's group of one. Its machine, for `aws ssm start-session --target` (it has no SSH): aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <this> --query 'AutoScalingGroups[0].Instances[0].InstanceId'. |
 | proxy\_ip | The proxy's elastic IP, where app.<domain>, tunnel.app.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches. |
+| public\_zone\_id | The domain's public zone, where modules/identity-issuer puts id.<domain>. |
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
 | runner\_config\_parameter\_arn | The runners' document, which the runners' role reads and nothing else of SSM. |
