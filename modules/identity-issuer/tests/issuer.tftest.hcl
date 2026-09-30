@@ -47,12 +47,14 @@ run "the_issuer_publishes_the_committed_documents_and_nothing_else" {
   }
   assert {
     condition = (
-      toset(keys(aws_s3_object.document)) == toset([".well-known/openid-configuration", ".well-known/jwks.json"]) &&
+      toset(keys(aws_s3_object.document)) == toset([".well-known/openid-configuration", ".well-known/jwks.json", ".well-known/allowed_signers"]) &&
       aws_s3_object.document[".well-known/jwks.json"].source == "tests/documents/.well-known/jwks.json" &&
       aws_s3_object.document[".well-known/jwks.json"].etag == filemd5("tests/documents/.well-known/jwks.json") &&
-      alltrue([for d in aws_s3_object.document : d.content_type == "application/json"])
+      aws_s3_object.document[".well-known/openid-configuration"].content_type == "application/json" &&
+      aws_s3_object.document[".well-known/jwks.json"].content_type == "application/json" &&
+      aws_s3_object.document[".well-known/allowed_signers"].content_type == "text/plain"
     )
-    error_message = "what is published is not the two committed documents, as JSON"
+    error_message = "what is published is not the committed documents, each as what it is"
   }
   assert {
     condition = (
