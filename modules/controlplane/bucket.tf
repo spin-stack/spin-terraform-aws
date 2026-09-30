@@ -62,6 +62,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "volumes" {
       expired_object_delete_marker = true
     }
   }
+  # The records of the identity tokens given (identity.tf): kept past the lock for as long as the
+  # installation answers who took an identity when, then gone - nothing of spin deletes them.
+  rule {
+    id     = "expire-identity-records"
+    status = "Enabled"
+    filter {
+      prefix = "identity/issued/"
+    }
+    expiration {
+      days = var.identity_record_days
+    }
+  }
   depends_on = [aws_s3_bucket_versioning.volumes]
 }
 

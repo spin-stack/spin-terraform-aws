@@ -174,6 +174,14 @@ data "aws_iam_policy_document" "controlplane" {
       values   = ["DIGEST"]
     }
   }
+  # What the key signed, as CloudTrail recorded it, to hold to the records of the tokens it gave
+  # (spin's internal/controlplane/identity/audit). LookupEvents takes no resource: it reads the
+  # account's management events, which name no secret.
+  statement {
+    sid       = "ReadWhatTheKeySigned"
+    actions   = ["cloudtrail:LookupEvents"]
+    resources = ["*"]
+  }
   # Its group of one: in service once it leads, and to be replaced when it stays down.
   statement {
     sid = "ItsGroup"
