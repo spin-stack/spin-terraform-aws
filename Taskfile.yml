@@ -13,7 +13,7 @@ vars:
   TFDOCS_VERSION: 0.24.0
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
   # The modules whose inputs and outputs terraform-docs writes into their README.
-  DOCUMENTED: modules/controlplane modules/runners
+  DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer
   # D2, as spin-stack/ami pins it, and its flags there: one light theme, each diagram its own size.
   # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
   # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests.
@@ -121,5 +121,5 @@ tasks:
       # What each module promises about who reaches what - the proxy the only machine the
       # internet reaches, no role able to write IAM or read another's secrets - asserted
       # against its plan, with no account.
-      - for: [modules/controlplane, modules/runners]
+      - for: [modules/controlplane, modules/runners, modules/identity-issuer]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"

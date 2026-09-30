@@ -78,6 +78,21 @@ output "domain" {
   value       = var.domain
 }
 
+output "public_zone_id" {
+  description = "The domain's public zone, where modules/identity-issuer puts id.<domain>."
+  value       = aws_route53_zone.public.zone_id
+}
+
+output "identity_key_arn" {
+  description = "The KMS key the control plane signs its workspaces' identity tokens with."
+  value       = aws_kms_key.identity.arn
+}
+
+output "identity_documents" {
+  description = "The command that writes the identity issuer's discovery document and key set from the key, for modules/identity-issuer to publish: run it with any credentials that may read the key's public half, and commit what it writes."
+  value       = "spin-controlplane identity documents --kms-key ${aws_kms_key.identity.arn} --domain ${var.domain} --out <dir>"
+}
+
 output "internal_zone_id" {
   description = "The private zone the components reach each other by, cp.<internal_zone> and proxy.<internal_zone>."
   value       = aws_route53_zone.internal.zone_id

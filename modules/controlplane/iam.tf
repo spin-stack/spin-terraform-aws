@@ -157,6 +157,23 @@ data "aws_iam_policy_document" "controlplane" {
       values   = [local.cp_host]
     }
   }
+  # Its workspaces' identity: a signature over a digest with the installation's key, ES256 and
+  # nothing else, and the key's public half to name it by. Never the key itself, which KMS keeps.
+  statement {
+    sid       = "SignItsWorkspacesIdentity"
+    actions   = ["kms:Sign", "kms:GetPublicKey"]
+    resources = [aws_kms_key.identity.arn]
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "kms:SigningAlgorithm"
+      values   = ["ECDSA_SHA_256"]
+    }
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "kms:MessageType"
+      values   = ["DIGEST"]
+    }
+  }
   # Its group of one: in service once it leads, and to be replaced when it stays down.
   statement {
     sid = "ItsGroup"

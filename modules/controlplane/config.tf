@@ -61,6 +61,7 @@ locals {
     encryption_key_at = local.ssm.key
     # The names its certificate must cover, and the CA it issues it under.
     tls             = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
+    identity        = { kms_key = aws_kms_key.identity.arn }
     production      = true
     installation_at = local.ssm.installation
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }
