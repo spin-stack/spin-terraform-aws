@@ -1,5 +1,6 @@
 # The installation's identity issuer: https://id.<domain>, where a system outside spin reads the
-# discovery document and the key set that verify a workspace's identity token.
+# discovery document and the key set that verify a workspace's identity token, and the allowed
+# signers that verify a commit a workspace signed.
 #
 # Its own origin, and nothing of the installation's serves it: whoever writes the key set decides
 # which tokens are the installation's. What is published is what `spin-controlplane identity
@@ -23,7 +24,7 @@ variable "zone_id" {
 }
 
 variable "documents" {
-  description = "The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration and .well-known/jwks.json."
+  description = "The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json and .well-known/allowed_signers."
   type        = string
 }
 
@@ -35,15 +36,18 @@ variable "tags" {
 
 locals {
   host = "id.${var.domain}"
+  # Each document and what it is served as. allowed_signers is the line git's
+  # gpg.ssh.allowedSignersFile takes to verify a commit a workspace signed.
   documents = {
-    ".well-known/openid-configuration" = "${var.documents}/.well-known/openid-configuration"
-    ".well-known/jwks.json"            = "${var.documents}/.well-known/jwks.json"
+    ".well-known/openid-configuration" = "application/json"
+    ".well-known/jwks.json"            = "application/json"
+    ".well-known/allowed_signers"      = "text/plain"
   }
 }
 
 data "aws_caller_identity" "current" {}
 
-# The two documents and nothing else; public only through the distribution (the policy below).
+# The documents and nothing else; public only through the distribution (the policy below).
 # Unversioned and unlogged: what is in it is in git, and a read of a public key set says nothing.
 #trivy:ignore:AWS-0090
 #trivy:ignore:AWS-0089
@@ -83,9 +87,9 @@ resource "aws_s3_object" "document" {
   for_each     = local.documents
   bucket       = aws_s3_bucket.issuer.id
   key          = each.key
-  source       = each.value
-  etag         = filemd5(each.value)
-  content_type = "application/json"
+  source       = "${var.documents}/${each.key}"
+  etag         = filemd5("${var.documents}/${each.key}")
+  content_type = each.value
   # A relying party reads the key set when it sees a key id it does not know, and again after
   # this long: a rotation publishes the next key beside this one well before it signs.
   cache_control = "public, max-age=300"

@@ -17,6 +17,14 @@ spin-controlplane identity documents --kms-key <arn> --domain <domain> --out ide
 Commit `identity/`, and point `documents` at it. A changed key set is then a change somebody
 reviews, and no machine of the installation can write it.
 
+Beside the key set is `.well-known/allowed_signers`: the same key as git verifies with, for a
+commit a workspace signed. Anybody can check one:
+
+```sh
+curl -fsS https://id.<domain>/.well-known/allowed_signers > allowed_signers
+git -c gpg.ssh.allowedSignersFile=allowed_signers verify-commit <commit>
+```
+
 CloudFront takes a certificate only from us-east-1, so the module is given a provider for it:
 
 ```hcl
@@ -74,7 +82,7 @@ module "identity_issuer" {
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| documents | The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration and .well-known/jwks.json. | `string` | n/a | yes |
+| documents | The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json and .well-known/allowed\_signers. | `string` | n/a | yes |
 | domain | The installation's domain: the issuer is id.<domain>. | `string` | n/a | yes |
 | name | The installation's name, as modules/controlplane's name output says it. | `string` | n/a | yes |
 | zone\_id | The domain's public zone (modules/controlplane's public\_zone\_id). | `string` | n/a | yes |
