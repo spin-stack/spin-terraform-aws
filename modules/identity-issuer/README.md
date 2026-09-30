@@ -25,6 +25,11 @@ curl -fsS https://id.<domain>/.well-known/allowed_signers > allowed_signers
 git -c gpg.ssh.allowedSignersFile=allowed_signers verify-commit <commit>
 ```
 
+And `.well-known/spiffe-bundle` is the trust domain's SPIFFE bundle: the X.509 CA a workspace's
+X.509-SVID chains to, which a service outside spin trusts in mutual TLS, and the key its JWT-SVIDs
+are signed with. The CA is the control plane's, made once and kept in its bucket, so the
+`identity_documents` output fetches it before it writes the documents.
+
 CloudFront takes a certificate only from us-east-1, so the module is given a provider for it:
 
 ```hcl
@@ -82,7 +87,7 @@ module "identity_issuer" {
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| documents | The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json and .well-known/allowed\_signers. | `string` | n/a | yes |
+| documents | The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json, .well-known/allowed\_signers and .well-known/spiffe-bundle. | `string` | n/a | yes |
 | domain | The installation's domain: the issuer is id.<domain>. | `string` | n/a | yes |
 | name | The installation's name, as modules/controlplane's name output says it. | `string` | n/a | yes |
 | zone\_id | The domain's public zone (modules/controlplane's public\_zone\_id). | `string` | n/a | yes |
