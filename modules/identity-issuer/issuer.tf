@@ -24,7 +24,7 @@ variable "zone_id" {
 }
 
 variable "documents" {
-  description = "The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json and .well-known/allowed_signers."
+  description = "The directory `spin-controlplane identity documents --out` wrote: it holds .well-known/openid-configuration, .well-known/jwks.json, .well-known/allowed_signers and .well-known/spiffe-bundle."
   type        = string
 }
 
@@ -42,6 +42,8 @@ locals {
     ".well-known/openid-configuration" = "application/json"
     ".well-known/jwks.json"            = "application/json"
     ".well-known/allowed_signers"      = "text/plain"
+    # What a service outside spin verifies a workspace's X.509-SVID against in mutual TLS.
+    ".well-known/spiffe-bundle" = "application/json"
   }
 }
 

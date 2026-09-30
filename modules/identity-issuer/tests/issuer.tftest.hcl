@@ -47,7 +47,10 @@ run "the_issuer_publishes_the_committed_documents_and_nothing_else" {
   }
   assert {
     condition = (
-      toset(keys(aws_s3_object.document)) == toset([".well-known/openid-configuration", ".well-known/jwks.json", ".well-known/allowed_signers"]) &&
+      toset(keys(aws_s3_object.document)) == toset([
+        ".well-known/openid-configuration", ".well-known/jwks.json", ".well-known/allowed_signers", ".well-known/spiffe-bundle",
+      ]) &&
+      aws_s3_object.document[".well-known/spiffe-bundle"].content_type == "application/json" &&
       aws_s3_object.document[".well-known/jwks.json"].source == "tests/documents/.well-known/jwks.json" &&
       aws_s3_object.document[".well-known/jwks.json"].etag == filemd5("tests/documents/.well-known/jwks.json") &&
       aws_s3_object.document[".well-known/openid-configuration"].content_type == "application/json" &&
