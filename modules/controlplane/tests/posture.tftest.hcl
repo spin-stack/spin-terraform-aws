@@ -789,6 +789,19 @@ run "a_workspaces_identity_is_signed_by_a_key_nothing_takes_out" {
     condition     = local.controlplane_document.identity == { kms_key = aws_kms_key.identity.arn }
     error_message = "the control plane's document does not name the identity key"
   }
+  # What the key signed is read from CloudTrail and held to the records, which the bucket keeps
+  # past its lock.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    toset(s.actions) == toset(["cloudtrail:LookupEvents"])])
+    error_message = "the control plane cannot read what the identity key signed"
+  }
+  assert {
+    condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.volumes.rule :
+      r.status == "Enabled" && anytrue([for f in r.filter : f.prefix == "identity/issued/"]) &&
+    anytrue([for e in r.expiration : e.days > var.object_lock_days])])
+    error_message = "the identity records are never expired, or asked to expire while the lock still holds them"
+  }
 }
 
 # No machine but the control plane's reads its secrets: Session Manager comes with nothing else
