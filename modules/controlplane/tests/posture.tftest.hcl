@@ -121,9 +121,13 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
-  # A release images.json does not have, in a region it has none in: the image is named, and its
-  # PCRs with it. The runs of the machines' image ask images.json.
-  image_id = "ami-0123456789abcdef0"
+  # A release images.json does not have, in a region it has none in: the images are named, and the
+  # control plane's PCRs with them. The runs of the machines' images ask images.json.
+  image_ids = {
+    "control-plane" = "ami-0123456789abcdef0"
+    runner          = "ami-0aaaaaaaaaaaaaaaa"
+    proxy           = "ami-0bbbbbbbbbbbbbbbb"
+  }
   image_measurements = {
     pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
     pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
@@ -980,15 +984,16 @@ run "the_databases_archive" {
   }
 }
 
-# Every machine boots the release's image: Spin OS, into which spin-boot laid what the release's
-# workflow signed, checked against its signature, and whose root the kernel checks every block of.
-# Which image that is, region by region, is images.json: an id this commit names, so an image
-# published again reaches an installation by its module's ref moving and by nothing else.
-run "the_machines_boot_the_releases_image" {
+# Every machine boots its role's image of the release: Spin OS, into which spin-boot laid that
+# role's part of what the release's workflow signed, checked against its signature, whose root the
+# kernel checks every block of, and which its role's Secure Boot key signed. Which image that is,
+# role by role and region by region, is images.json: ids this commit names, so an image published
+# again reaches an installation by its module's ref moving and by nothing else.
+run "the_machines_boot_their_roles_image_of_the_release" {
   command = plan
   variables {
     spin_version = "v20260928.02"
-    image_id     = ""
+    image_ids    = {}
   }
   override_data {
     target = data.aws_region.current
@@ -996,18 +1001,20 @@ run "the_machines_boot_the_releases_image" {
   }
 
   assert {
-    # Whatever id images.json holds for it - a pull request that publishes the release again
-    # changes that, and nothing here should have to follow.
-    condition     = anytrue([for f in data.aws_ami.spin_os.filter : f.name == "image-id" && f.values == toset([jsondecode(file("${path.module}/../../images.json"))["v20260928.02"]["us-west-2"]])])
-    error_message = "the image is not the one images.json names for the release in its region"
+    # Whatever ids images.json holds for it - a pull request that publishes the release again
+    # changes those, and nothing here should have to follow.
+    condition = alltrue([for role in ["control-plane", "runner", "proxy"] :
+      anytrue([for f in data.aws_ami.spin_os[role].filter : f.name == "image-id" && f.values == toset([jsondecode(file("${path.module}/../../images.json"))["v20260928.02"][role]["us-west-2"]])])
+    ])
+    error_message = "an image is not the one images.json names for its role of the release in its region"
   }
   assert {
-    condition     = aws_launch_template.controlplane.image_id == local.image && aws_launch_template.proxy.image_id == local.image
-    error_message = "a machine boots another image than the release's"
+    condition     = aws_launch_template.controlplane.image_id == local.image["control-plane"] && aws_launch_template.proxy.image_id == local.image["proxy"]
+    error_message = "a machine boots another image than its role's of the release"
   }
   assert {
-    condition     = output.image.id == local.image && output.image.root_device == "/dev/xvda"
-    error_message = "the runners are not handed the release's image and its root device"
+    condition     = output.images["runner"].id == local.image["runner"] && output.images["runner"].root_device == "/dev/xvda"
+    error_message = "the runners are not handed the runner's image of the release and its root device"
   }
 }
 
@@ -1017,9 +1024,19 @@ run "a_release_with_no_image_here_is_refused" {
   variables {
     # images.json has it in us-west-2; the tests' region is us-east-2.
     spin_version = "v20260928.02"
-    image_id     = ""
+    image_ids    = {}
   }
   expect_failures = [data.aws_ami.spin_os]
+}
+
+# Images of your own are three, one per role, or none: one image for every machine would boot a
+# runner under the control plane's Secure Boot key.
+run "images_of_your_own_are_one_per_role" {
+  command = plan
+  variables {
+    image_ids = { "control-plane" = "ami-0123456789abcdef0" }
+  }
+  expect_failures = [var.image_ids]
 }
 
 # The control plane's key is answered to nothing but an attested control plane: the KMS key agrees
@@ -1070,7 +1087,7 @@ run "a_release_with_no_measurements_is_refused" {
   command = plan
   variables {
     spin_version       = "v20260928.02"
-    image_id           = ""
+    image_ids          = {}
     image_measurements = null
   }
   override_data {
@@ -1080,30 +1097,33 @@ run "a_release_with_no_measurements_is_refused" {
   expect_failures = [aws_kms_key.encryption]
 }
 
-# What the ami repository's pull request writes beside the image is what the key policy reads: a
-# dated release, and three SHA384 digests.
-run "measurements_json_is_releases_and_their_pcrs" {
+# What the ami repository's pull request writes beside the images is what the key policy reads: a
+# dated release, a role, and three SHA384 digests.
+run "measurements_json_is_releases_roles_and_their_pcrs" {
   command = plan
 
   assert {
-    condition = alltrue([for release, pcrs in local.measurements :
-      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && keys(pcrs) == tolist(["pcr12", "pcr4", "pcr7"]) &&
-      alltrue([for pcr in values(pcrs) : can(regex("^[0-9a-f]{96}$", pcr))])
+    condition = alltrue([for release, roles in local.measurements :
+      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(roles) > 0 && alltrue([for role, pcrs in roles :
+        contains(local.roles, role) && keys(pcrs) == tolist(["pcr12", "pcr4", "pcr7"]) &&
+        alltrue([for pcr in values(pcrs) : can(regex("^[0-9a-f]{96}$", pcr))])
+      ])
     ])
-    error_message = "measurements.json is not { release: { pcr4, pcr7, pcr12 } } of SHA384 digests"
+    error_message = "measurements.json is not { release: { role: { pcr4, pcr7, pcr12 } } } of SHA384 digests"
   }
 }
 
-# What the ami repository's pull request writes is what this module reads: a dated release, a
-# region, an AMI id.
-run "images_json_is_releases_regions_and_amis" {
+# What the ami repository's pull request writes is what this module reads: a dated release, each of
+# the three roles, a region, an AMI id.
+run "images_json_is_releases_roles_regions_and_amis" {
   command = plan
 
   assert {
-    condition = length(local.images) > 0 && alltrue([for release, regions in local.images :
-      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(regions) > 0 && alltrue([for region, ami in regions :
-    can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", region)) && can(regex("^ami-[0-9a-f]{17}$", ami))])])
-    error_message = "images.json is not { <release>: { <region>: <ami-id> } }"
+    condition = length(local.images) > 0 && alltrue([for release, roles in local.images :
+      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && toset(keys(roles)) == toset(local.roles) &&
+      alltrue([for role, regions in roles : length(regions) > 0 && alltrue([for region, ami in regions :
+    can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", region)) && can(regex("^ami-[0-9a-f]{17}$", ami))])])])
+    error_message = "images.json is not { <release>: { <role>: { <region>: <ami-id> } } } with every role"
   }
 }
 

@@ -12,13 +12,14 @@ module "spin" {
 }
 ```
 
-Every machine boots **Spin OS** of that release: the image
-[spin-stack/ami](https://github.com/spin-stack/ami) builds and publishes. Where each release's
-image is, region by region, is [`images.json`](images.json) - `{ "<release>": { "<region>":
-"<ami-id>" } }` - which the ami repository's publish updates here by a pull request. A module ref
-is then a set of releases with their images: a release with none in the installation's region is
-refused at plan, naming the regions it has one in, and `image_id` names an image of your own
-build instead.
+Every machine boots **Spin OS** of that release, one image per role - the control plane's, the
+runners' and the proxy's, each laid with that role's part of the release and signed by that role's
+Secure Boot key: the images [spin-stack/ami](https://github.com/spin-stack/ami) builds and
+publishes. Where each is, role by role and region by region, is [`images.json`](images.json) - `{
+"<release>": { "<role>": { "<region>": "<ami-id>" } } }` - which the ami repository's publish
+updates here by a pull request. A module ref is then a set of releases with their images: a
+release with none in the installation's region is refused at plan, naming the regions it has one
+in, and `image_ids` names images of your own build instead, one per role.
 
 The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
@@ -46,7 +47,8 @@ module's tests against its plan.
   [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) signed
   in to the account (`aws sts get-caller-identity` answers), and the
   [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
-  for a shell on a machine.
+  for a shell on the control plane's or the proxy's machine. A runner has none: its serial console,
+  its boot log and its metrics say what it does.
 - A domain, or a subdomain of one, that is the installation's alone: its zone is made here, in
   Route 53 ($0.50 a month), and whoever registered it points its nameservers at the
   `name_servers` output.
@@ -275,10 +277,10 @@ The installation's state bucket and key (`bootstrap/`) are removed apart, after 
   the certificates the last one had from their own bucket (versioned, no Object Lock), starts
   Caddy, and once Caddy answers points `proxy.` at itself and takes the elastic IP; its watch
   saves what Caddy issues every five minutes, following no link out of Caddy's directory. What
-  is lost is seconds of API and open connections, never a workspace. The image is the release's
-  Spin OS, the id `images.json` names, so it moves only with `spin_version`, the module's ref, or
-  `image_id`: an image published again for a release reaches an installation by a reviewed change
-  to that file and by nothing else. A change to a
+  is lost is seconds of API and open connections, never a workspace. Each image is its role's
+  Spin OS of the release, the id `images.json` names, so it moves only with `spin_version`, the
+  module's ref, or `image_ids`: an image published again for a release reaches an installation by
+  a reviewed change to that file and by nothing else. A change to a
   document alone reaches a machine when it next starts: `aws autoscaling
   start-instance-refresh` on its group.
 - **The proxy has subnets of its own**, and the control plane takes a browser's address only
@@ -293,9 +295,10 @@ The installation's state bucket and key (`bootstrap/`) are removed apart, after 
 - **The control plane's secrets are its role's alone.** Session Manager is given as a policy of
   this module's - the agent's registration and its channels - and not AWS's
   `AmazonSSMManagedInstanceCore`, which also reads every parameter in the account: the
-  parameters are under the account's `aws/ssm` key, so on the proxy or a runner it opened the
-  encryption key. The boundary backs this: no role but the control plane's reads the key, the
-  CA's key, the first password or the installation's configuration.
+  parameters are under the account's `aws/ssm` key, so on the proxy it opened the encryption key.
+  A runner has no Session Manager at all: its image carries no agent and its role is given none.
+  The boundary backs this: no role but the control plane's reads the key, the CA's key, the first
+  password or the installation's configuration.
 - **What crossed the network is kept.** The VPC's flow log goes to CloudWatch for
   `log_retention_days` (30); `flow_logs = false` turns it off. The resolver's query log is
   Route 53 Resolver's, and `dns_query_logs = true` asks for it.

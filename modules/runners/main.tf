@@ -4,8 +4,10 @@
 # Nothing reaches a runner - its group has no ingress - and it reaches the control plane on 8080,
 # the proxy's relay on 443 and the bucket through the gateway endpoint.
 
-# A runner boots the control plane's image: the installation's release, which is the only one a
-# runner's control plane serves (spin's CheckRelease refuses a runner of another).
+# A runner boots the runner's image of the installation's release, which is the only one a
+# runner's control plane serves (spin's CheckRelease refuses a runner of another). Nothing reaches
+# into it, Session Manager included: the image carries no agent, and the role grants none. What a
+# runner says is its serial console's, its boot log and its metrics; one that fails is replaced.
 
 locals {
   name = var.controlplane.name
@@ -91,12 +93,6 @@ resource "aws_iam_role_policy_attachment" "runner_boot_log" {
   policy_arn = var.controlplane.boot_log_policy_arn
 }
 
-resource "aws_iam_role_policy_attachment" "runner_ssm" {
-  count      = var.session_manager ? 1 : 0
-  role       = aws_iam_role.runner.name
-  policy_arn = var.controlplane.session_manager_policy_arn
-}
-
 resource "aws_iam_instance_profile" "runner" {
   name = "${local.iam_name}-runner"
   role = aws_iam_role.runner.name
@@ -105,7 +101,7 @@ resource "aws_iam_instance_profile" "runner" {
 
 resource "aws_launch_template" "runner" {
   name_prefix            = "${local.name}-runner-"
-  image_id               = var.controlplane.image.id
+  image_id               = var.controlplane.images["runner"].id
   vpc_security_group_ids = [aws_security_group.runner.id]
   update_default_version = true
 
@@ -128,7 +124,7 @@ resource "aws_launch_template" "runner" {
   }
 
   block_device_mappings {
-    device_name = var.controlplane.image.root_device
+    device_name = var.controlplane.images["runner"].root_device
     ebs {
       volume_type           = "gp3"
       volume_size           = var.root_volume_gb

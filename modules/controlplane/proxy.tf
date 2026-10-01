@@ -217,7 +217,7 @@ resource "aws_s3_bucket_policy" "certificates" {
 
 resource "aws_launch_template" "proxy" {
   name_prefix            = "${local.name}-proxy-"
-  image_id               = local.image
+  image_id               = local.image["proxy"]
   instance_type          = var.proxy_instance_type
   vpc_security_group_ids = [aws_security_group.proxy.id]
   user_data              = base64encode(local.user_data["proxy"])
@@ -233,7 +233,7 @@ resource "aws_launch_template" "proxy" {
   }
 
   block_device_mappings {
-    device_name = local.root_device
+    device_name = local.root_device["proxy"]
     ebs {
       volume_type           = "gp3"
       volume_size           = 20

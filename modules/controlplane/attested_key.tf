@@ -9,12 +9,14 @@
 # destroyed by a plan.
 
 locals {
-  # Each release's PCRs, as spin-stack/ami's publish proposes them beside its image (images.json).
+  # Each release's PCRs, role by role, as spin-stack/ami's publish proposes them beside its images
+  # (images.json).
   measurements = jsondecode(file("${path.module}/../../measurements.json"))
-  # Those of the image this installation boots: a build of your own names its own, and so may a
-  # release published before its PCRs were.
+  # Those of the control plane's image this installation boots: a build of your own names its own,
+  # and so may a release published before its PCRs were. Another role's image measures other PCRs -
+  # it is signed by another key - and is never answered the key.
   image_pcrs = (var.image_measurements != null ? var.image_measurements :
-  var.image_id != "" ? null : try(local.measurements[var.spin_version], null))
+  length(var.image_ids) > 0 ? null : try(local.measurements[var.spin_version]["control-plane"], null))
 }
 
 # No rotation: KMS rotates no asymmetric key, and a new key-agreement key would be a new secret and
@@ -31,7 +33,7 @@ resource "aws_kms_key" "encryption" {
     prevent_destroy = true
     precondition {
       condition     = local.image_pcrs != null
-      error_message = var.image_id != "" ? "image_id names an image of your own: image_measurements are its PCRs, which the control plane's key is answered to." : "${var.spin_version} has no measurements in measurements.json: a machine of it could not attest, and the control plane would have no key. Publish it (spin-stack/ami) and move this module's ref, or give its manifest's PCRs as image_measurements."
+      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are the control plane's image's PCRs, which the control plane's key is answered to." : "${var.spin_version} has no measurements of its control plane's image in measurements.json: a machine of it could not attest, and the control plane would have no key. Publish it (spin-stack/ami) and move this module's ref, or give its manifest's PCRs as image_measurements."
     }
   }
 }

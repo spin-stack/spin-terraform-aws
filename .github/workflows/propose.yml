@@ -63,9 +63,9 @@ jobs:
           # The ref the deployment names: a release's tag, which is what its users follow, or the
           # commit on main.
           if [ "${GITHUB_REF_TYPE}" = tag ]; then ref="${GITHUB_REF_NAME}"; else ref="${GITHUB_SHA::7}"; fi
-          # The newest release with an image in the region: releases are v<YYYYMMDD>.<NN>, which
-          # sort as text.
-          release=$(jq -r --arg r "${REGION}" '[to_entries[] | select(.value[$r]) | .key] | sort | last // empty' images.json)
+          # The newest release with every role's image in the region: releases are
+          # v<YYYYMMDD>.<NN>, which sort as text.
+          release=$(jq -r --arg r "${REGION}" '[to_entries[] | select(.value["control-plane"][$r] and .value.runner[$r] and .value.proxy[$r]) | .key] | sort | last // empty' images.json)
           if [ -z "${release}" ]; then
             echo "images.json has no release with an image in ${REGION}"; exit 1
           fi

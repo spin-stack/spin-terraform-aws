@@ -1,23 +1,79 @@
 {
   "v20260927.04": {
-    "us-west-2": "ami-077c3c1059fa5fedb"
+    "control-plane": {
+      "us-west-2": "ami-077c3c1059fa5fedb"
+    },
+    "proxy": {
+      "us-west-2": "ami-077c3c1059fa5fedb"
+    },
+    "runner": {
+      "us-west-2": "ami-077c3c1059fa5fedb"
+    }
   },
   "v20260928.02": {
-    "us-west-2": "ami-0c560101086829f38"
+    "control-plane": {
+      "us-west-2": "ami-0c560101086829f38"
+    },
+    "proxy": {
+      "us-west-2": "ami-0c560101086829f38"
+    },
+    "runner": {
+      "us-west-2": "ami-0c560101086829f38"
+    }
   },
   "v20260928.03": {
-    "us-west-2": "ami-067ff5104a5f9b91d"
+    "control-plane": {
+      "us-west-2": "ami-067ff5104a5f9b91d"
+    },
+    "proxy": {
+      "us-west-2": "ami-067ff5104a5f9b91d"
+    },
+    "runner": {
+      "us-west-2": "ami-067ff5104a5f9b91d"
+    }
   },
   "v20260928.04": {
-    "us-west-2": "ami-032dc0109ab913c4a"
+    "control-plane": {
+      "us-west-2": "ami-032dc0109ab913c4a"
+    },
+    "proxy": {
+      "us-west-2": "ami-032dc0109ab913c4a"
+    },
+    "runner": {
+      "us-west-2": "ami-032dc0109ab913c4a"
+    }
   },
   "v20260928.05": {
-    "us-west-2": "ami-0f123e666d64f2edf"
+    "control-plane": {
+      "us-west-2": "ami-0f123e666d64f2edf"
+    },
+    "proxy": {
+      "us-west-2": "ami-0f123e666d64f2edf"
+    },
+    "runner": {
+      "us-west-2": "ami-0f123e666d64f2edf"
+    }
   },
   "v20260928.06": {
-    "us-west-2": "ami-079402ecf0415ed28"
+    "control-plane": {
+      "us-west-2": "ami-079402ecf0415ed28"
+    },
+    "proxy": {
+      "us-west-2": "ami-079402ecf0415ed28"
+    },
+    "runner": {
+      "us-west-2": "ami-079402ecf0415ed28"
+    }
   },
   "v20260928.07": {
-    "us-west-2": "ami-0eef1f2618541d4d0"
+    "control-plane": {
+      "us-west-2": "ami-0eef1f2618541d4d0"
+    },
+    "proxy": {
+      "us-west-2": "ami-0eef1f2618541d4d0"
+    },
+    "runner": {
+      "us-west-2": "ami-0eef1f2618541d4d0"
+    }
   }
 }

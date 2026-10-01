@@ -48,9 +48,9 @@ output "runner_user_data" {
   value       = local.user_data["runner"]
 }
 
-output "image" {
-  description = "The Spin OS image of the installation's release, which the runners boot too: its id and its root device."
-  value       = { id = local.image, root_device = local.root_device }
+output "images" {
+  description = "The Spin OS images of the installation's release, by role - the control plane's, the runners' and the proxy's: each one's id and root device. The runners module boots the runner's."
+  value       = { for role in local.roles : role => { id = local.image[role], root_device = local.root_device[role] } }
 }
 
 output "boot_log_group" {

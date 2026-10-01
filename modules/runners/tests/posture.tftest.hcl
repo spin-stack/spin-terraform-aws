@@ -30,11 +30,14 @@ variables {
     security_group_id           = "sg-00000000000000000"
     runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
     runner_user_data            = "{\"systemd.credentials\":[{\"name\":\"spin.role\",\"text\":\"runner\"},{\"name\":\"spin.config\",\"text\":\"ssm:///spin/runner-config?region=us-east-2\"}]}"
-    image                       = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
-    boot_log_policy_arn         = "arn:aws:iam::123456789012:policy/spin-boot-log"
-    standard_vcpus              = 8
-    boundary_arn                = "arn:aws:iam::123456789012:policy/spin-boundary"
-    session_manager_policy_arn  = "arn:aws:iam::123456789012:policy/spin-session-manager"
+    images = {
+      "control-plane" = { id = "ami-0aaaaaaaaaaaaaaaa", root_device = "/dev/sda1" }
+      runner          = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
+      proxy           = { id = "ami-0bbbbbbbbbbbbbbbb", root_device = "/dev/sda1" }
+    }
+    boot_log_policy_arn = "arn:aws:iam::123456789012:policy/spin-boot-log"
+    standard_vcpus      = 8
+    boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
   }
 }
 
@@ -74,8 +77,8 @@ run "a_runner_is_reached_by_nothing" {
     condition     = base64decode(aws_launch_template.runner.user_data) == var.controlplane.runner_user_data
     error_message = "a runner's machine is told something other than its role and its document"
   }
-  # And it boots the control plane's image - the installation's release - on that image's root
-  # device. The group names the template's version by number: a new image is a change to the group
+  # And it boots the runner's image of the installation's release - not the control plane's nor the
+  # proxy's, each signed by another key - on that image's root device. The group names the template's version by number: a new image is a change to the group
   # the plan shows, where "$Latest" is the same string before and after.
   assert {
     condition = (
@@ -83,7 +86,7 @@ run "a_runner_is_reached_by_nothing" {
       anytrue([for b in aws_launch_template.runner.block_device_mappings : b.device_name == "/dev/xvda"]) &&
       aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version == "7"
     )
-    error_message = "a runner boots another image than the installation's, or the group cannot tell a new one"
+    error_message = "a runner boots another image than the installation's runner's, or the group cannot tell a new one"
   }
   # A release moves no workspace unless the installation says so: nothing refreshes the group, and
   # the next host it starts once the control plane has emptied it boots the new image.
@@ -137,12 +140,6 @@ run "a_runners_role_reads_its_document" {
   assert {
     condition     = aws_iam_role.runner.name == "spin-us-east-2-runner" && aws_iam_instance_profile.runner.name == "spin-us-east-2-runner"
     error_message = "the runners' role is not the one the installation lets join"
-  }
-  # Session Manager by the control plane module's own policy, which is a session and no more:
-  # the managed one reads every parameter in the account, the encryption key among them.
-  assert {
-    condition     = aws_iam_role_policy_attachment.runner_ssm[0].policy_arn == "arn:aws:iam::123456789012:policy/spin-session-manager"
-    error_message = "a runner is given more of SSM than a session"
   }
 }
 
