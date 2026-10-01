@@ -66,6 +66,9 @@ locals {
     production      = true
     installation_at = local.ssm.installation
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }
+    # The builds of the runner's image a host may join as, by what its NitroTPM measures: this
+    # release's, as measurements.json has it (attested_key.tf). A machine of any other joins nothing.
+    host_attestation = { runner = local.pcrs_of["runner"] == null ? [] : [local.pcrs_of["runner"]] }
 
     # What the machine's first boot does, and what the control plane never reads.
     install = {

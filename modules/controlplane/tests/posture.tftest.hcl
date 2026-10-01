@@ -129,9 +129,16 @@ variables {
     proxy           = "ami-0bbbbbbbbbbbbbbbb"
   }
   image_measurements = {
-    pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
-    pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
-    pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    "control-plane" = {
+      pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+      pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+      pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+    runner = {
+      pcr4  = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+      pcr7  = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+      pcr12 = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
   }
 }
 
@@ -1060,9 +1067,9 @@ run "the_key_is_answered_only_to_an_attested_control_plane" {
       s.effect == "Deny" || (!contains(s.actions, "kms:DeriveSharedSecret") && !contains(s.actions, "kms:*")) || (
         toset(s.actions) == toset(["kms:DeriveSharedSecret"]) &&
         alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements.pcr4])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements.pcr7])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements.pcr12])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr12])]) &&
         anytrue([for c in s.condition : c.variable == "kms:KeyAgreementAlgorithm" && toset(c.values) == toset(["ECDH"])])
       )
     ])
@@ -1081,6 +1088,27 @@ run "the_key_is_answered_only_to_an_attested_control_plane" {
   }
 }
 
+# The control plane is told the runner's build a host may join as - this release's, never the
+# control plane's own - and nothing else.
+run "a_host_joins_only_as_the_runners_build" {
+  command = plan
+
+  assert {
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation == { runner = [var.image_measurements["runner"]] }
+    error_message = "the control plane is told other builds than the runner's a host may join as"
+  }
+}
+
+# A release whose runner's image has no measurements, with none given, is refused at plan: no host
+# of it could join.
+run "a_release_with_no_runner_measurements_is_refused" {
+  command = plan
+  variables {
+    image_measurements = null
+  }
+  expect_failures = [data.aws_ami.spin_os, aws_kms_key.encryption]
+}
+
 # A release published before its PCRs were, with none given, is refused at plan: a machine of it
 # could not attest, and its control plane would come up with no key.
 run "a_release_with_no_measurements_is_refused" {
@@ -1094,7 +1122,7 @@ run "a_release_with_no_measurements_is_refused" {
     target = data.aws_region.current
     values = { region = "us-west-2", name = "us-west-2" }
   }
-  expect_failures = [aws_kms_key.encryption]
+  expect_failures = [aws_kms_key.encryption, data.aws_ami.spin_os]
 }
 
 # What the ami repository's pull request writes beside the images is what the key policy reads: a

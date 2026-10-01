@@ -40,6 +40,12 @@ data "aws_ami" "spin_os" {
       condition     = local.images_wanted[each.key] != ""
       error_message = "${var.spin_version} has no Spin OS image for the ${each.key} in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version][each.key], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name the images with image_ids."
     }
+    # A runner's image no host of could prove it booted is one no host of joins (host_attestation in
+    # config.tf).
+    precondition {
+      condition     = each.key != "runner" || local.pcrs_of["runner"] != null
+      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's." : "${var.spin_version} has no measurements of its runner's image in measurements.json: no host of it could join. Publish it (spin-stack/ami) and move this module's ref, or give its manifests' PCRs as image_measurements."
+    }
   }
 }
 
