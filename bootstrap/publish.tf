@@ -23,16 +23,40 @@ variable "image_publishers" {
   }
 }
 
-variable "secure_boot_key" {
-  description = "The KMS alias of the key Spin OS's kernel image is signed with (spin-stack/ami's `spin-os secureboot init`)."
-  type        = string
-  default     = "alias/spin-os-secureboot-db"
+# The Secure Boot key each role's image is signed with: three, so an instance's PCR7 says which role
+# it booted - a key the control plane's key policy, and later a join, can tell apart - and a runner's
+# image can never boot as a control plane's. RSA-2048 signing PKCS #1 v1.5 over SHA-256, the one
+# algorithm UEFI firmware and Authenticode agree on; the private halves never leave KMS. A new key
+# is a new db that no image published before trusts, so a plan never destroys one.
+locals {
+  secure_boot_roles = toset(["control-plane", "runner", "proxy"])
+}
+
+resource "aws_kms_key" "secure_boot" {
+  for_each                 = local.secure_boot_roles
+  description              = "Signs the kernel image of Spin OS's ${each.key} image (Secure Boot db)"
+  customer_master_key_spec = "RSA_2048"
+  key_usage                = "SIGN_VERIFY"
+  deletion_window_in_days  = 30
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_kms_alias" "secure_boot" {
+  for_each      = local.secure_boot_roles
+  name          = "alias/spin-os-secureboot-db-${each.key}"
+  target_key_id = aws_kms_key.secure_boot[each.key].key_id
+}
+
+output "secure_boot_keys" {
+  description = "Each role's Secure Boot key, by the alias spin-stack/ami signs that role's image with."
+  value       = { for role, a in aws_kms_alias.secure_boot : role => a.name }
 }
 
 locals {
   publishers = { for r, prefix in var.image_publishers : replace(r, "/", "-") => prefix }
   arn        = "arn:${data.aws_partition.current.partition}"
-  account    = data.aws_caller_identity.current.account_id
 }
 
 # The provider is made here too when no repository applies an installation from GitHub Actions.
@@ -75,16 +99,11 @@ resource "aws_iam_role" "publish" {
 }
 
 data "aws_iam_policy_document" "publish" {
-  # The kernel image's signature: the one key, by its alias.
+  # The kernel image's signature: each role's key, and no other.
   statement {
     sid       = "SignTheKernel"
     actions   = ["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"]
-    resources = ["${local.arn}:kms:${var.region}:${local.account}:key/*"]
-    condition {
-      test     = "ForAnyValue:StringEquals"
-      variable = "kms:ResourceAliases"
-      values   = [var.secure_boot_key]
-    }
+    resources = [for k in aws_kms_key.secure_boot : k.arn]
   }
   # The disk, block by block, into a new snapshot, tagged as it is started.
   statement {
