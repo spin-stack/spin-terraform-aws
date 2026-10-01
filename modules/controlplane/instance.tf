@@ -40,11 +40,11 @@ data "aws_ami" "spin_os" {
       condition     = local.images_wanted[each.key] != ""
       error_message = "${var.spin_version} has no Spin OS image for the ${each.key} in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version][each.key], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name the images with image_ids."
     }
-    # A runner's image no host of could prove it booted is one no host of joins (host_attestation in
-    # config.tf).
+    # A runner's or a proxy's image no machine of could prove it booted is one no host of joins and
+    # no proxy of is given its token (host_attestation in config.tf).
     precondition {
-      condition     = each.key != "runner" || local.pcrs_of["runner"] != null
-      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's." : "${var.spin_version} has no measurements of its runner's image in measurements.json: no host of it could join. Publish it (spin-stack/ami) and move this module's ref, or give its manifests' PCRs as image_measurements."
+      condition     = !contains(["runner", "proxy"], each.key) || local.pcrs_of[each.key] != null
+      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's, the proxy is given its token only as the proxy's." : "${var.spin_version} has no measurements of its ${each.key}'s image in measurements.json: no machine of it could prove what it booted. Publish it (spin-stack/ami) and move this module's ref, or give its manifests' PCRs as image_measurements."
     }
   }
 }

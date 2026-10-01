@@ -61,6 +61,7 @@ locals {
   runner_scope_arn      = "${local.arn}:iam::${local.account}:role/${local.iam_name}-runner-scope"
   controlplane_role_arn = "${local.arn}:iam::${local.account}:role/${local.iam_name}-controlplane"
   runner_role_arn       = "${local.arn}:iam::${local.account}:role/${local.iam_name}-runner"
+  proxy_role_arn        = "${local.arn}:iam::${local.account}:role/${local.iam_name}-proxy"
 }
 
 data "aws_iam_policy_document" "controlplane" {

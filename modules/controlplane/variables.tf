@@ -255,14 +255,14 @@ variable "budget_emails" {
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane and runner, instead of measurements.json's: the control plane's key is answered to the control plane's (attested_key.tf), and a host joins only as the runner's (host_attestation). Required with image_ids, and for a release published before its PCRs were."
+  description = "The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). Required with image_ids, and for a release published before its PCRs were."
   type        = map(object({ pcr4 = string, pcr7 = string, pcr12 = string }))
   default     = null
   validation {
     condition = var.image_measurements == null ? true : (
-      toset(keys(var.image_measurements)) == toset(["control-plane", "runner"]) &&
+      toset(keys(var.image_measurements)) == toset(["control-plane", "runner", "proxy"]) &&
       alltrue([for role in values(var.image_measurements) : alltrue([for pcr in values(role) : can(regex("^[0-9a-f]{96}$", pcr))])])
     )
-    error_message = "image_measurements are the control-plane's and the runner's, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them."
+    error_message = "image_measurements are the control-plane's, the runner's and the proxy's, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them."
   }
 }

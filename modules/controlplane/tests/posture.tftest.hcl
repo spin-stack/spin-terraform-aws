@@ -139,6 +139,11 @@ variables {
       pcr7  = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
       pcr12 = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
+    proxy = {
+      pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+      pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+      pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
   }
 }
 
@@ -1094,8 +1099,26 @@ run "a_host_joins_only_as_the_runners_build" {
   command = plan
 
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation == { runner = [var.image_measurements["runner"]] }
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == [var.image_measurements["runner"]]
     error_message = "the control plane is told other builds than the runner's a host may join as"
+  }
+}
+
+# The control plane is told the proxy's role and build, which the proxy proves for its token - its
+# own role and image, never a runner's - and the proxy is told whom it proves it to.
+run "the_proxy_proves_it_is_the_proxys_build" {
+  command = plan
+
+  assert {
+    condition = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.proxy == {
+      role   = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
+      builds = [var.image_measurements["proxy"]]
+    }
+    error_message = "the control plane is told another role or build than the proxy's for the proxy's token"
+  }
+  assert {
+    condition     = yamldecode(aws_ssm_parameter.proxy_config.value).install.join == { audience = local.join_audience }
+    error_message = "the proxy is not told the installation it proves it is the proxy to"
   }
 }
 

@@ -66,9 +66,13 @@ locals {
     production      = true
     installation_at = local.ssm.installation
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }
-    # The builds of the runner's image a host may join as, by what its NitroTPM measures: this
-    # release's, as measurements.json has it (attested_key.tf). A machine of any other joins nothing.
-    host_attestation = { runner = local.pcrs_of["runner"] == null ? [] : [local.pcrs_of["runner"]] }
+    # The builds of the runner's image a host may join as, and of the proxy's the proxy is given
+    # its token as - with the proxy's role - by what each NitroTPM measures: this release's, as
+    # measurements.json has them (attested_key.tf). A machine of any other is given nothing.
+    host_attestation = {
+      runner = local.pcrs_of["runner"] == null ? [] : [local.pcrs_of["runner"]]
+      proxy  = { role = local.proxy_role_arn, builds = local.pcrs_of["proxy"] == null ? [] : [local.pcrs_of["proxy"]] }
+    }
 
     # What the machine's first boot does, and what the control plane never reads.
     install = {
@@ -119,6 +123,8 @@ locals {
           certificates = aws_s3_bucket.certificates.bucket
         }
       }
+      # Who the proxy proves it is to, for its token: the installation hosts join.
+      join = { audience = local.join_audience }
     }
   }
 
