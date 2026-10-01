@@ -26,7 +26,6 @@ locals {
     proxy          = local.proxy_parameter
     runner         = local.runner_parameter
     installation   = local.installation_parameter
-    key            = local.key_parameter
     ca             = local.ca_parameter
     admin_password = local.admin_password_parameter
   } : k => "ssm://${p}?region=${local.region}" }
@@ -58,7 +57,9 @@ locals {
         region = local.region
       }
     }
-    encryption_key_at = local.ssm.key
+    # Agreed with KMS at every start by a machine whose NitroTPM proves this release's image
+    # (attested_key.tf): named here, held nowhere.
+    encryption_key_attested = { kms_key = aws_kms_key.encryption.arn }
     # The names its certificate must cover, and the CA it issues it under.
     tls             = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
     identity        = { kms_key = aws_kms_key.identity.arn }

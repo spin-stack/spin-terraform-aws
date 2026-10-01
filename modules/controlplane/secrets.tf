@@ -2,47 +2,21 @@
 # machine of the installation can write a parameter (boundary.tf), so what a machine reads is
 # what this module wrote, and a machine that was taken cannot leave something for the next one.
 #
-# Two of them never reach the state: the encryption key and the first administrator's password
-# are ephemeral values written through write-only attributes, once - value_wo_version is what
-# says when, and it does not change on its own. The third, the CA, is in the state on purpose:
+# The encryption key is not one of them: no apply makes it, and nothing stores it
+# (attested_key.tf).
+#
+# The first administrator's password never reaches the state: an ephemeral value written through a
+# write-only attribute, once - value_wo_version is what says when, and it does not change on its
+# own. The CA is in the state on purpose:
 # its certificate is what every runner and the proxy are given in their documents, so this
 # module has to know it, and a certificate whose key the state does not hold is one the next
 # apply would make again. The state is encrypted for that reason (the deployment's
 # encryption block), and the key is in SSM for the control plane alone.
 
 locals {
-  key_parameter            = "/spin/${local.name}/controlplane-encryption-key"
   ca_parameter             = "/spin/${local.name}/controlplane-ca"
   admin_password_parameter = "/spin/${local.name}/bootstrap-password"
   admin_email              = var.admin_email != "" ? var.admin_email : "admin@${var.domain}"
-}
-
-# The key everything the database seals is sealed under. With the database, it is the
-# installation: a new one is a database nothing can open, which is why its version is a constant.
-ephemeral "random_password" "encryption_key" {
-  length = 64
-}
-
-resource "aws_ssm_parameter" "encryption_key" {
-  name = local.key_parameter
-  # Worded as the installation was first made, and never changed after: a change to the
-  # parameter is a PutParameter, which carries a value, and the value is write-only - an
-  # ephemeral password made again at every apply. An apply that rewrote the description could
-  # write a new key, and a new key is a database nothing can open.
-  description = "The encryption key of ${local.name}: with the catalog, the installation"
-  type        = "SecureString"
-  # Thirty-two bytes, as base64: what the control plane's key is.
-  value_wo         = base64sha256(ephemeral.random_password.encryption_key.result)
-  value_wo_version = 1
-  tags             = local.tags
-  # A plan that would replace it - a new name, a parameter deleted by hand - is refused rather
-  # than shown as one line among many. Removing an installation is README.md's "Removing an
-  # installation".
-  lifecycle {
-    prevent_destroy = true
-    # The description above, held: an edit to it is not an edit this parameter may take.
-    ignore_changes = [description]
-  }
 }
 
 # The certificate authority every component trusts the control plane by. Ten years and no early

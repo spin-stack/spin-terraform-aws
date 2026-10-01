@@ -64,6 +64,12 @@ override_resource {
   values = { arn = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001" }
 }
 
+# The KMS key the control plane's key is agreed with, which its document names.
+override_resource {
+  target = aws_kms_key.encryption
+  values = { arn = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000002" }
+}
+
 # The buckets' ARNs, so what each role is given of which bucket can be read at plan.
 override_resource {
   target = aws_s3_bucket.database
@@ -115,9 +121,14 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
-  # A release images.json does not have, in a region it has none in: the image is named. The runs
-  # of the machines' image ask images.json.
+  # A release images.json does not have, in a region it has none in: the image is named, and its
+  # PCRs with it. The runs of the machines' image ask images.json.
   image_id = "ami-0123456789abcdef0"
+  image_measurements = {
+    pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+    pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+    pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
 }
 
 run "the_internet_reaches_the_proxy_alone" {
@@ -307,34 +318,30 @@ run "an_update_stands_the_new_machine_beside_the_old" {
   }
 }
 
-# The installation's secrets are this apply's to write and nobody else's. The key and the first
-# administrator's password are ephemeral and written through write-only attributes, so neither is
-# in the plan or the state; each is written once, on the version this module fixes, and an apply
-# after that writes neither again - a new key is a database nothing can open.
+# The installation's secrets are this apply's to write and nobody else's. The first administrator's
+# password is ephemeral and written through a write-only attribute, so it is in neither the plan nor
+# the state, and written once. The encryption key no apply writes at all: it is agreed with KMS by an
+# attested machine, and stored nowhere.
 run "the_secrets_are_written_once_and_never_by_a_machine" {
   command = plan
 
   assert {
     condition = (
-      aws_ssm_parameter.encryption_key.type == "SecureString" && aws_ssm_parameter.encryption_key.value_wo_version == 1 &&
       aws_ssm_parameter.admin_password.type == "SecureString" && aws_ssm_parameter.admin_password.value_wo_version == 1 &&
-      strcontains(file("${path.module}/secrets.tf"), "ephemeral \"random_password\" \"encryption_key\"") &&
-      strcontains(file("${path.module}/secrets.tf"), "ephemeral \"random_password\" \"admin\"")
+      strcontains(file("${path.module}/secrets.tf"), "ephemeral \"random_password\" \"admin\"") &&
+      !strcontains(file("${path.module}/secrets.tf"), "encryption_key")
     )
-    error_message = "the encryption key or the administrator's password is in the state, or is written on every apply"
+    error_message = "the administrator's password is in the state or written on every apply, or the encryption key is written by an apply"
   }
-  # A plan that would make the key or the CA again is refused: a new key is a database nothing
-  # opens, a new CA every runner distrusting the control plane. lifecycle is not an attribute a
-  # plan can be asked about, so the file is.
+  # A plan that would make the key's KMS key or the CA again is refused: a new key is a database
+  # nothing opens, a new CA every runner distrusting the control plane. lifecycle is not an
+  # attribute a plan can be asked about, so the files are.
   assert {
-    condition     = length(regexall("prevent_destroy = true", file("${path.module}/secrets.tf"))) == 3
-    error_message = "the key or the CA can be replaced by an apply"
-  }
-  # Nor rewritten in place: any change to the key's parameter is a PutParameter carrying a value,
-  # and its value is an ephemeral password made again at every apply. Its wording is held.
-  assert {
-    condition     = strcontains(file("${path.module}/secrets.tf"), "ignore_changes = [description]")
-    error_message = "an edit to the encryption key's description would rewrite the key"
+    condition = (
+      length(regexall("prevent_destroy = true", file("${path.module}/secrets.tf"))) == 2 &&
+      length(regexall("prevent_destroy = true", file("${path.module}/attested_key.tf"))) == 1
+    )
+    error_message = "the encryption key's KMS key or the CA can be replaced by an apply"
   }
   # The CA the control plane issues under, and the certificate everything else trusts it by: a CA
   # that can sign, and nothing but the certificate in a document another role reads.
@@ -349,12 +356,14 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
     error_message = "the CA cannot sign, would be made again by an apply, or its key is in a document another role reads"
   }
   # Named in the control plane's document and read by it; nothing reads them on a machine's behalf.
+  # The key is named by its KMS key, never given.
   assert {
     condition = (
-      local.controlplane_document.encryption_key_at == "ssm:///spin/spin/controlplane-encryption-key?region=us-east-2" &&
+      local.controlplane_document.encryption_key_attested.kms_key == aws_kms_key.encryption.arn &&
       local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/spin/bootstrap-password?region=us-east-2" &&
       local.controlplane_document.bootstrap_admin.email == "admin@example.com" &&
-      !contains(keys(local.controlplane_document), "encryption_key")
+      !contains(keys(local.controlplane_document), "encryption_key") &&
+      !contains(keys(local.controlplane_document), "encryption_key_at")
     )
     error_message = "the document holds a secret rather than where it is"
   }
@@ -602,7 +611,7 @@ run "an_account_holds_several_installations" {
   }
   assert {
     condition = alltrue([for n in [
-      aws_ssm_parameter.claim.name, aws_ssm_parameter.encryption_key.name, aws_ssm_parameter.ca.name,
+      aws_ssm_parameter.claim.name, aws_ssm_parameter.ca.name,
       aws_ssm_parameter.admin_password.name, aws_ssm_parameter.controlplane_config.name, aws_ssm_parameter.proxy_config.name,
       aws_ssm_parameter.runner_config.name, aws_ssm_parameter.installation.name,
       aws_cloudwatch_log_group.boot.name, aws_cloudwatch_log_group.flow[0].name,
@@ -823,13 +832,13 @@ run "no_machine_reads_the_control_planes_secrets" {
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") &&
-      contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/controlplane-encryption-key") &&
+      contains(s.resources, "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/controlplane-ca") &&
       anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
     toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])])])
-    error_message = "a role other than the control plane's can read the encryption key"
+    error_message = "a role other than the control plane's can read the CA's key"
   }
-  # The CA's key, the first administrator's password and the installation's configuration are
-  # the same line as the encryption key: nobody else's to read.
+  # The first administrator's password and the installation's configuration are the same line as
+  # the CA's key: nobody else's to read.
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "ssm:GetParameter*") && length(setintersection(s.resources, toset([
@@ -877,7 +886,7 @@ run "the_collector" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
-      s.sid != "ItsDocumentAndSecrets" || length(s.resources) == 5
+      s.sid != "ItsDocumentAndSecrets" || length(s.resources) == 4
     ])
     error_message = "the control plane reads a telemetry token from SSM: it is the database's"
   }
@@ -1011,6 +1020,78 @@ run "a_release_with_no_image_here_is_refused" {
     image_id     = ""
   }
   expect_failures = [data.aws_ami.spin_os]
+}
+
+# The control plane's key is answered to nothing but an attested control plane: the KMS key agrees
+# keys and does nothing else, the only statement that lets anything ask is the control plane's role
+# with this image's PCRs, the account keeps the key without using it, and whatever a later edit
+# allows is refused without an attestation document.
+run "the_key_is_answered_only_to_an_attested_control_plane" {
+  command = plan
+
+  override_resource {
+    target = aws_iam_role.controlplane
+    values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane" }
+  }
+
+  assert {
+    condition     = aws_kms_key.encryption.customer_master_key_spec == "ECC_NIST_P256" && aws_kms_key.encryption.key_usage == "KEY_AGREEMENT"
+    error_message = "the encryption key's KMS key is not a P-256 key-agreement key"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.encryption_key.statement :
+      s.effect == "Deny" || (!contains(s.actions, "kms:DeriveSharedSecret") && !contains(s.actions, "kms:*")) || (
+        toset(s.actions) == toset(["kms:DeriveSharedSecret"]) &&
+        alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements.pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements.pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements.pcr12])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:KeyAgreementAlgorithm" && toset(c.values) == toset(["ECDH"])])
+      )
+    ])
+    error_message = "something other than the control plane's role, with this image's PCRs, may agree the key"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.encryption_key.statement :
+      s.effect == "Deny" && toset(s.actions) == toset(["kms:DeriveSharedSecret"]) &&
+      anytrue([for p in s.principals : contains(p.identifiers, "*")]) &&
+    anytrue([for c in s.condition : c.test == "Null" && toset(c.values) == toset(["true"]) && startswith(c.variable, "kms:RecipientAttestation:NitroTPMPCR")])])
+    error_message = "the key can be agreed without an attestation document if a later edit of its policy allows it"
+  }
+  assert {
+    condition     = strcontains(file("${path.module}/attested_key.tf"), "prevent_destroy = true")
+    error_message = "the encryption key's KMS key can be destroyed by a plan, and with it the installation"
+  }
+}
+
+# A release published before its PCRs were, with none given, is refused at plan: a machine of it
+# could not attest, and its control plane would come up with no key.
+run "a_release_with_no_measurements_is_refused" {
+  command = plan
+  variables {
+    spin_version       = "v20260928.02"
+    image_id           = ""
+    image_measurements = null
+  }
+  override_data {
+    target = data.aws_region.current
+    values = { region = "us-west-2", name = "us-west-2" }
+  }
+  expect_failures = [aws_kms_key.encryption]
+}
+
+# What the ami repository's pull request writes beside the image is what the key policy reads: a
+# dated release, and three SHA384 digests.
+run "measurements_json_is_releases_and_their_pcrs" {
+  command = plan
+
+  assert {
+    condition = alltrue([for release, pcrs in local.measurements :
+      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && keys(pcrs) == tolist(["pcr12", "pcr4", "pcr7"]) &&
+      alltrue([for pcr in values(pcrs) : can(regex("^[0-9a-f]{96}$", pcr))])
+    ])
+    error_message = "measurements.json is not { release: { pcr4, pcr7, pcr12 } } of SHA384 digests"
+  }
 }
 
 # What the ami repository's pull request writes is what this module reads: a dated release, a

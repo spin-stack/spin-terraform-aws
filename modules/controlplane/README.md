@@ -51,6 +51,8 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_role_policy_attachment.proxy_boot_log](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.proxy_ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_internet_gateway.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway) | resource |
+| [aws_kms_alias.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
+| [aws_kms_key.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_kms_key.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_launch_template.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_launch_template.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
@@ -98,7 +100,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_ssm_parameter.ca](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.claim](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.controlplane_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [aws_ssm_parameter.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.installation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.proxy_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.runner_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
@@ -129,6 +130,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_policy_document.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.database_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ec2_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.flow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.flow_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.logs_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -156,6 +158,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | flow\_logs | Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records. | `bool` | `true` | no |
 | identity\_record\_days | How many days the record of each identity token given is kept (identity/issued/ in the volumes bucket), which the key's signatures in CloudTrail are held to: longer than the bucket's lock, and long enough to answer who took an identity when. | `number` | `400` | no |
 | image\_id | A Spin OS AMI for every machine, instead of the one images.json names for spin\_version in this region: a build of your own. It must carry that release: a machine refuses a document of another. | `string` | `""` | no |
+| image\_measurements | The PCRs an instance of the image measures - its manifest's measurements, SHA384 in lowercase hex - which the control plane's key is answered to (attested\_key.tf), instead of measurements.json's: required with image\_id, and for a release published before its PCRs were. | `object({ pcr4 = string, pcr7 = string, pcr12 = string })` | `null` | no |
 | installation\_config | The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds what it knows - the domain, who joins as a host, the autoscaling settings below - and writes it where the control plane reads it at every start, which seeds the database from it before it serves. What the file later says differently is shown in the dashboard to apply or dismiss, and nothing is written over what an administrator decided. | `string` | `""` | no |
 | instance\_type | The control plane's machine: the control plane, its database (PostgreSQL), the collector, and the stores of logs, traces and metrics it runs. | `string` | `"t8i.medium"` | no |
 | internal\_zone | The private zone the components reach each other by: cp.<this> and proxy.<this>, resolved only inside the VPC. | `string` | `"spin.internal"` | no |

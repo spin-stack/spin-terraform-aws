@@ -142,7 +142,7 @@ data "aws_iam_policy_document" "controlplane" {
   statement {
     sid     = "ItsDocumentAndSecrets"
     actions = ["ssm:GetParameter"]
-    resources = [for p in [local.config_parameter, local.installation_parameter, local.key_parameter, local.ca_parameter, local.admin_password_parameter] :
+    resources = [for p in [local.config_parameter, local.installation_parameter, local.ca_parameter, local.admin_password_parameter] :
     "${local.arn}:ssm:${local.region}:${local.account}:parameter${p}"]
   }
   # Its own name in the internal zone, and nothing else there: what a new machine takes when it

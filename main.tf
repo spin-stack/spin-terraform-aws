@@ -21,6 +21,7 @@ module "controlplane" {
   collector           = var.collector
   root_volume_gb      = var.controlplane_volume_gb
   image_id            = var.image_id
+  image_measurements  = var.image_measurements
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes
   quiet_hours         = var.quiet_hours
