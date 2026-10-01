@@ -223,15 +223,22 @@ variable "tags" {
   nullable    = false
 }
 
-variable "image_id" {
-  description = "A Spin OS AMI for every machine, instead of the one images.json names for spin_version in this region: a build of your own. It must carry that release: a machine refuses a document of another."
-  type        = string
-  default     = ""
+variable "image_ids" {
+  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role."
+  type        = map(string)
+  default     = {}
   nullable    = false
+  validation {
+    condition = length(var.image_ids) == 0 || (
+      toset(keys(var.image_ids)) == toset(["control-plane", "runner", "proxy"]) &&
+      alltrue([for id in values(var.image_ids) : can(regex("^ami-[0-9a-f]{17}$", id))])
+    )
+    error_message = "image_ids names an AMI for each of control-plane, runner and proxy, or none."
+  }
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of the image measures - its manifest's measurements, SHA384 in lowercase hex - which the control plane's key is answered to (attested_key.tf), instead of measurements.json's: required with image_id, and for a release published before its PCRs were."
+  description = "The PCRs an instance of the control plane's image measures - its manifest's measurements, SHA384 in lowercase hex - which the control plane's key is answered to (attested_key.tf), instead of measurements.json's: required with image_ids, and for a release published before its PCRs were."
   type        = object({ pcr4 = string, pcr7 = string, pcr12 = string })
   default     = null
   validation {

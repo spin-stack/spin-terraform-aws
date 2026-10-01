@@ -14,11 +14,10 @@ variable "controlplane" {
     security_group_id           = string
     runner_config_parameter_arn = string
     runner_user_data            = string
-    image                       = object({ id = string, root_device = string })
+    images                      = map(object({ id = string, root_device = string }))
     boot_log_policy_arn         = string
     standard_vcpus              = number
     boundary_arn                = string
-    session_manager_policy_arn  = string
   })
 }
 
@@ -111,13 +110,6 @@ variable "root_volume_gb" {
   description = "The runner's root disk: the OS and the machine's files; its data is on the instance store or data_volume_gb."
   type        = number
   default     = 30
-  nullable    = false
-}
-
-variable "session_manager" {
-  description = "Let Session Manager reach the hosts. There is no SSH either way."
-  type        = bool
-  default     = true
   nullable    = false
 }
 

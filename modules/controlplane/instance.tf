@@ -3,26 +3,29 @@
 # at every start (attested_key.tf) and the CA is in SSM (secrets.tf): a replaced instance reads its
 # document, restores the database from the archive and serves it.
 
-# Spin OS of this installation's release (spin-stack/ami): the image is the release - a machine of
-# it runs that release and no other, from a root it cannot write - so the release names the image.
-# Where each release's image is, region by region, is images.json at this repository's root, which
-# spin-stack/ami's publish updates by a pull request: an id this module's commit names, so an image
+# Spin OS of this installation's release (spin-stack/ami), one image per role: the image is the
+# release and the role - a machine of it runs that release's part for that role and no other, from
+# a root it cannot write, under a Secure Boot key of that role's - so the release names the images.
+# Where each is, role by role and region by region, is images.json at this repository's root, which
+# spin-stack/ami's publish updates by a pull request: ids this module's commit names, so an image
 # published again for a release reaches an installation by the module's ref moving, never by
-# whatever apply happens to follow it. image_id names one outright - a build of your own.
+# whatever apply happens to follow it. image_ids names them outright - builds of your own.
 locals {
-  images         = jsondecode(file("${path.module}/../../images.json"))
-  released_image = try(local.images[var.spin_version][local.region], "")
-  image_wanted   = var.image_id != "" ? var.image_id : local.released_image
+  roles           = ["control-plane", "runner", "proxy"]
+  images          = jsondecode(file("${path.module}/../../images.json"))
+  released_images = { for role in local.roles : role => try(local.images[var.spin_version][role][local.region], "") }
+  images_wanted   = length(var.image_ids) > 0 ? var.image_ids : local.released_images
 }
 
 # No owners: the image is named by its id, which a reviewed images.json or the operator gives -
 # there is no search whose result an owner would narrow.
 #trivy:ignore:AWS-0344
 data "aws_ami" "spin_os" {
+  for_each           = toset(local.roles)
   include_deprecated = true
   filter {
     name   = "image-id"
-    values = [local.image_wanted]
+    values = [local.images_wanted[each.key]]
   }
   filter {
     name   = "architecture"
@@ -34,16 +37,16 @@ data "aws_ami" "spin_os" {
   }
   lifecycle {
     precondition {
-      condition     = local.image_wanted != ""
-      error_message = "${var.spin_version} has no Spin OS image in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name one with image_id."
+      condition     = local.images_wanted[each.key] != ""
+      error_message = "${var.spin_version} has no Spin OS image for the ${each.key} in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version][each.key], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name the images with image_ids."
     }
   }
 }
 
 locals {
-  image = data.aws_ami.spin_os.id
-  # The image's root device, where a machine's root volume is sized: Spin OS's is /dev/xvda.
-  root_device = data.aws_ami.spin_os.root_device_name
+  image = { for role, ami in data.aws_ami.spin_os : role => ami.id }
+  # Each image's root device, where a machine's root volume is sized: Spin OS's is /dev/xvda.
+  root_device = { for role, ami in data.aws_ami.spin_os : role => ami.root_device_name }
 
   # What each machine starts on, as the tag that makes a change to it a new launch template: a
   # machine reads its document at every start, and nothing else would roll the change out. The
@@ -76,7 +79,7 @@ data "aws_ec2_instance_type" "proxy" {
 
 resource "aws_launch_template" "controlplane" {
   name_prefix            = "${local.name}-controlplane-"
-  image_id               = local.image
+  image_id               = local.image["control-plane"]
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.controlplane.id]
   user_data              = base64encode(local.user_data["control-plane"])
@@ -92,7 +95,7 @@ resource "aws_launch_template" "controlplane" {
   }
 
   block_device_mappings {
-    device_name = local.root_device
+    device_name = local.root_device["control-plane"]
     ebs {
       volume_type           = "gp3"
       volume_size           = var.root_volume_gb

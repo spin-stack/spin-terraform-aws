@@ -20,7 +20,7 @@ module "controlplane" {
   proxy_instance_type = var.proxy_instance_type
   collector           = var.collector
   root_volume_gb      = var.controlplane_volume_gb
-  image_id            = var.image_id
+  image_ids           = var.image_ids
   image_measurements  = var.image_measurements
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes

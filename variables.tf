@@ -67,14 +67,14 @@ variable "controlplane_volume_gb" {
   default     = null
 }
 
-variable "image_id" {
-  description = "A Spin OS AMI of your own for every machine, instead of the one images.json names for spin_version in this region."
-  type        = string
+variable "image_ids" {
+  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin_version in this region."
+  type        = map(string)
   default     = null
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of the image measures - its manifest's measurements - which the control plane's key is answered to, instead of measurements.json's: required with image_id, and for a release published before its PCRs were."
+  description = "The PCRs an instance of the control plane's image measures - its manifest's measurements - which the control plane's key is answered to, instead of measurements.json's: required with image_ids, and for a release published before its PCRs were."
   type        = object({ pcr4 = string, pcr7 = string, pcr12 = string })
   default     = null
 }
