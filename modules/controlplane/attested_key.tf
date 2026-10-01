@@ -15,8 +15,8 @@ locals {
   # Those of each role's image this installation boots: a build of your own names its own, and so
   # may a release published before its PCRs were. Each role's image measures its own PCRs - it is
   # signed by its own key - so the control plane's key is answered to the control plane's alone,
-  # and a host joins only as the runner's.
-  pcrs_of = { for role in ["control-plane", "runner"] : role => (
+  # a host joins only as the runner's, and the proxy is given its token only as the proxy's.
+  pcrs_of = { for role in ["control-plane", "runner", "proxy"] : role => (
     var.image_measurements != null ? var.image_measurements[role] :
     length(var.image_ids) > 0 ? null : try(local.measurements[var.spin_version][role], null)
   ) }
