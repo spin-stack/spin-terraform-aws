@@ -180,15 +180,15 @@ laptop either. Removing one is said first, applied, and only then destroyed:
    tofu apply   # with decommission = true in module "spin"
    ```
 
-2. The encryption key and the CA refuse to be destroyed, because an apply that replaced either
-   would leave an installation nothing can open. Take them out of the state, destroy, and delete
-   the key's parameter:
+2. The KMS key the encryption key is agreed with, and the CA, refuse to be destroyed, because an
+   apply that replaced either would leave an installation nothing can open. Take them out of the
+   state, destroy, and schedule the key's deletion:
 
    ```bash
-   tofu state rm module.spin.module.controlplane.aws_ssm_parameter.encryption_key \
+   tofu state rm module.spin.module.controlplane.aws_kms_key.encryption \
      module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
    tofu destroy
-   aws ssm delete-parameter --name /spin/<name>/controlplane-encryption-key
+   aws kms schedule-key-deletion --key-id alias/spin-<name>-encryption --pending-window-in-days 7
    ```
 
 The apply has to come first: a destroy empties a bucket as its state says, so `decommission`

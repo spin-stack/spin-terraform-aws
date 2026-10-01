@@ -1,7 +1,7 @@
 # One machine that holds nothing the installation cannot lose. The database runs on it and is
-# archived as it is written to a bucket of its own (database_bucket.tf), and the key and the CA are
-# in SSM (secrets.tf): a replaced instance reads its document, restores the database from the
-# archive and serves it.
+# archived as it is written to a bucket of its own (database_bucket.tf), the key is agreed with KMS
+# at every start (attested_key.tf) and the CA is in SSM (secrets.tf): a replaced instance reads its
+# document, restores the database from the archive and serves it.
 
 # Spin OS of this installation's release (spin-stack/ami): the image is the release - a machine of
 # it runs that release and no other, from a root it cannot write - so the release names the image.
@@ -182,7 +182,7 @@ resource "aws_autoscaling_group" "controlplane" {
     # What the machine starts on, and what the document names.
     aws_ssm_parameter.controlplane_config,
     aws_ssm_parameter.installation,
-    aws_ssm_parameter.encryption_key,
+    aws_kms_key.encryption,
     aws_ssm_parameter.ca,
     aws_ssm_parameter.admin_password,
     # The installer checks the bucket and a credential minted under the role; both exist and

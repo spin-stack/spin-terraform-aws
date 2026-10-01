@@ -229,3 +229,15 @@ variable "image_id" {
   default     = ""
   nullable    = false
 }
+
+variable "image_measurements" {
+  description = "The PCRs an instance of the image measures - its manifest's measurements, SHA384 in lowercase hex - which the control plane's key is answered to (attested_key.tf), instead of measurements.json's: required with image_id, and for a release published before its PCRs were."
+  type        = object({ pcr4 = string, pcr7 = string, pcr12 = string })
+  default     = null
+  validation {
+    condition = var.image_measurements == null ? true : alltrue([
+      for pcr in values(var.image_measurements) : can(regex("^[0-9a-f]{96}$", pcr))
+    ])
+    error_message = "image_measurements are SHA384 digests: 96 lowercase hex digits each, as NitroTPM reports them."
+  }
+}

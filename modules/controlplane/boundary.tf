@@ -78,7 +78,7 @@ data "aws_iam_policy_document" "boundary" {
     sid     = "TheControlPlanesSecrets"
     effect  = "Deny"
     actions = ["ssm:GetParameter*"]
-    resources = [for p in [local.key_parameter, local.ca_parameter, local.admin_password_parameter, local.installation_parameter] :
+    resources = [for p in [local.ca_parameter, local.admin_password_parameter, local.installation_parameter] :
     "${local.arn}:ssm:${local.region}:${local.account}:parameter${p}"]
     condition {
       test     = "ArnNotEquals"

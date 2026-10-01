@@ -73,6 +73,12 @@ variable "image_id" {
   default     = null
 }
 
+variable "image_measurements" {
+  description = "The PCRs an instance of the image measures - its manifest's measurements - which the control plane's key is answered to, instead of measurements.json's: required with image_id, and for a release published before its PCRs were."
+  type        = object({ pcr4 = string, pcr7 = string, pcr12 = string })
+  default     = null
+}
+
 variable "installation_config" {
   description = "The installation's config file (spin's configs/spin-example.yaml), as YAML: the control plane seeds its database from it at start, and shows a later change to it in the dashboard to apply or dismiss."
   type        = string
