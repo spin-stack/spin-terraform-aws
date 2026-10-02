@@ -1286,8 +1286,29 @@ run "every_bucket_is_billed_by_its_role" {
   }
 }
 
+run "the_control_plane_is_told_its_scope_and_its_budget" {
+  command = plan
+  variables {
+    monthly_budget_usd = 500
+  }
+
+  assert {
+    condition     = local.installation.settings.bill_scope == local.name
+    error_message = "the control plane reads the bill of something other than what carries its own tag"
+  }
+  assert {
+    condition     = local.installation.settings.bill_budget == "arn:aws:budgets::123456789012:budget/${local.name}-monthly" && aws_budgets_budget.monthly[0].name == "${local.name}-monthly"
+    error_message = "the control plane is told a budget other than the installation's"
+  }
+}
+
 run "no_budget_unless_one_is_named" {
   command = plan
+
+  assert {
+    condition     = !contains(keys(local.installation.settings), "bill_budget")
+    error_message = "the control plane is told of a budget nobody named"
+  }
 
   assert {
     condition     = length(aws_budgets_budget.monthly) == 0
