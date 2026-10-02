@@ -90,7 +90,7 @@ output "identity_key_arn" {
 
 output "identity_documents" {
   description = "The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the X.509 CA the control plane made and keeps in its bucket, then the documents from it and the key's public half. Run them with credentials that may read both, and commit what they write."
-  value       = "aws s3 cp s3://${aws_s3_bucket.volumes.bucket}/identity/x509-ca.der <dir>/x509-ca.der && spin-controlplane identity documents --kms-key ${aws_kms_key.identity.arn} --domain ${var.domain} --x509-ca <dir>/x509-ca.der --out <dir>"
+  value       = "aws s3 cp s3://${aws_s3_bucket.volumes.bucket}/identity/x509-ca.der <dir>/x509-ca.der && spin-controlplane identity documents --provider aws --kms-key ${aws_kms_key.identity.arn} --domain ${var.domain} --x509-ca <dir>/x509-ca.der --out <dir>"
 }
 
 output "internal_zone_id" {
