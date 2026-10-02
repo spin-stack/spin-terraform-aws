@@ -375,7 +375,7 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
   # The key is named by its KMS key, never given.
   assert {
     condition = (
-      local.controlplane_document.encryption_key_attested.kms_key == aws_kms_key.encryption.arn &&
+      local.controlplane_document.encryption_key_attested.key == aws_kms_key.encryption.arn &&
       local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/spin/bootstrap-password?region=us-east-2" &&
       local.controlplane_document.bootstrap_admin.email == "admin@example.com" &&
       !contains(keys(local.controlplane_document), "encryption_key") &&
@@ -811,7 +811,7 @@ run "a_workspaces_identity_is_signed_by_a_key_nothing_takes_out" {
     error_message = "the proxy may use a KMS key"
   }
   assert {
-    condition     = local.controlplane_document.identity == { kms_key = aws_kms_key.identity.arn }
+    condition     = local.controlplane_document.identity == { key = aws_kms_key.identity.arn }
     error_message = "the control plane's document does not name the identity key"
   }
   # What the key signed is read from CloudTrail and held to the records, which the bucket keeps
