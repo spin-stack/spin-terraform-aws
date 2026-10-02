@@ -182,6 +182,23 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["cloudtrail:LookupEvents"]
     resources = ["*"]
   }
+  # The bill, read: what the installation cost by day and service and what it is forecast to, which
+  # the control plane keeps and shows. Cost Explorer takes no resource, so this reads the account's
+  # whole bill; the control plane asks only for what carries its spin:installation tag. Read, never
+  # changed: nothing here may make, move or delete a budget or a cost category.
+  statement {
+    sid       = "ReadTheBill"
+    actions   = ["ce:GetCostAndUsage", "ce:GetCostForecast"]
+    resources = ["*"]
+  }
+  dynamic "statement" {
+    for_each = aws_budgets_budget.monthly
+    content {
+      sid       = "ReadItsBudget"
+      actions   = ["budgets:ViewBudget"]
+      resources = [statement.value.arn]
+    }
+  }
   # Its group of one: in service once it leads, and to be replaced when it stays down.
   statement {
     sid = "ItsGroup"

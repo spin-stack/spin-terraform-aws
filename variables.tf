@@ -151,6 +151,18 @@ variable "decommission" {
   default     = null
 }
 
+variable "monthly_budget_usd" {
+  description = "What the installation may cost in a month, in US dollars: an AWS Budget the control plane reads and whose alerts go to budget_emails. Null is no budget."
+  type        = number
+  default     = null
+}
+
+variable "budget_emails" {
+  description = "Who is emailed when the month's cost passes 80 % or 100 % of monthly_budget_usd, or is forecast to pass it."
+  type        = list(string)
+  default     = null
+}
+
 variable "tags" {
   description = "Tags on everything both modules create."
   type        = map(string)

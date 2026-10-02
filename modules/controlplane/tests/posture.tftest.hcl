@@ -1180,3 +1180,56 @@ run "the_logs" {
     error_message = "the flow log is not every connection, or is kept for ever"
   }
 }
+
+# The bill is read and never written: the control plane may ask what the installation cost and is
+# forecast to, and see its budget, and nothing more of Cost Explorer or Budgets. The budget is over
+# the installation's own tag, and tells who it names past 80 % and 100 %, and when 100 % is
+# forecast.
+run "the_bill_is_read_and_never_written" {
+  command = plan
+  variables {
+    monthly_budget_usd = 500
+    budget_emails      = ["ops@example.com"]
+  }
+
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement : alltrue([for a in s.actions :
+      (!startswith(a, "ce:") || contains(["ce:GetCostAndUsage", "ce:GetCostForecast"], a)) &&
+    (!startswith(a, "budgets:") || a == "budgets:ViewBudget")])])
+    error_message = "the control plane may change the bill's budgets or cost categories, not only read them"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    contains(s.actions, "ce:GetCostAndUsage") && contains(s.actions, "ce:GetCostForecast")])
+    error_message = "the control plane cannot read the bill"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    contains(s.actions, "budgets:ViewBudget")])
+    error_message = "the control plane cannot see the installation's budget"
+  }
+  assert {
+    condition = (aws_budgets_budget.monthly[0].limit_amount == "500" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY" &&
+    alltrue([for f in aws_budgets_budget.monthly[0].cost_filter : f.name == "TagKeyValue" && alltrue([for v in f.values : startswith(v, "user:spin:installation$")])]))
+    error_message = "the budget is not the month's, of the installation's own tag"
+  }
+  assert {
+    condition = (toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}"]) == toset(["ACTUAL:80", "ACTUAL:100", "FORECASTED:100"]) &&
+    alltrue([for n in aws_budgets_budget.monthly[0].notification : n.subscriber_email_addresses == toset(["ops@example.com"])]))
+    error_message = "the budget does not tell who it names at 80 % and 100 %, and when 100 % is forecast"
+  }
+}
+
+run "no_budget_unless_one_is_named" {
+  command = plan
+
+  assert {
+    condition     = length(aws_budgets_budget.monthly) == 0
+    error_message = "a budget was made where none was named"
+  }
+  assert {
+    condition = !anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+    contains(s.actions, "budgets:ViewBudget")])
+    error_message = "the control plane is let see a budget that does not exist"
+  }
+}

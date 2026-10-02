@@ -110,7 +110,7 @@ resource "aws_launch_template" "controlplane" {
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${local.name}-controlplane" })
+    tags          = merge(local.tags, { Name = "${local.name}-controlplane", "spin:role" = "controlplane" })
   }
   tags = local.tags
 }

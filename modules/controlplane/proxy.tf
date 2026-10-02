@@ -248,7 +248,7 @@ resource "aws_launch_template" "proxy" {
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${local.name}-proxy" })
+    tags          = merge(local.tags, { Name = "${local.name}-proxy", "spin:role" = "proxy" })
   }
   tags = local.tags
 }

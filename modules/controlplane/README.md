@@ -27,6 +27,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | ---- | ---- |
 | [aws_autoscaling_group.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/autoscaling_group) | resource |
 | [aws_autoscaling_group.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/autoscaling_group) | resource |
+| [aws_budgets_budget.monthly](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/budgets_budget) | resource |
 | [aws_cloudwatch_log_group.boot](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.flow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
@@ -151,6 +152,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | acme\_email | The address Let's Encrypt writes to; empty is admin@<domain>. | `string` | `""` | no |
 | admin\_email | Who the first administrator signs in as; empty is admin@<domain>. The one-time password is in the admin\_password\_parameter output's parameter. | `string` | `""` | no |
 | availability\_zones | How many zones to make subnets in. The control plane, the proxy and the runners may each be started in any of them, which is what gives a group somewhere to go when a zone runs out. | `number` | `3` | no |
+| budget\_emails | Who AWS emails when the month's cost passes 80 % or 100 % of monthly\_budget\_usd, or is forecast to pass it. | `list(string)` | `[]` | no |
 | collector | The collector: how often metrics are pushed to it. Which Alloy it is, is the image's. | ```object({ metric_interval = optional(string, "60s") })``` | `{}` | no |
 | database\_lock\_days | The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database\_bucket.tf). | `number` | `14` | no |
 | decommission | Set to true, and applied, before destroying the installation: its buckets lose the policies that refuse every object write from outside the VPC - the destroy runs from outside it - and a destroy empties every bucket, data included, lifting legal holds and bypassing the GOVERNANCE retention. Never set on an installation that is to keep its data. | `bool` | `false` | no |
@@ -163,6 +165,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | instance\_type | The control plane's machine: the control plane, its database (PostgreSQL), the collector, and the stores of logs, traces and metrics it runs. | `string` | `"t8i.medium"` | no |
 | internal\_zone | The private zone the components reach each other by: cp.<this> and proxy.<this>, resolved only inside the VPC. | `string` | `"spin.internal"` | no |
 | log\_retention\_days | How long the flow and query logs are kept. | `number` | `30` | no |
+| monthly\_budget\_usd | What the installation may cost in a month, in US dollars: an AWS Budget on its spin:installation tag (budget.tf), which the control plane reads and alerts reach. Null is no budget. | `number` | `null` | no |
 | name | The installation's name, one per region of an account: every resource's prefix, the SSM path (/spin/<name>/...) each machine's document is at, and - with the region - every IAM name. Two installations of one account may share a name in two regions, and not in one (claim.tf). | `string` | `"spin"` | no |
 | object\_lock\_days | The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and the bucket's lifecycle (bucket.tf) removes them a day after. | `number` | `30` | no |
 | proxy\_allowed\_cidrs | Where users may reach the proxy on 443 from: the dashboard, workspaces and SSH. Anywhere by default; an office's or a VPN's ranges close the installation to everyone else. The runners reach it from inside the VPC whatever this says, and 80 stays open for the ACME challenge. | `list(string)` | ```[ "0.0.0.0/0" ]``` | no |
