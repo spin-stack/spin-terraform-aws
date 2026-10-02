@@ -153,8 +153,8 @@ locals {
     base_domain = var.domain
     # Who joins as a host: the runners' role, under the policy a runner of it starts with.
     host_join = {
-      audience = local.join_audience
-      aws      = [merge({ role = local.runner_role_arn }, var.runner_policy)]
+      audience   = local.join_audience
+      principals = [merge({ principal = local.runner_role_arn }, var.runner_policy)]
     }
     settings = merge(try(local.operator.settings, {}), merge({
       # Whose word about a browser's address the control plane takes: the proxy's subnets, where

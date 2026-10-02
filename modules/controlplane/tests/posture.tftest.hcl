@@ -479,7 +479,7 @@ run "a_runner_joins_by_its_role" {
     condition = (
       local.installation.host_join.audience == "spin:123456789012:us-east-2:spin" &&
       local.runner_document.install.join.audience == local.installation.host_join.audience &&
-      local.installation.host_join.aws == [{ role = "arn:aws:iam::123456789012:role/spin-us-east-2-runner", shutdown_grace = "100s", preemption_source = "aws" }]
+      local.installation.host_join.principals == [{ principal = "arn:aws:iam::123456789012:role/spin-us-east-2-runner", shutdown_grace = "100s", preemption_source = "aws" }]
     )
     error_message = "a runner joins for another installation than the one that names its role, or under no policy"
   }
