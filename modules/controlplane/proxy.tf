@@ -125,7 +125,8 @@ resource "aws_eip" "proxy" {
 resource "aws_s3_bucket" "certificates" {
   bucket        = "${local.name}-proxy-${local.account}-${local.region}"
   force_destroy = true
-  tags          = local.tags
+  # Not "proxy": that value is what lets the control plane move the proxy's address (OntoAProxy).
+  tags = merge(local.tags, { "spin:role" = "certificates" })
 }
 
 resource "aws_s3_bucket_versioning" "certificates" {

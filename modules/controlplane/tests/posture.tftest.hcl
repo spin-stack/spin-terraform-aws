@@ -1220,6 +1220,21 @@ run "the_bill_is_read_and_never_written" {
   }
 }
 
+# The bill's S3 is told apart by bucket: the disks' is shared out to each volume by its bytes, and
+# the rest is the platform's. A bucket with no role, or the volumes' role on another, would put
+# one's cost on the other.
+run "every_bucket_is_billed_by_its_role" {
+  command = plan
+
+  assert {
+    condition = (aws_s3_bucket.volumes.tags["spin:role"] == "volumes" &&
+      aws_s3_bucket.database.tags["spin:role"] == "database" &&
+      aws_s3_bucket.logs.tags["spin:role"] == "logs" &&
+    aws_s3_bucket.certificates.tags["spin:role"] == "certificates")
+    error_message = "a bucket is not tagged with its role, and its cost is not told apart"
+  }
+}
+
 run "no_budget_unless_one_is_named" {
   command = plan
 
