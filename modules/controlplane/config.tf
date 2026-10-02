@@ -176,6 +176,12 @@ locals {
       # Its name and not its id: the name is known at plan, and what a machine starts on is
       # hashed into its launch template then.
       logs_bucket = aws_s3_bucket.logs.bucket
+      # Which of the account's costs are this installation's - what carries its spin:installation
+      # tag - for the control plane's reading of the bill (iam.tf, ReadTheBill).
+      bill_scope = local.name
+      }, var.monthly_budget_usd == null ? {} : {
+      # Its budget (budget.tf), by an ARN known at plan rather than read off the budget.
+      bill_budget = "${local.arn}:budgets::${local.account}:budget/${local.name}-monthly"
     }))
   })
 }
