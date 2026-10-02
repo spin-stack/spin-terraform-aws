@@ -71,7 +71,7 @@ locals {
     # measurements.json has them (attested_key.tf). A machine of any other is given nothing.
     host_attestation = {
       runner = local.pcrs_of["runner"] == null ? [] : [local.pcrs_of["runner"]]
-      proxy  = { role = local.proxy_role_arn, builds = local.pcrs_of["proxy"] == null ? [] : [local.pcrs_of["proxy"]] }
+      proxy  = { principal = local.proxy_role_arn, builds = local.pcrs_of["proxy"] == null ? [] : [local.pcrs_of["proxy"]] }
     }
 
     # What the machine's first boot does, and what the control plane never reads.

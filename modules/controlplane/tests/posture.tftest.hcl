@@ -1111,8 +1111,8 @@ run "the_proxy_proves_it_is_the_proxys_build" {
 
   assert {
     condition = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.proxy == {
-      role   = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
-      builds = [var.image_measurements["proxy"]]
+      principal = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
+      builds    = [var.image_measurements["proxy"]]
     }
     error_message = "the control plane is told another role or build than the proxy's for the proxy's token"
   }
