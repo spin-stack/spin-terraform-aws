@@ -463,7 +463,7 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
       local.proxy_document.install.release == "v20260921.02" &&
       !contains(keys(local.runner_document.install), "release") &&
       local.controlplane_document.install.store.bucket == "spin-volumes-123456789012-us-east-2" &&
-      startswith(local.controlplane_document.install.store.role_arn, "arn:aws:iam::123456789012:role/")
+      startswith(local.controlplane_document.install.store.principal, "arn:aws:iam::123456789012:role/")
     )
     error_message = "a document does not say what its machine installs, or a runner is told a release other than its control plane's"
   }
