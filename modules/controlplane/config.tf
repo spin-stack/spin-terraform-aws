@@ -59,10 +59,10 @@ locals {
     }
     # Agreed with KMS at every start by a machine whose NitroTPM proves this release's image
     # (attested_key.tf): named here, held nowhere.
-    encryption_key_attested = { kms_key = aws_kms_key.encryption.arn }
+    encryption_key_attested = { key = aws_kms_key.encryption.arn }
     # The names its certificate must cover, and the CA it issues it under.
     tls             = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
-    identity        = { kms_key = aws_kms_key.identity.arn }
+    identity        = { key = aws_kms_key.identity.arn }
     production      = true
     installation_at = local.ssm.installation
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }

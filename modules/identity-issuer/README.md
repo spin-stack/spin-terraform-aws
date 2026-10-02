@@ -11,7 +11,7 @@ control plane signs with and never holds; its `identity_documents` output
 key's public half:
 
 ```sh
-spin-controlplane identity documents --provider aws --kms-key <arn> --domain <domain> --out identity/
+spin-controlplane identity documents --provider aws --key <arn> --domain <domain> --out identity/
 ```
 
 Commit `identity/`, and point `documents` at it. A changed key set is then a change somebody
