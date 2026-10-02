@@ -79,9 +79,9 @@ locals {
       release = var.spin_version
       log     = local.boot_log
       store = {
-        bucket   = aws_s3_bucket.volumes.bucket
-        region   = local.region
-        role_arn = aws_iam_role.runner_scope.arn
+        bucket    = aws_s3_bucket.volumes.bucket
+        region    = local.region
+        principal = aws_iam_role.runner_scope.arn
       }
       launch = {
         aws = {
