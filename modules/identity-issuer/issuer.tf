@@ -56,7 +56,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_s3_bucket" "issuer" {
   bucket        = "${var.name}-identity-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
-  tags          = var.tags
+  tags          = merge(var.tags, { "spin:role" = "identity" })
 }
 
 resource "aws_s3_bucket_public_access_block" "issuer" {

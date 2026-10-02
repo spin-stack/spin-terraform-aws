@@ -12,7 +12,9 @@ resource "aws_s3_bucket" "volumes" {
   object_lock_enabled = true
   # Only when the installation is being removed (var.decommission): every workspace's disk is here.
   force_destroy = var.decommission
-  tags          = local.tags
+  # spin:role "volumes" is how the control plane tells what the disks cost from the rest of the
+  # bill's S3, which it shares out to each volume by its bytes.
+  tags = merge(local.tags, { "spin:role" = "volumes" })
 }
 
 resource "aws_s3_bucket_versioning" "volumes" {
