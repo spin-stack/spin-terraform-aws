@@ -237,6 +237,23 @@ variable "image_ids" {
   }
 }
 
+variable "monthly_budget_usd" {
+  description = "What the installation may cost in a month, in US dollars: an AWS Budget on its spin:installation tag (budget.tf), which the control plane reads and alerts reach. Null is no budget."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.monthly_budget_usd == null ? true : var.monthly_budget_usd > 0
+    error_message = "monthly_budget_usd is an amount above zero, or null for none."
+  }
+}
+
+variable "budget_emails" {
+  description = "Who AWS emails when the month's cost passes 80 % or 100 % of monthly_budget_usd, or is forecast to pass it."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "image_measurements" {
   description = "The PCRs an instance of the control plane's image measures - its manifest's measurements, SHA384 in lowercase hex - which the control plane's key is answered to (attested_key.tf), instead of measurements.json's: required with image_ids, and for a release published before its PCRs were."
   type        = object({ pcr4 = string, pcr7 = string, pcr12 = string })

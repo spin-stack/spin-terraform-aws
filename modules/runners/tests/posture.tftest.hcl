@@ -67,6 +67,11 @@ run "a_runner_is_reached_by_nothing" {
     condition     = aws_launch_template.runner.cpu_options[0].nested_virtualization == "enabled"
     error_message = "a runner is started without KVM"
   }
+  # What a runner costs is read off the bill by its role: the machine and its disks alike.
+  assert {
+    condition     = alltrue([for t in aws_launch_template.runner.tag_specifications : t.tags["spin:role"] == "runner"])
+    error_message = "a runner's machine or disk is not tagged as a runner's, and its cost is no role's"
+  }
   assert {
     condition     = alltrue([for b in aws_launch_template.runner.block_device_mappings : b.ebs[0].encrypted == "true"])
     error_message = "a runner's disk is not encrypted"

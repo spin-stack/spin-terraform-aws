@@ -149,13 +149,15 @@ resource "aws_launch_template" "runner" {
   # The control plane module's: the runner role and the runners' document, as credentials.
   user_data = base64encode(var.controlplane.runner_user_data)
 
+  # spin:role is how the bill is read by role (a cost allocation tag, bootstrap/cost.tf); no policy
+  # here decides anything by a runner's.
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.tags, { Name = "${local.name}-runner" })
+    tags          = merge(local.tags, { Name = "${local.name}-runner", "spin:role" = "runner" })
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = merge(local.tags, { Name = "${local.name}-runner" })
+    tags          = merge(local.tags, { Name = "${local.name}-runner", "spin:role" = "runner" })
   }
   tags = local.tags
 }

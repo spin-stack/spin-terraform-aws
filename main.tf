@@ -27,6 +27,8 @@ module "controlplane" {
   quiet_hours         = var.quiet_hours
   time_zone           = var.time_zone
   decommission        = var.decommission
+  monthly_budget_usd  = var.monthly_budget_usd
+  budget_emails       = var.budget_emails
   tags                = var.tags
 }
 
