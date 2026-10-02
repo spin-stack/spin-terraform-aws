@@ -159,9 +159,10 @@ locals {
     settings = merge(try(local.operator.settings, {}), merge({
       # Whose word about a browser's address the control plane takes: the proxy's subnets, where
       # nothing but a proxy runs.
-      trusted_proxies          = aws_subnet.edge[*].cidr_block
-      autoscaling_group        = local.runner_group
-      autoscaling_region       = local.region
+      trusted_proxies = aws_subnet.edge[*].cidr_block
+      # The runners' group as spin's AWS provider names one, <region>/<name>: known at plan, as
+      # the group's ARN, which carries an id AWS makes, is not.
+      autoscaling_group        = "${local.region}/${local.runner_group}"
       autoscaling_idle_minutes = var.runner_idle_minutes
       }, var.quiet_hours == "" ? {} : {
       autoscaling_quiet_hours = var.quiet_hours
