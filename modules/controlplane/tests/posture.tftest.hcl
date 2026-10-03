@@ -1033,7 +1033,7 @@ run "a_volumes_signed_history_is_erased_by_nobody" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
-    s.actions == toset(["s3:GetObject"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/writers/*"])])
+    s.actions == toset(["s3:GetObject", "s3:GetObjectVersion"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/writers/*"])])
     error_message = "a runner cannot read who a volume's writers are, and would believe no HEAD"
   }
   assert {

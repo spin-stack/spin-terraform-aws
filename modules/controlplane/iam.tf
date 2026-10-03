@@ -256,9 +256,10 @@ data "aws_iam_policy_document" "runner_scope" {
     resources = ["${aws_s3_bucket.volumes.arn}/layers/*", "${aws_s3_bucket.volumes.arn}/volumes/*"]
   }
   # Who wrote a volume's HEAD: a writer's record, read to hold the HEAD's signature to before a
-  # restore believes it. Written by the control plane alone, at a host's join.
+  # restore believes it - as its one version, which a write over it would not displace. Written by
+  # the control plane alone, at a host's join.
   statement {
-    actions   = ["s3:GetObject"]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
     resources = ["${aws_s3_bucket.volumes.arn}/writers/*"]
   }
 }
