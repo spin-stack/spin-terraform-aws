@@ -22,13 +22,14 @@ data "aws_iam_policy_document" "boundary" {
     ]
     resources = ["*"]
   }
-  # One role is ever assumed from another: the one the control plane mints runners'
-  # credentials under. Nothing becomes anything else, or anyone federated.
+  # Two roles are ever assumed from another: the one the control plane mints runners'
+  # credentials under, and the one it grants volumes' keys under. Nothing becomes anything
+  # else, or anyone federated.
   statement {
-    sid           = "OnlyTheRunnerScope"
+    sid           = "OnlyTheRunnerScopeAndTheVolumeKeys"
     effect        = "Deny"
     actions       = ["sts:AssumeRole"]
-    not_resources = [local.runner_scope_arn]
+    not_resources = [local.runner_scope_arn, local.volume_keys_role_arn]
   }
   statement {
     sid    = "NoOtherCredentials"
