@@ -16,9 +16,12 @@ locals {
   # may a release published before its PCRs were. Each role's image measures its own PCRs - it is
   # signed by its own key - so the control plane's key is answered to the control plane's alone,
   # a host joins only as the runner's, and the proxy is given its token only as the proxy's.
+  # The PCRs alone: an entry also carries the signed statement of them, which the control plane is
+  # given only once a spin release reads it - one it does not know would make it refuse its document.
   pcrs_of = { for role in ["control-plane", "runner", "proxy"] : role => (
     var.image_measurements != null ? var.image_measurements[role] :
-    length(var.image_ids) > 0 ? null : try(local.measurements[var.spin_version][role], null)
+    length(var.image_ids) > 0 ? null :
+    try({ for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => local.measurements[var.spin_version][role][pcr] }, null)
   ) }
   image_pcrs = local.pcrs_of["control-plane"]
 }
