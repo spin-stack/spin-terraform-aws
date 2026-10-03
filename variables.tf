@@ -74,9 +74,15 @@ variable "image_ids" {
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of each role's image measures - its manifest's measurements - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's, a host joins only as the runner's, and the proxy is given its token only as the proxy's. Required with image_ids, and for a release published before its PCRs were."
-  type        = map(object({ pcr4 = string, pcr7 = string, pcr12 = string }))
-  default     = null
+  description = "The PCRs an instance of each role's image measures - its manifest's measurements - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's, a host joins only as the runner's, and the proxy is given its token only as the proxy's. The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them. Required with image_ids, and for a release published before its PCRs were."
+  type = map(object({
+    pcr4      = string
+    pcr7      = string
+    pcr12     = string
+    statement = optional(string)
+    bundle    = optional(string)
+  }))
+  default = null
 }
 
 variable "installation_config" {

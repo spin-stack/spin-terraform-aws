@@ -16,12 +16,21 @@ locals {
   # may a release published before its PCRs were. Each role's image measures its own PCRs - it is
   # signed by its own key - so the control plane's key is answered to the control plane's alone,
   # a host joins only as the runner's, and the proxy is given its token only as the proxy's.
-  # The PCRs alone: an entry also carries the signed statement of them, which the control plane is
-  # given only once a spin release reads it - one it does not know would make it refuse its document.
-  pcrs_of = { for role in ["control-plane", "runner", "proxy"] : role => (
+  measured_of = { for role in ["control-plane", "runner", "proxy"] : role => (
     var.image_measurements != null ? var.image_measurements[role] :
-    length(var.image_ids) > 0 ? null :
-    try({ for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => local.measurements[var.spin_version][role][pcr] }, null)
+    length(var.image_ids) > 0 ? null : try(local.measurements[var.spin_version][role], null)
+  ) }
+  # The PCRs alone: what the control plane's key policy and the proxy's join hold a machine to.
+  pcrs_of = { for role, m in local.measured_of : role => (
+    m == null ? null : { for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => m[pcr] }
+  ) }
+  # A writer's build - the runner's, the control plane's - with what its release signed of it: the
+  # statement of its PCRs and the bundle that signs it, which a writer's record carries for a
+  # verifier to hold the machine's document to (spin F6b). Its image's own publisher signs it, so a
+  # control plane that is told other PCRs is not believed by a verifier.
+  signed_of = { for role in ["control-plane", "runner"] : role => (
+    local.measured_of[role] == null ? null :
+    try({ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => local.measured_of[role][k] }, null)
   ) }
   image_pcrs = local.pcrs_of["control-plane"]
 }

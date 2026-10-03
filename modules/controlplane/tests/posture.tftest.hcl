@@ -141,14 +141,18 @@ variables {
   }
   image_measurements = {
     "control-plane" = {
-      pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
-      pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
-      pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      pcr4      = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+      pcr7      = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+      pcr12     = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      statement = "Y29udHJvbC1wbGFuZSBzdGF0ZW1lbnQ="
+      bundle    = "eyJzaWduZWQiOiJjb250cm9sLXBsYW5lIn0="
     }
     runner = {
-      pcr4  = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
-      pcr7  = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
-      pcr12 = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      pcr4      = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+      pcr7      = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+      pcr12     = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      statement = "cnVubmVyIHN0YXRlbWVudA=="
+      bundle    = "eyJzaWduZWQiOiJydW5uZXIifQ=="
     }
     proxy = {
       pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
@@ -1180,8 +1184,45 @@ run "a_host_joins_only_as_the_runners_build" {
 
   assert {
     condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == [var.image_measurements["runner"]]
-    error_message = "the control plane is told other builds than the runner's a host may join as"
+    error_message = "the control plane is told other builds than the runner's a host may join as, or not what its release signed of it"
   }
+}
+
+# The control plane records its own key as a writer of volumes with its own build and what its
+# release signed of it: the control plane's image's, and no other role's.
+run "the_control_plane_writes_as_its_own_signed_build" {
+  command = plan
+
+  assert {
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.control_plane == [var.image_measurements["control-plane"]]
+    error_message = "the control plane is told another build than its own, or not what its release signed of it"
+  }
+}
+
+# Images of your own whose writers' builds come with no statement their publisher signed are
+# refused at plan: no verifier would believe what their machines write.
+run "a_writers_build_with_no_statement_is_refused" {
+  command = plan
+  variables {
+    image_measurements = {
+      "control-plane" = {
+        pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+      runner = {
+        pcr4  = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7  = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12 = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+      proxy = {
+        pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  }
+  expect_failures = [var.image_measurements]
 }
 
 # The control plane is told the proxy's role and build, which the proxy proves for its token - its
@@ -1192,7 +1233,7 @@ run "the_proxy_proves_it_is_the_proxys_build" {
   assert {
     condition = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.proxy == {
       principal = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
-      builds    = [var.image_measurements["proxy"]]
+      builds    = [{ for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => var.image_measurements["proxy"][pcr] }]
     }
     error_message = "the control plane is told another role or build than the proxy's for the proxy's token"
   }

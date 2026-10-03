@@ -71,10 +71,13 @@ locals {
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }
     # The builds of the runner's image a host may join as, and of the proxy's the proxy is given
     # its token as - with the proxy's role - by what each NitroTPM measures: this release's, as
-    # measurements.json has them (attested_key.tf). A machine of any other is given nothing.
+    # measurements.json has them (attested_key.tf). A machine of any other is given nothing. The
+    # runner's and the control plane's carry what their release signed of them, which each records
+    # its key as a writer of volumes with.
     host_attestation = {
-      runner = local.pcrs_of["runner"] == null ? [] : [local.pcrs_of["runner"]]
-      proxy  = { principal = local.proxy_role_arn, builds = local.pcrs_of["proxy"] == null ? [] : [local.pcrs_of["proxy"]] }
+      runner        = local.signed_of["runner"] == null ? [] : [local.signed_of["runner"]]
+      proxy         = { principal = local.proxy_role_arn, builds = local.pcrs_of["proxy"] == null ? [] : [local.pcrs_of["proxy"]] }
+      control_plane = local.signed_of["control-plane"] == null ? [] : [local.signed_of["control-plane"]]
     }
 
     # What the machine's first boot does, and what the control plane never reads.
