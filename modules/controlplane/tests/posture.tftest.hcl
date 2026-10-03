@@ -1011,6 +1011,39 @@ run "the_databases_archive" {
   }
 }
 
+# A volume's history is the HEAD its writer signed with the highest sequence among the versions
+# the bucket keeps, held to who that writer is (spin F6): no role erases a version of a HEAD or of
+# a writer's record, whatever it is given later, nor lifts the lock that keeps them. A runner reads
+# the records, to hold a HEAD to its writer, and writes none: only the control plane says who a
+# writer is.
+run "a_volumes_signed_history_is_erased_by_nobody" {
+  command = plan
+
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:DeleteObjectVersion") && length(s.condition) == 0 &&
+      contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/volumes/*/HEAD") &&
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/writers/*")])
+    error_message = "a role can erase a version of a volume's HEAD or of a writer's record"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+    s.effect == "Deny" && contains(s.actions, "s3:BypassGovernanceRetention") && contains(s.resources, "*")])
+    error_message = "a role can lift the lock that keeps a volume's HEADs"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+    s.actions == toset(["s3:GetObject"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/writers/*"])])
+    error_message = "a runner cannot read who a volume's writers are, and would believe no HEAD"
+  }
+  assert {
+    condition = !anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+      anytrue([for a in s.actions : a != "s3:GetObject" && a != "s3:GetObjectVersion"]) &&
+    anytrue([for r in s.resources : strcontains(r, "/writers/")])])
+    error_message = "a runner can write who a writer is"
+  }
+}
+
 # Every machine boots its role's image of the release: Spin OS, into which spin-boot laid that
 # role's part of what the release's workflow signed, checked against its signature, whose root the
 # kernel checks every block of, and which its role's Secure Boot key signed. Which image that is,
