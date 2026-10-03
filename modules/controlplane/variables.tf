@@ -255,14 +255,21 @@ variable "budget_emails" {
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). Required with image_ids, and for a release published before its PCRs were."
-  type        = map(object({ pcr4 = string, pcr7 = string, pcr12 = string }))
-  default     = null
+  description = "The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. Required with image_ids, and for a release published before its PCRs were."
+  type = map(object({
+    pcr4      = string
+    pcr7      = string
+    pcr12     = string
+    statement = optional(string)
+    bundle    = optional(string)
+  }))
+  default = null
   validation {
     condition = var.image_measurements == null ? true : (
       toset(keys(var.image_measurements)) == toset(["control-plane", "runner", "proxy"]) &&
-      alltrue([for role in values(var.image_measurements) : alltrue([for pcr in values(role) : can(regex("^[0-9a-f]{96}$", pcr))])])
+      alltrue([for role in values(var.image_measurements) : alltrue([for pcr in [role.pcr4, role.pcr7, role.pcr12] : can(regex("^[0-9a-f]{96}$", pcr))])]) &&
+      alltrue([for role in ["control-plane", "runner"] : can(base64decode(var.image_measurements[role].statement)) && can(base64decode(var.image_measurements[role].bundle))])
     )
-    error_message = "image_measurements are the control-plane's, the runner's and the proxy's, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them."
+    error_message = "image_measurements are the control-plane's, the runner's and the proxy's, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them; the control plane's and the runner's with their statement and bundle, base64."
   }
 }
