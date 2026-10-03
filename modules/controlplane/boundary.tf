@@ -140,6 +140,17 @@ data "aws_iam_policy_document" "boundary" {
     actions   = ["s3:DeleteObjectVersion"]
     resources = ["${aws_s3_bucket.database.arn}/*"]
   }
+  # A volume's history is the HEAD its writer signed with the highest sequence among the versions
+  # the bucket keeps, held to the record of who that writer is (spin's F6). The lock keeps a version
+  # only so long: past it, erasing the newest HEADs of a volume nobody wrote since would be a
+  # rollback a restore believes. No role erases either - a delete of them is a marker, which
+  # nothing in spin lifts: a workspace's delete is the database's until it is crypto-shredded.
+  statement {
+    sid       = "NoVersionOfAVolumesSignedHistoryErased"
+    effect    = "Deny"
+    actions   = ["s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.volumes.arn}/volumes/*/HEAD", "${aws_s3_bucket.volumes.arn}/writers/*"]
+  }
 }
 
 resource "aws_iam_policy" "boundary" {
