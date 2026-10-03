@@ -138,6 +138,13 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["sts:AssumeRole"]
     resources = [aws_iam_role.runner_scope.arn]
   }
+  # A grant of a volume's key: a session tagged with its owner (volume_keys.tf). What the
+  # control plane may do with the key itself is the key's policy.
+  statement {
+    sid       = "GrantVolumeKeys"
+    actions   = ["sts:AssumeRole", "sts:TagSession"]
+    resources = [aws_iam_role.volume_keys.arn]
+  }
   # What it starts on, and the secrets its document names. Read, never written: every parameter
   # of the installation is this module's to write (secrets.tf).
   statement {

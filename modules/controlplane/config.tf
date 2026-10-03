@@ -61,8 +61,11 @@ locals {
     # (attested_key.tf): named here, held nowhere.
     encryption_key_attested = { key = aws_kms_key.encryption.arn }
     # The names its certificate must cover, and the CA it issues it under.
-    tls             = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
-    identity        = { key = aws_kms_key.identity.arn }
+    tls      = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
+    identity = { key = aws_kms_key.identity.arn }
+    # Every volume's key is KMS's, granted under the volume-keys role and opened only by an
+    # attested runner (volume_keys.tf).
+    volume_keys     = { key = aws_kms_key.volumes.arn, role = aws_iam_role.volume_keys.arn }
     production      = true
     installation_at = local.ssm.installation
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }

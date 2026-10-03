@@ -70,6 +70,17 @@ override_resource {
   values = { arn = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000002" }
 }
 
+# The volumes' KMS key and the role its keys are granted under, which the document names.
+override_resource {
+  target = aws_kms_key.volumes
+  values = { arn = "arn:aws:kms:us-east-2:123456789012:key/volumes" }
+}
+
+override_resource {
+  target = aws_iam_role.volume_keys
+  values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys" }
+}
+
 # The buckets' ARNs, so what each role is given of which bucket can be read at plan.
 override_resource {
   target = aws_s3_bucket.database
@@ -721,8 +732,8 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope"])])
-    error_message = "the boundary lets a role become another than the runner scope"
+    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope", "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys"])])
+    error_message = "the boundary lets a role become another than the runner scope or the volume keys"
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
@@ -1095,6 +1106,75 @@ run "the_key_is_answered_only_to_an_attested_control_plane" {
 
 # The control plane is told the runner's build a host may join as - this release's, never the
 # control plane's own - and nothing else.
+# A volume's key is opened only by the volume-keys role - a grant's session - for the owner its
+# session is tagged with, and only answered to a runner of this release's image. The control plane
+# makes keys it does not see, sees only what it seals itself, checks a key only under this same key,
+# and decrypts nothing, attested or not; whatever a later edit allows is refused without an
+# attestation document. The role is the control plane's alone to assume, tagged with an owner and
+# nothing else, and the control plane is told the key and the role.
+run "a_volumes_key_is_opened_only_by_an_attested_runner" {
+  command = plan
+
+  override_resource {
+    target = aws_iam_role.controlplane
+    values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane" }
+  }
+
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.volume_keys.statement :
+      s.effect == "Deny" || (!contains(s.actions, "kms:Decrypt") && !contains(s.actions, "kms:*")) || (
+        toset(s.actions) == toset(["kms:Decrypt"]) &&
+        alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:owner" && toset(c.values) == toset(["$${aws:PrincipalTag/spin:owner}"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"].pcr12])])
+      )
+    ])
+    error_message = "something other than a grant's session, for its own owner, on a runner of this image, may decrypt a volume's key"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.volume_keys.statement :
+      s.effect == "Deny" && toset(s.actions) == toset(["kms:Decrypt"]) &&
+      anytrue([for p in s.principals : contains(p.identifiers, "*")]) &&
+    anytrue([for c in s.condition : c.test == "Null" && toset(c.values) == toset(["true"]) && startswith(c.variable, "kms:RecipientAttestation:NitroTPMPCR")])])
+    error_message = "a volume's key can be decrypted without an attestation document if a later edit of the policy allows it"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.volume_keys.statement :
+      s.effect == "Deny" && toset(s.actions) == toset(["kms:Decrypt"]) && length(s.condition) == 0 &&
+    anytrue([for p in s.principals : contains(p.identifiers, "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane")])])
+    error_message = "the control plane's role is not denied decrypting a volume's key"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.volume_keys.statement :
+      s.effect == "Deny" || !contains(s.actions, "kms:GenerateDataKey") ||
+    anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:held" && toset(c.values) == toset(["true"])])])
+    error_message = "the control plane may see a key that is not one it seals itself"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.volume_keys.statement :
+      s.effect == "Deny" || (!contains(s.actions, "kms:ReEncryptFrom") && !contains(s.actions, "kms:ReEncryptTo")) ||
+    anytrue([for c in s.condition : c.variable == "kms:ReEncryptOnSameKey" && toset(c.values) == toset(["true"])])])
+    error_message = "a volume's key may be re-encrypted onto another key"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.volume_keys_trust.statement :
+      alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])]) &&
+      anytrue([for c in s.condition : c.test == "Null" && c.variable == "aws:RequestTag/spin:owner" && toset(c.values) == toset(["false"])]) &&
+    anytrue([for c in s.condition : c.variable == "aws:TagKeys" && toset(c.values) == toset(["spin:owner"])])])
+    error_message = "the volume-keys role can be assumed by another, or without a grant's owner, or with other tags"
+  }
+  assert {
+    condition     = local.controlplane_document.volume_keys == { key = "arn:aws:kms:us-east-2:123456789012:key/volumes", role = "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys" }
+    error_message = "the control plane is not told the volumes' key and the role it grants them under"
+  }
+  assert {
+    condition     = strcontains(file("${path.module}/volume_keys.tf"), "prevent_destroy = true") && aws_kms_key.volumes.enable_key_rotation
+    error_message = "the volumes' KMS key can be destroyed by a plan, or is never rotated"
+  }
+}
+
 run "a_host_joins_only_as_the_runners_build" {
   command = plan
 
