@@ -13,7 +13,7 @@ vars:
   TFDOCS_VERSION: 0.24.0
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
   # The modules whose inputs and outputs terraform-docs writes into their README.
-  DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer
+  DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer modules/terminal
   # D2, as spin-stack/ami pins it, and its flags there: one light theme, each diagram its own size.
   # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
   # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests.
@@ -23,6 +23,27 @@ vars:
     --elk-padding '[top=40,left=24,bottom=24,right=24]' --theme 0 --pad 16 --scale 1
 
 tasks:
+  term:fetch:
+    desc: >-
+      Fetch a spin release's browser terminal for modules/terminal: its spin-term.tar.gz, checked
+      against the signature release.yml made at that tag, unpacked into OUT with the RELEASE it is.
+      RELEASE=<tag> [OUT=term]. Needs gh and cosign.
+    # Checked before it is unpacked, and against the workflow at the tag rather than any file's
+    # word: whoever writes term.<domain> writes the code that asks a person's passkey.
+    requires: {vars: [RELEASE]}
+    vars:
+      OUT: '{{.OUT | default "term"}}'
+      IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/{{.RELEASE}}
+    cmds:
+      - |
+        set -euo pipefail
+        tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+        gh release download '{{.RELEASE}}' -R spin-stack/spin -p 'spin-term.tar.gz' -p 'spin-term.tar.gz.sigstore.json' -D "$tmp"
+        cosign verify-blob --bundle "$tmp/spin-term.tar.gz.sigstore.json" --certificate-identity '{{.IDENTITY}}' \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com "$tmp/spin-term.tar.gz"
+        rm -rf '{{.OUT}}' && mkdir -p '{{.OUT}}' && tar -xzf "$tmp/spin-term.tar.gz" -C '{{.OUT}}'
+        printf '%s\n' '{{.RELEASE}}' > '{{.OUT}}/RELEASE'
+
   tools:tofu:
     desc: Install the pinned OpenTofu.
     status:
@@ -121,5 +142,5 @@ tasks:
       # What each module promises about who reaches what - the proxy the only machine the
       # internet reaches, no role able to write IAM or read another's secrets - asserted
       # against its plan, with no account.
-      - for: [modules/controlplane, modules/runners, modules/identity-issuer]
+      - for: [modules/controlplane, modules/runners, modules/identity-issuer, modules/terminal]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"
