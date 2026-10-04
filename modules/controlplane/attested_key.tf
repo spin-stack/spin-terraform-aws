@@ -33,6 +33,11 @@ locals {
     try({ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => local.measured_of[role][k] }, null)
   ) }
   image_pcrs = local.pcrs_of["control-plane"]
+  # Each role's image of this release that spin-stack/ami marked revoked in measurements.json, with
+  # why (task images:revoke): a release with one is not installed, and an installation on it is told
+  # on its next plan.
+  # An entry with no revocation has it null - an optional attribute - or not at all.
+  revoked = { for role, m in local.measured_of : role => m.revoked if try(m.revoked != null && m.revoked != "", false) }
 }
 
 # No rotation: KMS rotates no asymmetric key, and a new key-agreement key would be a new secret and
@@ -47,6 +52,10 @@ resource "aws_kms_key" "encryption" {
   tags                     = local.tags
   lifecycle {
     prevent_destroy = true
+    precondition {
+      condition     = length(local.revoked) == 0
+      error_message = "${var.spin_version} is revoked, and is not installed: ${join("; ", [for role, why in local.revoked : "its ${role} image: ${why}"])}. Move this module's spin_version to a release that is not."
+    }
     precondition {
       condition     = local.image_pcrs != null
       error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and the control plane's are what its key is answered to." : "${var.spin_version} has no measurements of its control plane's image in measurements.json: a machine of it could not attest, and the control plane would have no key. Publish it (spin-stack/ami) and move this module's ref, or give its manifest's PCRs as image_measurements."

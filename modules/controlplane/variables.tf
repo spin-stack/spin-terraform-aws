@@ -262,6 +262,9 @@ variable "image_measurements" {
     pcr12     = string
     statement = optional(string)
     bundle    = optional(string)
+    # Why the build is not to be run, as measurements.json says of a revoked one: a release with
+    # one is not installed (attested_key.tf).
+    revoked = optional(string)
   }))
   default = null
   validation {

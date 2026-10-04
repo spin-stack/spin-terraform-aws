@@ -1474,3 +1474,34 @@ run "no_budget_unless_one_is_named" {
     error_message = "the control plane is let see a budget that does not exist"
   }
 }
+
+# A release spin-stack/ami marked revoked in measurements.json is not installed: the plan stops,
+# saying which image and why, before anything of it is made.
+run "a_revoked_release_is_not_installed" {
+  command = plan
+  variables {
+    image_measurements = {
+      "control-plane" = {
+        pcr4      = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7      = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12     = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        statement = "Y29udHJvbC1wbGFuZSBzdGF0ZW1lbnQ="
+        bundle    = "eyJzaWduZWQiOiJjb250cm9sLXBsYW5lIn0="
+      }
+      runner = {
+        pcr4      = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7      = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12     = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        statement = "cnVubmVyIHN0YXRlbWVudA=="
+        bundle    = "eyJzaWduZWQiOiJydW5uZXIifQ=="
+        revoked   = "CVE-2026-0001 in sshd"
+      }
+      proxy = {
+        pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  }
+  expect_failures = [aws_kms_key.encryption]
+}

@@ -81,6 +81,7 @@ variable "image_measurements" {
     pcr12     = string
     statement = optional(string)
     bundle    = optional(string)
+    revoked   = optional(string)
   }))
   default = null
 }
