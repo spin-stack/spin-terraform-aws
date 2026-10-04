@@ -41,6 +41,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_policy.session_manager](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_role.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.flow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.identity_keys](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.runner_scope](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.volume_keys](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -54,6 +55,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_role_policy_attachment.proxy_ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_internet_gateway.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway) | resource |
 | [aws_kms_alias.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
+| [aws_kms_alias.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_alias.volumes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_key.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_kms_key.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
@@ -137,6 +139,8 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_policy_document.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.flow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.flow_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.identity_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.identity_keys_trust](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.logs_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -163,7 +167,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | decommission | Set to true, and applied, before destroying the installation: its buckets lose the policies that refuse every object write from outside the VPC - the destroy runs from outside it - and a destroy empties every bucket, data included, lifting legal holds and bypassing the GOVERNANCE retention. Never set on an installation that is to keep its data. | `bool` | `false` | no |
 | dns\_query\_logs | Keep the VPC resolver's query log in CloudWatch: every name looked up, a workspace's included. It is Route 53 Resolver's, and off unless asked for. Each installation that turns it on takes one of the ten CloudWatch Logs resource policies a region of an account may have. | `bool` | `false` | no |
 | flow\_logs | Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records. | `bool` | `true` | no |
-| identity\_record\_days | How many days the record of each identity token given is kept (identity/issued/ in the volumes bucket), which the key's signatures in CloudTrail are held to: longer than the bucket's lock, and long enough to answer who took an identity when. | `number` | `400` | no |
+| identity\_record\_days | How many days the record of each identity a host signs is kept (identity/issued/ in the volumes bucket): longer than the bucket's lock, and long enough to answer who took an identity when. | `number` | `400` | no |
 | image\_ids | Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin\_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role. | `map(string)` | `{}` | no |
 | image\_measurements | The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's (attested\_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host\_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. Required with image\_ids, and for a release published before its PCRs were. | ```map(object({ pcr4 = string pcr7 = string pcr12 = string statement = optional(string) bundle = optional(string) # Why the build is not to be run, as measurements.json says of a revoked one: a release with # one is not installed (attested_key.tf). revoked = optional(string) }))``` | `null` | no |
 | installation\_config | The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds what it knows - the domain, who joins as a host, the autoscaling settings below - and writes it where the control plane reads it at every start, which seeds the database from it before it serves. What the file later says differently is shown in the dashboard to apply or dismiss, and nothing is written over what an administrator decided. | `string` | `""` | no |
@@ -199,8 +203,8 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | database\_bucket | The database's archive: the base backups and WAL the control plane ships as it writes, and restores from when its machine is replaced. Its role alone reaches it. |
 | domain | The base domain; the runners' relay is tunnel.app.<domain>, dialled at relay\_dial. |
 | iam\_name | What the installation's IAM names begin with: its name and its region, since IAM is the account's and two regions may each have an installation of one name. The runners' role and instance profile are named for it. |
-| identity\_documents | The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the X.509 CA the control plane made and keeps in its bucket, then the documents from it and the key's public half. Run them with credentials that may read both, and commit what they write. |
-| identity\_key\_arn | The KMS key the control plane signs its workspaces' identity tokens with. |
+| identity\_documents | The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the identity key as the control plane keeps it in its bucket (its public half is all that is read) and the X.509 CA the first host to sign an SVID made beside it, then the documents from them. Run them with credentials that may read both, and commit what they write. |
+| identity\_key\_arn | The KMS key the installation's identity key is sealed under, which only an attested runner opens. |
 | images | The Spin OS images of the installation's release, by role - the control plane's, the runners' and the proxy's: each one's id and root device. The runners module boots the runner's. |
 | internal\_zone\_id | The private zone the components reach each other by, cp.<internal\_zone> and proxy.<internal\_zone>. |
 | name | The installation's name, claimed in its region (claim.tf), which the runners' group and security group are named for. |

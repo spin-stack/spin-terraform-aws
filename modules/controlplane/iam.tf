@@ -145,6 +145,13 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["sts:AssumeRole", "sts:TagSession"]
     resources = [aws_iam_role.volume_keys.arn]
   }
+  # A grant of the identity key: a session of the identity-keys role (identity.tf). What the
+  # control plane may do with the key itself - make it unseen, and nothing else - is the key's policy.
+  statement {
+    sid       = "GrantTheIdentityKey"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.identity_keys.arn]
+  }
   # What it starts on, and the secrets its document names. Read, never written: every parameter
   # of the installation is this module's to write (secrets.tf).
   statement {
@@ -165,26 +172,9 @@ data "aws_iam_policy_document" "controlplane" {
       values   = [local.cp_host]
     }
   }
-  # Its workspaces' identity: a signature over a digest with the installation's key, ES256 and
-  # nothing else, and the key's public half to name it by. Never the key itself, which KMS keeps.
-  statement {
-    sid       = "SignItsWorkspacesIdentity"
-    actions   = ["kms:Sign", "kms:GetPublicKey"]
-    resources = [aws_kms_key.identity.arn]
-    condition {
-      test     = "StringEqualsIfExists"
-      variable = "kms:SigningAlgorithm"
-      values   = ["ECDSA_SHA_256"]
-    }
-    condition {
-      test     = "StringEqualsIfExists"
-      variable = "kms:MessageType"
-      values   = ["DIGEST"]
-    }
-  }
-  # What the key signed, as CloudTrail recorded it, to hold to the records of the tokens it gave
-  # (spin's internal/controlplane/identity/audit). LookupEvents takes no resource: it reads the
-  # account's management events, which name no secret.
+  # Every time the identity key was opened, as CloudTrail recorded it, to hold to the records of the
+  # grants the control plane gave (spin's internal/identity/audit). LookupEvents takes no resource:
+  # it reads the account's management events, which name no secret.
   statement {
     sid       = "ReadWhatTheKeySigned"
     actions   = ["cloudtrail:LookupEvents"]
@@ -260,6 +250,19 @@ data "aws_iam_policy_document" "runner_scope" {
   statement {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.volumes.arn}/writers/*"]
+  }
+  # The identity a host signs for its machines (spin's internal/runner/identityserver): the record
+  # of each - under the host's own name, as the session policy narrows it - and the X.509 CA the
+  # first host to sign an SVID makes; and the keyrings and rosters people signed, which it holds a
+  # workspace's creation to, read and never written.
+  statement {
+    actions = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.volumes.arn}/identity/issued/*",
+    "${aws_s3_bucket.volumes.arn}/identity/x509-ca.der"]
+  }
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.volumes.arn}/rosters/*"]
   }
 }
 

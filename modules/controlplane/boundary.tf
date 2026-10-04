@@ -151,6 +151,17 @@ data "aws_iam_policy_document" "boundary" {
     actions   = ["s3:DeleteObjectVersion"]
     resources = ["${aws_s3_bucket.volumes.arn}/volumes/*/HEAD", "${aws_s3_bucket.volumes.arn}/writers/*"]
   }
+  # Who is in a team and which keys sign for a person is a chain people signed (spin's
+  # internal/roster), read by hosts at its newest version: a version deleted - a marker over it -
+  # is a member taken out put back in. Nothing deletes one, nor the identity key the control plane
+  # keeps, which every relying party trusts.
+  statement {
+    sid     = "NoRosterNorTheIdentityKeyUndone"
+    effect  = "Deny"
+    actions = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.volumes.arn}/rosters/*", "${aws_s3_bucket.volumes.arn}/identity/issuer.json",
+    "${aws_s3_bucket.volumes.arn}/identity/x509-ca.der"]
+  }
 }
 
 resource "aws_iam_policy" "boundary" {
