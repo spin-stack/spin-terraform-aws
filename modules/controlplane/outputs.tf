@@ -84,13 +84,13 @@ output "public_zone_id" {
 }
 
 output "identity_key_arn" {
-  description = "The KMS key the control plane signs its workspaces' identity tokens with."
+  description = "The KMS key the installation's identity key is sealed under, which only an attested runner opens."
   value       = aws_kms_key.identity.arn
 }
 
 output "identity_documents" {
-  description = "The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the X.509 CA the control plane made and keeps in its bucket, then the documents from it and the key's public half. Run them with credentials that may read both, and commit what they write."
-  value       = "aws s3 cp s3://${aws_s3_bucket.volumes.bucket}/identity/x509-ca.der <dir>/x509-ca.der && spin-controlplane identity documents --provider aws --key ${aws_kms_key.identity.arn} --domain ${var.domain} --x509-ca <dir>/x509-ca.der --out <dir>"
+  description = "The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the identity key as the control plane keeps it in its bucket (its public half is all that is read) and the X.509 CA the first host to sign an SVID made beside it, then the documents from them. Run them with credentials that may read both, and commit what they write."
+  value       = "aws s3 cp s3://${aws_s3_bucket.volumes.bucket}/identity/issuer.json <dir>/issuer.json && aws s3 cp s3://${aws_s3_bucket.volumes.bucket}/identity/x509-ca.der <dir>/x509-ca.der && spin-controlplane identity documents --issuer <dir>/issuer.json --domain ${var.domain} --x509-ca <dir>/x509-ca.der --out <dir>"
 }
 
 output "internal_zone_id" {

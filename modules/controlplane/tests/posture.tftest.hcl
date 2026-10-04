@@ -81,6 +81,11 @@ override_resource {
   values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys" }
 }
 
+override_resource {
+  target = aws_iam_role.identity_keys
+  values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys" }
+}
+
 # The buckets' ARNs, so what each role is given of which bucket can be read at plan.
 override_resource {
   target = aws_s3_bucket.database
@@ -798,27 +803,63 @@ run "the_roles" {
   }
 }
 
-# The workspaces' identity is signed by a key KMS keeps: P-256, made to sign, which the control
-# plane may ask to sign digests with ES256 and nothing else may use at all - and its document names
-# that key.
-run "a_workspaces_identity_is_signed_by_a_key_nothing_takes_out" {
+# The workspaces' identity is signed by the hosts, with a key KMS made for the control plane without
+# its plaintext and opens only to a runner of this image: the control plane may make the pair
+# unseen and grant it, and is denied opening it or making one it knows; its own role grants it no
+# KMS action at all; and its document names the key and the role it grants it under.
+run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
   command = plan
 
+  override_resource {
+    target = aws_iam_role.controlplane
+    values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane" }
+  }
+
   assert {
-    condition     = aws_kms_key.identity.customer_master_key_spec == "ECC_NIST_P256" && aws_kms_key.identity.key_usage == "SIGN_VERIFY"
-    error_message = "the identity key is not a P-256 key made to sign"
+    condition = alltrue([for s in data.aws_iam_policy_document.identity_key.statement :
+      s.effect == "Deny" || (!contains(s.actions, "kms:Decrypt") && !contains(s.actions, "kms:*")) || (
+        toset(s.actions) == toset(["kms:Decrypt"]) &&
+        alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:purpose" && toset(c.values) == toset(["identity-issuer"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"].pcr12])])
+      )
+    ])
+    error_message = "something other than a grant's session, on a runner of this image, may open the identity key"
   }
   assert {
-    condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
-      toset(s.actions) == toset(["kms:Sign", "kms:GetPublicKey"]) && s.resources == toset([aws_kms_key.identity.arn]) &&
-      anytrue([for c in s.condition : c.variable == "kms:SigningAlgorithm" && toset(c.values) == toset(["ECDSA_SHA_256"])]) &&
-    anytrue([for c in s.condition : c.variable == "kms:MessageType" && toset(c.values) == toset(["DIGEST"])])])
-    error_message = "the control plane may not sign with the identity key, or may sign more than ES256 digests with it"
+    condition = anytrue([for s in data.aws_iam_policy_document.identity_key.statement :
+      s.effect == "Deny" && toset(s.actions) == toset(["kms:Decrypt"]) &&
+      anytrue([for p in s.principals : contains(p.identifiers, "*")]) &&
+    anytrue([for c in s.condition : c.test == "Null" && toset(c.values) == toset(["true"]) && startswith(c.variable, "kms:RecipientAttestation:NitroTPMPCR")])])
+    error_message = "the identity key can be opened without an attestation document if a later edit of the policy allows it"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.identity_key.statement :
+      s.effect == "Deny" && length(s.condition) == 0 &&
+      anytrue([for p in s.principals : contains(p.identifiers, "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane")]) &&
+    alltrue([for a in ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKeyPair", "kms:ReEncryptFrom", "kms:ReEncryptTo"] : contains(s.actions, a)])])
+    error_message = "the control plane's role is not denied opening the identity key, or making one it knows"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.identity_key.statement :
+      s.effect == "Deny" || !anytrue([for p in s.principals : contains(p.identifiers, "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane")]) || (
+        toset(s.actions) == toset(["kms:GenerateDataKeyPairWithoutPlaintext"]) &&
+        anytrue([for c in s.condition : c.variable == "kms:DataKeyPairSpec" && toset(c.values) == toset(["ECC_NIST_P256"])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:purpose" && toset(c.values) == toset(["identity-issuer"])])
+    )])
+    error_message = "the control plane may do more with the identity key than make a P-256 pair unseen"
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
-    !anytrue([for a in s.actions : startswith(a, "kms:") && !contains(["kms:Sign", "kms:GetPublicKey"], a)])])
-    error_message = "the control plane is granted more of KMS than signing"
+    !anytrue([for a in s.actions : startswith(a, "kms:")])])
+    error_message = "the control plane's role is granted KMS actions: what it may do with a key is the key's policy"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.identity_keys_trust.statement :
+    alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])])])
+    error_message = "the identity-keys role can be assumed by another than the control plane"
   }
   assert {
     condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
@@ -826,15 +867,39 @@ run "a_workspaces_identity_is_signed_by_a_key_nothing_takes_out" {
     error_message = "the proxy may use a KMS key"
   }
   assert {
-    condition     = local.controlplane_document.identity == { key = aws_kms_key.identity.arn }
-    error_message = "the control plane's document does not name the identity key"
+    condition     = local.controlplane_document.identity == { key = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001", role = "arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys" }
+    error_message = "the control plane is not told the identity key and the role it grants it under"
   }
-  # What the key signed is read from CloudTrail and held to the records, which the bucket keeps
-  # past its lock.
+  assert {
+    condition     = strcontains(file("${path.module}/identity.tf"), "prevent_destroy = true") && aws_kms_key.identity.enable_key_rotation
+    error_message = "the identity key can be destroyed by a plan, or is never rotated"
+  }
+  # Every opening of the key is read from CloudTrail and held to the records of the grants, which
+  # the bucket keeps past its lock.
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
     toset(s.actions) == toset(["cloudtrail:LookupEvents"])])
-    error_message = "the control plane cannot read what the identity key signed"
+    error_message = "the control plane cannot read every opening of the identity key"
+  }
+  # What a host reaches of it: its own records and the CA, written; the rosters, read; and no role
+  # deletes a roster or the key.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+      toset(s.actions) == toset(["s3:GetObject", "s3:PutObject"]) &&
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issued/*")])
+    error_message = "a host cannot record the identities it signs"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+      !anytrue([for r in s.resources : startswith(r, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/")]) ||
+    toset(s.actions) == toset(["s3:GetObject"])])
+    error_message = "a host may write a roster"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:DeleteObject") && contains(s.actions, "s3:DeleteObjectVersion") &&
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/*")])
+    error_message = "a role may delete a version of a roster, which puts a member back"
   }
   assert {
     condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.volumes.rule :
