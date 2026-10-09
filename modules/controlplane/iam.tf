@@ -121,11 +121,12 @@ data "aws_iam_policy_document" "controlplane" {
     resources = ["${aws_s3_bucket.database.arn}/*"]
   }
   # The runners' group, which the runners module names ${name}-runners: the control plane
-  # starts a host when a workspace waits for one and empties the group when nothing runs.
-  # Describe has no resource-level permission; the resize is held to that one group.
+  # starts a host when a workspace waits for one, empties the group when nothing runs, and gives
+  # back one host that holds nothing only it has, by its instance, with the group one smaller.
+  # Describe has no resource-level permission; the resize and the removal are held to that group.
   statement {
     sid       = "SizeTheRunners"
-    actions   = ["autoscaling:SetDesiredCapacity"]
+    actions   = ["autoscaling:SetDesiredCapacity", "autoscaling:TerminateInstanceInAutoScalingGroup"]
     resources = ["${local.arn}:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.runner_group}"]
   }
   statement {
