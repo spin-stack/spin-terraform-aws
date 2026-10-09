@@ -14,10 +14,14 @@ vars:
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer modules/terminal
-  # D2, as spin-stack/ami pins it, and its flags there: one light theme, each diagram its own size.
+  # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
+  # size. Its release's own build rather than its image: the image came from Docker Hub, which
+  # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
+  # release renders the committed SVGs byte for byte as that image did.
   # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
   # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests.
-  D2: terrastruct/d2@sha256:0f9237e0213338415de5ef7436c92450ddd04e0e6e7df2db3f41387322df97b9
+  D2_VERSION: 0.9.0
+  D2_SHA256: 5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9
   D2_FLAGS: >-
     --layout elk --elk-nodeNodeBetweenLayers 56 --elk-edgeNodeBetweenLayers 20
     --elk-padding '[top=40,left=24,bottom=24,right=24]' --theme 0 --pad 16 --scale 1
@@ -88,6 +92,17 @@ tasks:
       - tar -xzf {{.TOOLS_BIN}}/terraform-docs.tgz -C {{.TOOLS_BIN}} terraform-docs
       - rm {{.TOOLS_BIN}}/terraform-docs.tgz
 
+  tools:d2:
+    desc: Install the pinned D2.
+    status:
+      - test -x {{.TOOLS_BIN}}/d2 && {{.TOOLS_BIN}}/d2 --version | grep -q '^v{{.D2_VERSION}}$'
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/d2.tgz https://github.com/terrastruct/d2/releases/download/v{{.D2_VERSION}}/d2-v{{.D2_VERSION}}-linux-amd64.tar.gz
+      - echo "{{.D2_SHA256}}  {{.TOOLS_BIN}}/d2.tgz" | sha256sum --check --quiet
+      - tar -xzf {{.TOOLS_BIN}}/d2.tgz -C {{.TOOLS_BIN}} --strip-components=2 d2-v{{.D2_VERSION}}/bin/d2
+      - rm {{.TOOLS_BIN}}/d2.tgz
+
   docs:
     desc: Write each module's inputs and outputs into its README.
     deps: [tools:terraform-docs]
@@ -97,22 +112,22 @@ tasks:
 
   diagrams:
     desc: Render docs/diagrams/*.d2 into the SVGs beside them, the icons inside each.
+    deps: [tools:d2]
     cmds:
       - >-
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
-        docker run --rm -u $(id -u):$(id -g) -v {{.ROOT_DIR}}:/work -w /work -e HOME=/tmp
-        {{.D2}} {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
+        {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
 
   # A picture nothing in a build reads is the one that drifts unnoticed: each SVG is rendered again
   # and has to be the one committed, byte for byte (D2 lays out the same source the same way).
   diagrams:check:
     desc: Fail when a committed SVG is not what its .d2 renders to.
+    deps: [tools:d2]
     cmds:
       - >-
         tmp=$(mktemp -d); trap 'rm -rf $tmp' EXIT;
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
-        docker run --rm -u $(id -u):$(id -g) -v {{.ROOT_DIR}}:/work -v $tmp:/out -w /work -e HOME=/tmp
-        {{.D2}} {{.D2_FLAGS}} "$d" "/out/$(basename ${d%.d2}).svg" >/dev/null || exit 1;
+        {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "$tmp/$(basename ${d%.d2}).svg" >/dev/null || exit 1;
         cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: task diagrams"; exit 1; }; done
 
   lint:
