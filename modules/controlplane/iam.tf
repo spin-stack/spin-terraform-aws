@@ -265,11 +265,11 @@ data "aws_iam_policy_document" "runner_scope" {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.volumes.arn}/rosters/*"]
   }
-  # Every version of each workspace's owner's words, which a host reads its guest's newest from at
-  # every login (spin's ownerword.Newest): read and never written - the control plane writes them.
+  # Every version of each workspace's access, which a host reads the newest of at every login
+  # (spin's ownerword.Newest): read and never written - the control plane writes them.
   statement {
     actions   = ["s3:GetObject", "s3:GetObjectVersion"]
-    resources = ["${aws_s3_bucket.volumes.arn}/words/*"]
+    resources = ["${aws_s3_bucket.volumes.arn}/access/*"]
   }
 }
 
