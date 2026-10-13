@@ -86,36 +86,39 @@ data "aws_iam_policy_document" "identity_key" {
     }
   }
   # A grant: a session of the identity-keys role decrypts the key, in its context, answered to a
-  # runner of this release's image - its kernel and command line (PCR4, PCR12) and the Secure Boot
-  # keys that checked them (PCR7).
-  statement {
-    sid    = "OnlyAnAttestedRunnerOpensTheKey"
-    effect = "Allow"
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.identity_keys.arn]
-    }
-    actions   = ["kms:Decrypt"]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "kms:EncryptionContext:spin:purpose"
-      values   = [local.identity_purpose]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR4"
-      values   = [try(local.runner_pcrs.pcr4, "none")]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR7"
-      values   = [try(local.runner_pcrs.pcr7, "none")]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR12"
-      values   = [try(local.runner_pcrs.pcr12, "none")]
+  # runner of a build of this release's image - its kernel and command line (PCR4, PCR12) and the
+  # Secure Boot keys that checked them (PCR7) - a statement per build (attested_key.tf).
+  dynamic "statement" {
+    for_each = local.pcrs_of["runner"]
+    content {
+      sid    = "OnlyAnAttestedRunnerOpensTheKey${statement.key + 1}"
+      effect = "Allow"
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.identity_keys.arn]
+      }
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:spin:purpose"
+        values   = [local.identity_purpose]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR4"
+        values   = [statement.value.pcr4]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR7"
+        values   = [statement.value.pcr7]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR12"
+        values   = [statement.value.pcr12]
+      }
     }
   }
   # Whatever a later edit of this policy allows, never the key in the clear: a decrypt with no

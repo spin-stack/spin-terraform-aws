@@ -43,13 +43,13 @@ data "aws_ami" "spin_os" {
     # A runner's or a proxy's image no machine of could prove it booted is one no host of joins and
     # no proxy of is given its token (host_attestation in config.tf).
     precondition {
-      condition     = !contains(["runner", "proxy"], each.key) || local.pcrs_of[each.key] != null
+      condition     = !contains(["runner", "proxy"], each.key) || length(local.pcrs_of[each.key]) > 0
       error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's, the proxy is given its token only as the proxy's." : "${var.spin_version} has no measurements of its ${each.key}'s image in measurements.json: no machine of it could prove what it booted. Publish it (spin-stack/ami) and move this module's ref, or give its manifests' PCRs as image_measurements."
     }
     # A writer's image - the runner's, the control plane's - whose release signed nothing of it is
     # one whose machines' writes no verifier believes (spin F6b).
     precondition {
-      condition     = !contains(["runner", "control-plane"], each.key) || local.signed_of[each.key] != null
+      condition     = !contains(["runner", "control-plane"], each.key) || alltrue([for b in local.signed_of[each.key] : b.statement != null && b.bundle != null])
       error_message = "the ${each.key}'s image has no statement of its PCRs its release signed, with its bundle: measurements.json's of a release published before spin-os images sign was, or image_measurements without statement and bundle (spin-os images sign writes both)."
     }
   }

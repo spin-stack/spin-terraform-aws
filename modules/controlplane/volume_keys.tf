@@ -10,7 +10,6 @@
 
 locals {
   volume_keys_role_arn = "${local.arn}:iam::${local.account}:role/${local.iam_name}-volume-keys"
-  runner_pcrs          = local.pcrs_of["runner"]
 }
 
 #trivy:ignore:AWS-0065
@@ -105,36 +104,40 @@ data "aws_iam_policy_document" "volume_keys" {
     }
   }
   # A grant: a session of the volume-keys role, tagged with the owner, decrypts that owner's keys,
-  # answered to a runner of this release's image - its kernel and command line (PCR4, PCR12) and
-  # the Secure Boot keys that checked them (PCR7).
-  statement {
-    sid    = "OnlyAnAttestedRunnerOpensAKey"
-    effect = "Allow"
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.volume_keys.arn]
-    }
-    actions   = ["kms:Decrypt"]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "kms:EncryptionContext:spin:owner"
-      values   = ["$${aws:PrincipalTag/spin:owner}"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR4"
-      values   = [try(local.runner_pcrs.pcr4, "none")]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR7"
-      values   = [try(local.runner_pcrs.pcr7, "none")]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:RecipientAttestation:NitroTPMPCR12"
-      values   = [try(local.runner_pcrs.pcr12, "none")]
+  # answered to a runner of a build of this release's image - its kernel and command line (PCR4,
+  # PCR12) and the Secure Boot keys that checked them (PCR7) - a statement per build
+  # (attested_key.tf).
+  dynamic "statement" {
+    for_each = local.pcrs_of["runner"]
+    content {
+      sid    = "OnlyAnAttestedRunnerOpensAKey${statement.key + 1}"
+      effect = "Allow"
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.volume_keys.arn]
+      }
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:spin:owner"
+        values   = ["$${aws:PrincipalTag/spin:owner}"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR4"
+        values   = [statement.value.pcr4]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR7"
+        values   = [statement.value.pcr7]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:RecipientAttestation:NitroTPMPCR12"
+        values   = [statement.value.pcr12]
+      }
     }
   }
   # Whatever a later edit of this policy allows, never a key in the clear: a decrypt with no

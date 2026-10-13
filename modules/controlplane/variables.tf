@@ -255,24 +255,24 @@ variable "budget_emails" {
 }
 
 variable "image_measurements" {
-  description = "The PCRs an instance of each role's image measures - its manifest's measurements, SHA384 in lowercase hex - by role, control-plane, runner and proxy, instead of measurements.json's: the control plane's key is answered to the control plane's (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. Required with image_ids, and for a release published before its PCRs were."
-  type = map(object({
+  description = "The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements, SHA384 in lowercase hex), instead of measurements.json's: the control plane's key is answered to the control plane's builds (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. The last of a role's is the image image_ids names. Required with image_ids, and for a release published before its PCRs were."
+  type = map(list(object({
     pcr4      = string
     pcr7      = string
     pcr12     = string
     statement = optional(string)
     bundle    = optional(string)
-    # Why the build is not to be run, as measurements.json says of a revoked one: a release with
-    # one is not installed (attested_key.tf).
+    # Why the build is not to be run, as measurements.json says of a revoked one: no machine of it
+    # is trusted, and a release whose newest build is revoked is not installed (attested_key.tf).
     revoked = optional(string)
-  }))
+  })))
   default = null
   validation {
     condition = var.image_measurements == null ? true : (
       toset(keys(var.image_measurements)) == toset(["control-plane", "runner", "proxy"]) &&
-      alltrue([for role in values(var.image_measurements) : alltrue([for pcr in [role.pcr4, role.pcr7, role.pcr12] : can(regex("^[0-9a-f]{96}$", pcr))])]) &&
-      alltrue([for role in ["control-plane", "runner"] : can(base64decode(var.image_measurements[role].statement)) && can(base64decode(var.image_measurements[role].bundle))])
+      alltrue([for builds in values(var.image_measurements) : length(builds) > 0 && alltrue([for b in builds : alltrue([for pcr in [b.pcr4, b.pcr7, b.pcr12] : can(regex("^[0-9a-f]{96}$", pcr))])])]) &&
+      alltrue([for role in ["control-plane", "runner"] : alltrue([for b in var.image_measurements[role] : can(base64decode(b.statement)) && can(base64decode(b.bundle))])])
     )
-    error_message = "image_measurements are the control-plane's, the runner's and the proxy's, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them; the control plane's and the runner's with their statement and bundle, base64."
+    error_message = "image_measurements are the control-plane's, the runner's and the proxy's builds, at least one each, each three SHA384 digests: 96 lowercase hex digits, as NitroTPM reports them; the control plane's and the runner's with their statement and bundle, base64."
   }
 }
