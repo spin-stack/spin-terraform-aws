@@ -145,25 +145,25 @@ variables {
     proxy           = "ami-0bbbbbbbbbbbbbbbb"
   }
   image_measurements = {
-    "control-plane" = {
+    "control-plane" = [{
       pcr4      = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
       pcr7      = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
       pcr12     = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       statement = "Y29udHJvbC1wbGFuZSBzdGF0ZW1lbnQ="
       bundle    = "eyJzaWduZWQiOiJjb250cm9sLXBsYW5lIn0="
-    }
-    runner = {
+    }]
+    runner = [{
       pcr4      = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
       pcr7      = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
       pcr12     = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       statement = "cnVubmVyIHN0YXRlbWVudA=="
       bundle    = "eyJzaWduZWQiOiJydW5uZXIifQ=="
-    }
-    proxy = {
+    }]
+    proxy = [{
       pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
       pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
       pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    }
+    }]
   }
 }
 
@@ -821,9 +821,9 @@ run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
         toset(s.actions) == toset(["kms:Decrypt"]) &&
         alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys"])]) &&
         anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:purpose" && toset(c.values) == toset(["identity-issuer"])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"].pcr4])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"].pcr7])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"].pcr12])])
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr12])])
       )
     ])
     error_message = "something other than a grant's session, on a runner of this image, may open the identity key"
@@ -1185,9 +1185,9 @@ run "the_key_is_answered_only_to_an_attested_control_plane" {
       s.effect == "Deny" || (!contains(s.actions, "kms:DeriveSharedSecret") && !contains(s.actions, "kms:*")) || (
         toset(s.actions) == toset(["kms:DeriveSharedSecret"]) &&
         alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr4])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr7])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["control-plane"].pcr12])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["control-plane"][0].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["control-plane"][0].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["control-plane"][0].pcr12])]) &&
         anytrue([for c in s.condition : c.variable == "kms:KeyAgreementAlgorithm" && toset(c.values) == toset(["ECDH"])])
       )
     ])
@@ -1228,9 +1228,9 @@ run "a_volumes_key_is_opened_only_by_an_attested_runner" {
         toset(s.actions) == toset(["kms:Decrypt"]) &&
         alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys"])]) &&
         anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:spin:owner" && toset(c.values) == toset(["$${aws:PrincipalTag/spin:owner}"])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"].pcr4])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"].pcr7])]) &&
-        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"].pcr12])])
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([var.image_measurements["runner"][0].pcr12])])
       )
     ])
     error_message = "something other than a grant's session, for its own owner, on a runner of this image, may decrypt a volume's key"
@@ -1281,7 +1281,7 @@ run "a_host_joins_only_as_the_runners_build" {
   command = plan
 
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == [var.image_measurements["runner"]]
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == var.image_measurements["runner"]
     error_message = "the control plane is told other builds than the runner's a host may join as, or not what its release signed of it"
   }
 }
@@ -1292,7 +1292,7 @@ run "the_control_plane_writes_as_its_own_signed_build" {
   command = plan
 
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.control_plane == [var.image_measurements["control-plane"]]
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.control_plane == var.image_measurements["control-plane"]
     error_message = "the control plane is told another build than its own, or not what its release signed of it"
   }
 }
@@ -1303,21 +1303,21 @@ run "a_writers_build_with_no_statement_is_refused" {
   command = plan
   variables {
     image_measurements = {
-      "control-plane" = {
+      "control-plane" = [{
         pcr4  = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7  = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-      }
-      runner = {
+      }]
+      runner = [{
         pcr4  = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7  = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12 = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-      }
-      proxy = {
+      }]
+      proxy = [{
         pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-      }
+      }]
     }
   }
   expect_failures = [var.image_measurements]
@@ -1331,7 +1331,7 @@ run "the_proxy_proves_it_is_the_proxys_build" {
   assert {
     condition = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.proxy == {
       principal = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
-      builds    = [{ for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => var.image_measurements["proxy"][pcr] }]
+      builds    = [for b in var.image_measurements["proxy"] : { for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => b[pcr] }]
     }
     error_message = "the control plane is told another role or build than the proxy's for the proxy's token"
   }
@@ -1367,19 +1367,22 @@ run "a_release_with_no_measurements_is_refused" {
   expect_failures = [aws_kms_key.encryption, data.aws_ami.spin_os]
 }
 
-# What the ami repository's pull request writes beside the images is what the key policy reads: a
-# dated release, a role, and three SHA384 digests.
-run "measurements_json_is_releases_roles_and_their_pcrs" {
+# What the ami repository's pull request writes beside the images is what the key policies read: a
+# dated release, a role, and each build of it by its revision, three SHA384 digests and what its
+# release signed of them.
+run "measurements_json_is_releases_roles_and_their_builds" {
   command = plan
 
   assert {
     condition = alltrue([for release, roles in local.measurements :
-      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(roles) > 0 && alltrue([for role, pcrs in roles :
-        contains(local.roles, role) && keys(pcrs) == tolist(["pcr12", "pcr4", "pcr7"]) &&
-        alltrue([for pcr in values(pcrs) : can(regex("^[0-9a-f]{96}$", pcr))])
+      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(roles) > 0 && alltrue([for role, builds in roles :
+        contains(local.roles, role) && length(builds) > 0 && alltrue([for revision, b in builds :
+          can(regex("^r[1-9][0-9]*$", revision)) && alltrue([for pcr in [b.pcr4, b.pcr7, b.pcr12] : can(regex("^[0-9a-f]{96}$", pcr))]) &&
+          can(base64decode(b.statement)) && can(base64decode(b.bundle))
+        ])
       ])
     ])
-    error_message = "measurements.json is not { release: { role: { pcr4, pcr7, pcr12 } } } of SHA384 digests"
+    error_message = "measurements.json is not { release: { role: { r<N>: { pcr4, pcr7, pcr12, statement, bundle } } } }"
   }
 }
 
@@ -1540,33 +1543,108 @@ run "no_budget_unless_one_is_named" {
   }
 }
 
-# A release spin-stack/ami marked revoked in measurements.json is not installed: the plan stops,
-# saying which image and why, before anything of it is made.
+# A release whose newest build of an image spin-stack/ami marked revoked in measurements.json is not
+# installed: the plan stops, saying which image and why, before anything of it is made - and with no
+# other build of the runner's, no host of it could join either.
 run "a_revoked_release_is_not_installed" {
   command = plan
   variables {
     image_measurements = {
-      "control-plane" = {
+      "control-plane" = [{
         pcr4      = "444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7      = "777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12     = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
         statement = "Y29udHJvbC1wbGFuZSBzdGF0ZW1lbnQ="
         bundle    = "eyJzaWduZWQiOiJjb250cm9sLXBsYW5lIn0="
-      }
-      runner = {
+      }]
+      runner = [{
         pcr4      = "aaaa44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7      = "aaaa77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12     = "aaaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
         statement = "cnVubmVyIHN0YXRlbWVudA=="
         bundle    = "eyJzaWduZWQiOiJydW5uZXIifQ=="
         revoked   = "CVE-2026-0001 in sshd"
-      }
-      proxy = {
+      }]
+      proxy = [{
         pcr4  = "bbbb44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
         pcr7  = "bbbb77777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
         pcr12 = "bbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-      }
+      }]
     }
   }
-  expect_failures = [aws_kms_key.encryption]
+  expect_failures = [aws_kms_key.encryption, data.aws_ami.spin_os]
+}
+
+# A release built again keeps its earlier builds trusted until one is revoked: the control plane's
+# key is agreed with a machine of either of its builds, each by its own three PCRs together; a
+# runner of a revoked build opens no volume, joins as nothing, and does not stop the release
+# installing while its newest build is not revoked.
+run "every_build_not_revoked_is_trusted" {
+  command = plan
+  variables {
+    image_measurements = {
+      "control-plane" = [
+        {
+          pcr4      = "d14444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+          pcr7      = "d17777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+          pcr12     = "d1cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          statement = "c3RhdGVtZW50"
+          bundle    = "eyJzaWduZWQiOjF9"
+        },
+        {
+          pcr4      = "d24444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+          pcr7      = "d27777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+          pcr12     = "d2cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          statement = "c3RhdGVtZW50"
+          bundle    = "eyJzaWduZWQiOjF9"
+        },
+      ]
+      runner = [
+        {
+          pcr4      = "e14444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+          pcr7      = "e17777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+          pcr12     = "e1cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          statement = "c3RhdGVtZW50"
+          bundle    = "eyJzaWduZWQiOjF9"
+          revoked   = "CVE-2026-0001 in sshd"
+        },
+        {
+          pcr4      = "e24444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+          pcr7      = "e27777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+          pcr12     = "e2cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          statement = "c3RhdGVtZW50"
+          bundle    = "eyJzaWduZWQiOjF9"
+        },
+      ]
+      proxy = [{
+        pcr4  = "f14444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+        pcr7  = "f17777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777"
+        pcr12 = "f1cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }]
+    }
+  }
+
+  assert {
+    condition = length([for s in data.aws_iam_policy_document.encryption_key.statement : s if s.effect == "Allow" && contains(s.actions, "kms:DeriveSharedSecret")]) == 2 && alltrue([
+      for b in var.image_measurements["control-plane"] : anytrue([for s in data.aws_iam_policy_document.encryption_key.statement :
+        s.effect == "Allow" && contains(s.actions, "kms:DeriveSharedSecret") &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR4" && toset(c.values) == toset([b.pcr4])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR7" && toset(c.values) == toset([b.pcr7])]) &&
+        anytrue([for c in s.condition : c.variable == "kms:RecipientAttestation:NitroTPMPCR12" && toset(c.values) == toset([b.pcr12])])
+      ])
+    ])
+    error_message = "the control plane's key is not agreed with each of its builds alone, by that build's three PCRs"
+  }
+  assert {
+    condition = alltrue([for doc in [data.aws_iam_policy_document.volume_keys, data.aws_iam_policy_document.identity_key] :
+      length([for s in doc.statement : s if s.effect == "Allow" && contains(s.actions, "kms:Decrypt") &&
+      anytrue([for c in s.condition : startswith(c.variable, "kms:RecipientAttestation:NitroTPMPCR")])]) == 1 &&
+      !anytrue([for s in doc.statement : anytrue([for c in s.condition : contains(c.values, var.image_measurements["runner"][0].pcr4)])])
+    ])
+    error_message = "a runner of a revoked build may open a volume's key or the identity key"
+  }
+  assert {
+    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == [{ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => var.image_measurements["runner"][1][k] }]
+    error_message = "a host may join as a revoked build of the runner's image"
+  }
 }
