@@ -49,9 +49,10 @@ tasks:
           -p 'spin-term.tar.gz.provenance.sigstore.json' -D "$tmp"
         cosign verify-blob --bundle "$tmp/spin-term.tar.gz.sigstore.json" --certificate-identity '{{.IDENTITY}}' \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com "$tmp/spin-term.tar.gz"
+        # By the file's digest: given the file, cosign reads it whole and refuses one over 128 MiB.
         cosign verify-blob-attestation --type slsaprovenance1 --bundle "$tmp/spin-term.tar.gz.provenance.sigstore.json" \
-          --certificate-identity '{{.IDENTITY}}' --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-          "$tmp/spin-term.tar.gz"
+          --digest "$(sha256sum "$tmp/spin-term.tar.gz" | cut -d' ' -f1)" --digestAlg sha256 \
+          --certificate-identity '{{.IDENTITY}}' --certificate-oidc-issuer https://token.actions.githubusercontent.com
         built=$(jq -r .dsseEnvelope.payload "$tmp/spin-term.tar.gz.provenance.sigstore.json" | base64 -d |
           jq -r .predicate.buildDefinition.externalParameters.version)
         if [ "$built" != '{{.RELEASE}}' ]; then
