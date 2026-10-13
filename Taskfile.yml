@@ -30,21 +30,33 @@ tasks:
   term:fetch:
     desc: >-
       Fetch a spin release's browser terminal for modules/terminal: its spin-term.tar.gz, checked
-      against the signature release.yml made at that tag, unpacked into OUT with the RELEASE it is.
-      RELEASE=<tag> [OUT=term]. Needs gh and cosign.
-    # Checked before it is unpacked, and against the workflow at the tag rather than any file's
-    # word: whoever writes term.<domain> writes the code that asks a person's passkey.
+      against the signature and the provenance release.yml made at main, the provenance naming
+      that RELEASE, unpacked into OUT with the RELEASE it is. RELEASE=<tag> [OUT=term]. Needs gh,
+      cosign and jq.
+    # Checked before it is unpacked, against the workflow at main rather than any file's word:
+    # whoever writes term.<domain> writes the code that asks a person's passkey. Every release is
+    # signed at main, so which release the tarball is is what its provenance says, and it must be
+    # the one asked for.
     requires: {vars: [RELEASE]}
     vars:
       OUT: '{{.OUT | default "term"}}'
-      IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/tags/{{.RELEASE}}
+      IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/heads/main
     cmds:
       - |
         set -euo pipefail
         tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-        gh release download '{{.RELEASE}}' -R spin-stack/spin -p 'spin-term.tar.gz' -p 'spin-term.tar.gz.sigstore.json' -D "$tmp"
+        gh release download '{{.RELEASE}}' -R spin-stack/spin -p 'spin-term.tar.gz' -p 'spin-term.tar.gz.sigstore.json' \
+          -p 'spin-term.tar.gz.provenance.sigstore.json' -D "$tmp"
         cosign verify-blob --bundle "$tmp/spin-term.tar.gz.sigstore.json" --certificate-identity '{{.IDENTITY}}' \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com "$tmp/spin-term.tar.gz"
+        cosign verify-blob-attestation --type slsaprovenance1 --bundle "$tmp/spin-term.tar.gz.provenance.sigstore.json" \
+          --certificate-identity '{{.IDENTITY}}' --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          "$tmp/spin-term.tar.gz"
+        built=$(jq -r .dsseEnvelope.payload "$tmp/spin-term.tar.gz.provenance.sigstore.json" | base64 -d |
+          jq -r .predicate.buildDefinition.externalParameters.version)
+        if [ "$built" != '{{.RELEASE}}' ]; then
+          echo "spin-term.tar.gz of {{.RELEASE}} says it was built as ${built}"; exit 1
+        fi
         rm -rf '{{.OUT}}' && mkdir -p '{{.OUT}}' && tar -xzf "$tmp/spin-term.tar.gz" -C '{{.OUT}}'
         printf '%s\n' '{{.RELEASE}}' > '{{.OUT}}/RELEASE'
 
