@@ -188,15 +188,16 @@ laptop either. Removing one is said first, applied, and only then destroyed:
    tofu apply   # with decommission = true in module "spin"
    ```
 
-2. The KMS key the encryption key is agreed with, and the CA, refuse to be destroyed, because an
-   apply that replaced either would leave an installation nothing can open. Take them out of the
-   state, destroy, and schedule the key's deletion:
+2. The KMS keys - the encryption key's, the volumes' and the identity's - and the CA refuse to be
+   destroyed, because an apply that replaced one would leave an installation nothing can open.
+   Note the keys, take them out of the state, destroy, and schedule each key's deletion (the
+   destroy takes their aliases):
 
    ```bash
-   tofu state rm module.spin.module.controlplane.aws_kms_key.encryption \
-     module.spin.module.controlplane.tls_private_key.ca module.spin.module.controlplane.tls_self_signed_cert.ca
+   keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id')
+   tofu state rm $(tofu state list | grep -E '\.aws_kms_key\.|\.tls_(private_key|self_signed_cert)\.ca$')
    tofu destroy
-   aws kms schedule-key-deletion --key-id alias/spin-<name>-encryption --pending-window-in-days 7
+   for id in $keys; do aws kms schedule-key-deletion --key-id $id --pending-window-in-days 7; done
    ```
 
 The apply has to come first: a destroy empties a bucket as its state says, so `decommission`
@@ -211,6 +212,8 @@ tofu destroy
 ```
 
 The installation's state bucket and key (`bootstrap/`) are removed apart, after this.
+`.github/workflows/fresh-install.yml` runs all of it every week - bootstrap, an installation, its
+first sign-in and this removal - in an account of its own, and says what that account needs.
 
 ## What it decides, and why
 
