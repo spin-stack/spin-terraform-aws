@@ -146,6 +146,12 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["sts:AssumeRole", "sts:TagSession"]
     resources = [aws_iam_role.volume_keys.arn]
   }
+  # A read of a team's secret: a session tagged with the team (team_secrets.tf).
+  statement {
+    sid       = "ReadTeamSecretsAsTheTeam"
+    actions   = ["sts:AssumeRole", "sts:TagSession"]
+    resources = [local.team_secrets_role_arn]
+  }
   # A grant of the identity key: a session of the identity-keys role (identity.tf). What the
   # control plane may do with the key itself - make it unseen, and nothing else - is the key's policy.
   statement {

@@ -176,6 +176,8 @@ locals {
       autoscaling_quiet_hours = var.quiet_hours
       autoscaling_time_zone   = var.time_zone
       }, {
+      # The role a team's secret kept in Secrets Manager is read under (team_secrets.tf).
+      team_secrets_role = local.team_secrets_role_arn
       # Where the installation pushes what it records: the collector on the control plane's
       # own machine.
       telemetry_collector       = local.collector
