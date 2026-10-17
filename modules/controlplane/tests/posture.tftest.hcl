@@ -730,7 +730,7 @@ run "the_roles" {
     condition = alltrue([for arn in [
       aws_iam_role.controlplane.permissions_boundary, aws_iam_role.runner_scope.permissions_boundary,
       aws_iam_role.proxy.permissions_boundary,
-      aws_iam_role.flow[0].permissions_boundary,
+      aws_iam_role.flow[0].permissions_boundary, aws_iam_role.team_secrets.permissions_boundary,
     ] : arn == "arn:aws:iam::123456789012:policy/spin-us-east-2-boundary"])
     error_message = "a role carries no boundary"
   }
@@ -741,8 +741,8 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope", "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys"])])
-    error_message = "the boundary lets a role become another than the runner scope or the volume keys"
+    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope", "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys", "arn:aws:iam::123456789012:role/spin-us-east-2-team-secrets"])])
+    error_message = "the boundary lets a role become another than the runner scope, the volume keys or the team secrets"
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
@@ -1214,6 +1214,33 @@ run "the_key_is_answered_only_to_an_attested_control_plane" {
 # and decrypts nothing, attested or not; whatever a later edit allows is refused without an
 # attestation document. The role is the control plane's alone to assume, tagged with an owner and
 # nothing else, and the control plane is told the key and the role.
+run "a_teams_secret_is_read_only_as_the_team" {
+  command = plan
+
+  override_resource {
+    target = aws_iam_role.controlplane
+    values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane" }
+  }
+
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.team_secrets_trust.statement :
+      alltrue([for p in s.principals : toset(p.identifiers) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])]) &&
+      anytrue([for c in s.condition : c.test == "Null" && c.variable == "aws:RequestTag/spin-team-id" && toset(c.values) == toset(["false"])]) &&
+    anytrue([for c in s.condition : c.variable == "aws:TagKeys" && toset(c.values) == toset(["spin-team-id"])])])
+    error_message = "the team-secrets role can be assumed by another, or without a team, or with other tags"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.team_secrets.statement :
+      toset(s.actions) == toset(["secretsmanager:GetSecretValue"]) &&
+    anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "secretsmanager:ResourceTag/spin-team-id" && toset(c.values) == toset(["$${aws:PrincipalTag/spin-team-id}"])])])
+    error_message = "a team's session reads a secret not tagged with its team, or does more than read"
+  }
+  assert {
+    condition     = local.installation.settings.team_secrets_role == "arn:aws:iam::123456789012:role/spin-us-east-2-team-secrets"
+    error_message = "the control plane is not told the role it reads a team's secret under"
+  }
+}
+
 run "a_volumes_key_is_opened_only_by_an_attested_runner" {
   command = plan
 
