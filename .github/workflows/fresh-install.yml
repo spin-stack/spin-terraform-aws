@@ -13,8 +13,8 @@
 #     (bootstrap/github.tf has the subject's form). Its ARN is the variable FRESH_INSTALL_ROLE.
 #   - A public Route 53 zone delegated from its parent, whose id is FRESH_INSTALL_ZONE_ID: each run
 #     installs on r<run>.<zone> and delegates it there, so the proxy's certificate is a real one.
-#   - Launch permission on the release's images, and on their snapshots: spin-stack/ami registers
-#     them in its own account.
+#   - Launch permission on the release's images in us-east-1, and on their snapshots: spin-stack/ami
+#     registers them in its own account.
 #   - Nothing else, and nothing of spin: each run makes the state's KMS key and bucket and the three
 #     Secure Boot keys (bootstrap/), and schedules every key it made for deletion when it ends. A run
 #     that finds bootstrap's bucket or aliases already there stops at its first apply: the run
@@ -33,11 +33,14 @@ concurrency:
 permissions:
   contents: read
 
+# us-east-1, named for both, and never the modules' us-west-2 default: that is where the development
+# installation lives, and an install from nothing beside it would share its region's quotas and
+# hide a dependency on what it left there.
 env:
-  AWS_REGION: us-west-2
+  AWS_REGION: us-east-1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
-  TF_VAR_region: us-west-2
+  TF_VAR_region: us-east-1
   TF_VAR_name: fresh
 
 jobs:
@@ -61,14 +64,15 @@ jobs:
           echo "${GITHUB_WORKSPACE}/.tools/bin" >> "${GITHUB_PATH}"
 
       # The newest release this commit can install in the region: an image of every role and its
-      # measurements. None is a failure: main installs nothing.
+      # measurements. None is a failure: main installs nothing. spin-stack/ami's release publishes
+      # in the regions its release.yml names, which must include this one.
       - name: Release
         run: |
           set -euo pipefail
           release=$(jq -r --arg r "${AWS_REGION}" --slurpfile m measurements.json '[to_entries[] | .key as $v | .value as $img
             | select(all("control-plane", "runner", "proxy"; $img[.][$r] and ($m[0][$v][.] // {} | length > 0))) | $v] | sort | last // empty' images.json)
           if [ -z "${release}" ]; then
-            echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}"; exit 1
+            echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"; exit 1
           fi
           echo "TF_VAR_spin_version=${release}" >> "${GITHUB_ENV}"
 
