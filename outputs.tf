@@ -99,7 +99,7 @@ output "controlplane_group" {
 }
 
 output "update_status" {
-  description = "After an apply that changed a machine: how its replacement went. Successful, InProgress, or RollbackSuccessful with the reason - in which case the old machine is still serving."
+  description = "After an apply that changed a machine: how its replacement went. Successful, InProgress, or RollbackSuccessful with the reason - after which the old machine serves again, at once or, for a control plane that had handed its database over, once its watch has restored it from the archive."
   value = {
     for g in [module.controlplane.controlplane_group, module.controlplane.proxy_group] :
     g => "${local.aws} autoscaling describe-instance-refreshes --auto-scaling-group-name ${g} --max-records 1 --query 'InstanceRefreshes[0].[Status,StatusReason,PercentageComplete]' --output text"
