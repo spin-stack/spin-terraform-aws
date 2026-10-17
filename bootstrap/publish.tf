@@ -23,6 +23,14 @@ variable "image_publishers" {
   }
 }
 
+# spin-stack/ami's release names the same list: its publish registers each image in every one, and
+# a region missing here is a release that fails there.
+variable "publish_regions" {
+  description = "The regions a publish role writes snapshots and registers images in; none is this bootstrap's region."
+  type        = list(string)
+  default     = []
+}
+
 # The Secure Boot key each role's image is signed with: three, so an instance's PCR7 says which role
 # it booted - a key the control plane's key policy, and later a join, can tell apart - and a runner's
 # image can never boot as a control plane's. RSA-2048 signing PKCS #1 v1.5 over SHA-256, the one
@@ -57,6 +65,8 @@ output "secure_boot_keys" {
 locals {
   publishers = { for r, prefix in var.image_publishers : replace(r, "/", "-") => prefix }
   arn        = "arn:${data.aws_partition.current.partition}"
+  snapshots  = [for r in coalescelist(var.publish_regions, [var.region]) : "${local.arn}:ec2:${r}::snapshot/*"]
+  images     = [for r in coalescelist(var.publish_regions, [var.region]) : "${local.arn}:ec2:${r}::image/*"]
 }
 
 # The provider is made here too when no repository applies an installation from GitHub Actions.
@@ -109,12 +119,12 @@ data "aws_iam_policy_document" "publish" {
   statement {
     sid       = "WriteTheSnapshot"
     actions   = ["ebs:StartSnapshot", "ebs:PutSnapshotBlock", "ebs:CompleteSnapshot"]
-    resources = ["${local.arn}:ec2:${var.region}::snapshot/*"]
+    resources = local.snapshots
   }
   statement {
     sid       = "TagWhatItMakes"
     actions   = ["ec2:CreateTags"]
-    resources = ["${local.arn}:ec2:${var.region}::snapshot/*", "${local.arn}:ec2:${var.region}::image/*"]
+    resources = concat(local.snapshots, local.images)
   }
   statement {
     sid       = "SeeTheImages"
@@ -124,13 +134,13 @@ data "aws_iam_policy_document" "publish" {
   statement {
     sid       = "RegisterTheImage"
     actions   = ["ec2:RegisterImage"]
-    resources = ["${local.arn}:ec2:${var.region}::image/*", "${local.arn}:ec2:${var.region}::snapshot/*"]
+    resources = concat(local.images, local.snapshots)
   }
   # What a failed publish leaves: a snapshot its build tagged, and no other.
   statement {
     sid       = "DeleteWhatAFailedPublishLeft"
     actions   = ["ec2:DeleteSnapshot"]
-    resources = ["${local.arn}:ec2:${var.region}::snapshot/*"]
+    resources = local.snapshots
     condition {
       test     = "Null"
       variable = "aws:ResourceTag/spin-os:commit"
