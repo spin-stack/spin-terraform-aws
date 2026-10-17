@@ -12,6 +12,9 @@ vars:
   TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
   TFDOCS_VERSION: 0.24.0
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+  # The version spin's versions.yaml pins: nothing else reads a workflow before GitHub runs it.
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer modules/terminal
   # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
@@ -105,6 +108,17 @@ tasks:
       - tar -xzf {{.TOOLS_BIN}}/terraform-docs.tgz -C {{.TOOLS_BIN}} terraform-docs
       - rm {{.TOOLS_BIN}}/terraform-docs.tgz
 
+  tools:actionlint:
+    desc: Install the pinned actionlint.
+    status:
+      - test -x {{.TOOLS_BIN}}/actionlint && {{.TOOLS_BIN}}/actionlint -version | grep -q '^{{.ACTIONLINT_VERSION}}$'
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v{{.ACTIONLINT_VERSION}}/actionlint_{{.ACTIONLINT_VERSION}}_linux_amd64.tar.gz
+      - echo "{{.ACTIONLINT_SHA256}}  {{.TOOLS_BIN}}/actionlint.tgz" | sha256sum --check --quiet
+      - tar -xzf {{.TOOLS_BIN}}/actionlint.tgz -C {{.TOOLS_BIN}} actionlint
+      - rm {{.TOOLS_BIN}}/actionlint.tgz
+
   tools:d2:
     desc: Install the pinned D2.
     status:
@@ -145,7 +159,7 @@ tasks:
 
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
-    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs]
+    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:actionlint]
     # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
@@ -154,6 +168,7 @@ tasks:
     cmds:
       - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
+      - "{{.TOOLS_BIN}}/actionlint"
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"

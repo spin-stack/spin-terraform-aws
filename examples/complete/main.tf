@@ -92,6 +92,11 @@ output "dashboard" {
   value       = module.spin.dashboard
 }
 
+output "first_sign_in" {
+  description = "The dashboard, the first administrator, and the command that reads their one-time password."
+  value       = module.spin.first_sign_in
+}
+
 output "next_steps" {
   description = "DNS, the first sign-in, and how to reach a machine: tofu output -raw next_steps"
   value       = module.spin.next_steps
