@@ -116,8 +116,11 @@ new one does. The control plane's database has one writer, so the old control pl
 the new one asks for it, then archives what it wrote and stops: the installation has no control
 plane until the new one has restored the database and started - seconds, which `spin` waits out
 for a read and a workspace does not notice. How it went is `tofu output update_status`:
-`Successful`; or `RollbackSuccessful` with the reason, in which case the old machine serves again and
-`tofu output boot_log` - one command per role, since a role's machines are one stream prefix - says
+`Successful`; or `RollbackSuccessful` with the reason. A new control plane that failed before it
+asked for the database leaves the old one serving; one that failed after hands the name back, and
+the old machine's watch starts its control plane within a minute, which restores the database from
+the archive first - or takes the name back after fifteen minutes when the new machine died without
+handing it. `tofu output boot_log` - one command per role, since a role's machines are one stream prefix - says
 why the new one did not come up. Until the launch hook gives up on a new machine that never comes
 up, the refresh holds the group and an apply that changes it is refused; `tofu output update_abort`,
 by group, is the command that rolls it back now. A change to anything else a machine starts on -
