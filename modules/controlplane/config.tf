@@ -196,10 +196,14 @@ locals {
   })
 }
 
+# The documents are Intelligent-Tiering, like installation below: the control plane's passed a
+# standard parameter's 4 KiB on a first install (fresh-install run 39161868759), and the tier is
+# advanced only while a document needs it.
 resource "aws_ssm_parameter" "controlplane_config" {
   name        = local.config_parameter
   description = "What ${local.name}'s control plane machines start on"
   type        = "String"
+  tier        = "Intelligent-Tiering"
   value       = yamlencode(local.controlplane_document)
   tags        = local.tags
 }
@@ -208,6 +212,7 @@ resource "aws_ssm_parameter" "proxy_config" {
   name        = local.proxy_parameter
   description = "What ${local.name}'s proxy machines start on"
   type        = "String"
+  tier        = "Intelligent-Tiering"
   value       = yamlencode(local.proxy_document)
   tags        = local.tags
 }
@@ -216,6 +221,7 @@ resource "aws_ssm_parameter" "runner_config" {
   name        = local.runner_parameter
   description = "What ${local.name}'s runners start on"
   type        = "String"
+  tier        = "Intelligent-Tiering"
   value       = yamlencode(local.runner_document)
   tags        = local.tags
 }

@@ -279,7 +279,9 @@ jobs:
             # shellcheck disable=SC2086 # one -target= per word
             tofu apply -auto-approve ${targets}
           fi
-          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id')
+          # `// empty`: an install that stopped halfway gave a null among the keys, and KMS refusing
+          # it stopped the loop before the keys after it (run 39161868759).
+          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id // empty')
           kept=$(tofu state list | grep -E '\.aws_kms_key\.|\.tls_(private_key|self_signed_cert)\.ca$' || true)
           # shellcheck disable=SC2086 # one address per word
           [ -z "${kept}" ] || tofu state rm ${kept}
@@ -294,7 +296,7 @@ jobs:
         run: |
           set -euo pipefail
           bucket=$(tofu output -raw bucket)
-          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id')
+          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id // empty')
           # shellcheck disable=SC2046 # one address per word
           tofu state rm aws_s3_bucket.state $(tofu state list | grep '^aws_kms_key\.')
           tofu destroy -auto-approve
