@@ -17,9 +17,11 @@
 #   - Launch permission on the release's images in us-east-1, and on their snapshots: spin-stack/ami
 #     registers them in its own account.
 #   - Nothing else, and nothing of spin: each run makes the state's KMS key and bucket and the three
-#     Secure Boot keys (bootstrap/), and schedules every key it made for deletion when it ends. A run
-#     that finds bootstrap's bucket or aliases already there stops at its first apply: the run
-#     before it did not finish, and its teardown's log says what is left.
+#     Secure Boot keys (bootstrap/), and removes them when it ends, every key scheduled for
+#     deletion. Nobody cleans the account by hand: hack/fresh-install-remove.sh is the removal, run
+#     at the end of a run and again at the start of the next, which finishes whatever the one before
+#     left - an installation still in bootstrap's bucket, the bucket, the aliases. Bootstrap is kept
+#     only while the installation's state still has something, since that state is what finds it.
 name: Fresh install
 
 on:
@@ -125,6 +127,13 @@ jobs:
           set -euo pipefail
           zone=$(aws route53 get-hosted-zone --id "${ZONE_ID}" --query HostedZone.Name --output text)
           echo "TF_VAR_domain=r${GITHUB_RUN_NUMBER}.qa.${zone%.}" >> "${GITHUB_ENV}"
+
+      # What a run before this one left - cancelled, or its removal refused - removed before anything
+      # is made, by the removal that runs at the end: bootstrap's apply refuses a bucket or an alias
+      # that is already there. One that cannot finish stops the run with nothing of its own made.
+      - name: Sweep
+        timeout-minutes: 60
+        run: bash hack/fresh-install-remove.sh
 
       - name: Bootstrap
         id: bootstrap
@@ -262,55 +271,10 @@ jobs:
           jq '.Changes[0].Action = "DELETE"' "${RUNNER_TEMP}/delegation.json" > "${RUNNER_TEMP}/undelegation.json"
           aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" --change-batch "file://${RUNNER_TEMP}/undelegation.json"
 
-      # The README's removal, as an operator would run it: decommission applied to the buckets the
-      # state has (an install that stopped halfway too), what refuses a destroy taken out of the
-      # state, the destroy, and only then the keys scheduled for deletion - a destroy that failed
-      # leaves them usable.
-      - name: Remove the installation
-        id: remove
-        if: always() && steps.install.outcome != 'skipped'
-        working-directory: examples/complete
+      # The removal the run began with (Sweep), on what this one made: the installation as the
+      # README removes it, what still carries its tag, and bootstrap once the installation's state
+      # is empty - however far the install got and whatever fails on the way.
+      - name: Remove everything
+        if: always() && steps.bootstrap.outcome != 'skipped'
         timeout-minutes: 60
-        run: |
-          set -euo pipefail
-          printf 'module "spin" {\n  decommission = true\n}\n' > decommission_override.tf
-          targets=$(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])?$' | sed 's/^/-target=/' || true)
-          if [ -n "${targets}" ]; then
-            # shellcheck disable=SC2086 # one -target= per word
-            tofu apply -auto-approve ${targets}
-          fi
-          # `// empty`: an install that stopped halfway gave a null among the keys, and KMS refusing
-          # it stopped the loop before the keys after it (run 39161868759).
-          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id // empty')
-          kept=$(tofu state list | grep -E '\.aws_kms_key\.|\.tls_(private_key|self_signed_cert)\.ca$' || true)
-          # shellcheck disable=SC2086 # one address per word
-          [ -z "${kept}" ] || tofu state rm ${kept}
-          tofu destroy -auto-approve
-          for id in ${keys}; do aws kms schedule-key-deletion --key-id "${id}" --pending-window-in-days 7 --query KeyId --output text; done
-
-      # Only once the installation is gone: its state is in this bucket, and without it whatever a
-      # failed destroy left is a person's to find by hand.
-      - name: Remove bootstrap
-        if: always() && steps.bootstrap.outcome != 'skipped' && (steps.remove.outcome == 'success' || steps.install.outcome == 'skipped')
-        working-directory: bootstrap
-        run: |
-          set -euo pipefail
-          bucket=$(tofu output -raw bucket)
-          keys=$(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id // empty')
-          # shellcheck disable=SC2046 # one address per word
-          tofu state rm aws_s3_bucket.state $(tofu state list | grep '^aws_kms_key\.')
-          tofu destroy -auto-approve
-          for id in ${keys}; do aws kms schedule-key-deletion --key-id "${id}" --pending-window-in-days 7 --query KeyId --output text; done
-          aws s3api list-object-versions --bucket "${bucket}" --output json |
-            jq '{Objects: [(.Versions // [])[], (.DeleteMarkers // [])[] | {Key, VersionId}], Quiet: true}' > "${RUNNER_TEMP}/versions.json"
-          if jq -e '.Objects | length > 0' "${RUNNER_TEMP}/versions.json" > /dev/null; then
-            aws s3api delete-objects --bucket "${bucket}" --delete "file://${RUNNER_TEMP}/versions.json"
-          fi
-          aws s3api delete-bucket --bucket "${bucket}"
-
-      # The tagging API is behind a destroy by minutes, so what it still lists is said, not failed on.
-      - name: Left behind
-        if: always() && steps.install.outcome != 'skipped'
-        run: |
-          aws resourcegroupstaggingapi get-resources --tag-filters "Key=spin:installation,Values=${TF_VAR_name}" \
-            --query 'ResourceTagMappingList[].ResourceARN' --output text | tr '\t' '\n' | grep -v ':kms:' | sed 's/^/::warning::left behind: /' || true
+        run: bash hack/fresh-install-remove.sh

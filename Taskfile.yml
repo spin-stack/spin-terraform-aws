@@ -15,6 +15,10 @@ vars:
   # The version spin's versions.yaml pins: nothing else reads a workflow before GitHub runs it.
   ACTIONLINT_VERSION: 1.7.12
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  # The shell in hack/ and in each workflow's steps (actionlint asks it). Its release has no
+  # checksums file: this is the archive's digest as first downloaded.
+  SHELLCHECK_VERSION: 0.11.0
+  SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
   # What the fresh install fetches spin's CLI with, from the release's public package, and checks it
   # by. Cosign's release is the binary itself, its digest the one in cosign_checksums.txt.
   COSIGN_VERSION: 3.1.3
@@ -125,6 +129,17 @@ tasks:
       - tar -xzf {{.TOOLS_BIN}}/actionlint.tgz -C {{.TOOLS_BIN}} actionlint
       - rm {{.TOOLS_BIN}}/actionlint.tgz
 
+  tools:shellcheck:
+    desc: Install the pinned ShellCheck.
+    status:
+      - "test -x {{.TOOLS_BIN}}/shellcheck && {{.TOOLS_BIN}}/shellcheck --version | grep -q '^version: {{.SHELLCHECK_VERSION}}$'"
+    cmds:
+      - mkdir -p {{.TOOLS_BIN}}
+      - curl -fsSLo {{.TOOLS_BIN}}/shellcheck.txz https://github.com/koalaman/shellcheck/releases/download/v{{.SHELLCHECK_VERSION}}/shellcheck-v{{.SHELLCHECK_VERSION}}.linux.x86_64.tar.xz
+      - echo "{{.SHELLCHECK_SHA256}}  {{.TOOLS_BIN}}/shellcheck.txz" | sha256sum --check --quiet
+      - tar -xJf {{.TOOLS_BIN}}/shellcheck.txz -C {{.TOOLS_BIN}} --strip-components=1 shellcheck-v{{.SHELLCHECK_VERSION}}/shellcheck
+      - rm {{.TOOLS_BIN}}/shellcheck.txz
+
   tools:cosign:
     desc: Install the pinned cosign.
     status:
@@ -186,7 +201,7 @@ tasks:
 
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
-    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:actionlint]
+    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:actionlint, tools:shellcheck]
     # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
@@ -195,7 +210,9 @@ tasks:
     cmds:
       - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
-      - "{{.TOOLS_BIN}}/actionlint"
+      # The pinned shellcheck, named: given none, actionlint takes whichever is on PATH, or skips.
+      - "{{.TOOLS_BIN}}/actionlint -shellcheck={{.TOOLS_BIN}}/shellcheck"
+      - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
