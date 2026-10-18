@@ -61,7 +61,9 @@ locals {
   root_device = { for role, ami in data.aws_ami.spin_os : role => ami.root_device_name }
 
   # What each machine starts on, as the tag that makes a change to it a new launch template: a
-  # machine reads its document at every start, and nothing else would roll the change out. The
+  # machine reads its document at every start, and nothing else would roll the change out - its
+  # user data names the object, which keeps its name whatever it holds. The hash is of what the
+  # object is written with (config.tf), known at plan, where its ETag and version are not. The
   # control plane's includes the installation's configuration, which it applies when it starts.
   controlplane_starts_on = sha256(join("\n", [yamlencode(local.controlplane_document), yamlencode(local.installation)]))
   proxy_starts_on        = sha256(yamlencode(local.proxy_document))
@@ -195,7 +197,7 @@ resource "aws_autoscaling_group" "controlplane" {
 
   depends_on = [
     # What the machine starts on, and what the document names.
-    aws_ssm_parameter.controlplane_config,
+    aws_s3_object.document,
     aws_ssm_parameter.installation,
     aws_kms_key.encryption,
     aws_ssm_parameter.ca,

@@ -45,8 +45,8 @@ resource "aws_iam_role_policy_attachment" "proxy_ssm" {
 data "aws_iam_policy_document" "proxy" {
   statement {
     sid       = "ItsDocument"
-    actions   = ["ssm:GetParameter"]
-    resources = [aws_ssm_parameter.proxy_config.arn]
+    actions   = ["s3:GetObject"]
+    resources = [local.document_arn["proxy"]]
   }
   statement {
     sid       = "ItsCertificates"
@@ -305,5 +305,5 @@ resource "aws_autoscaling_group" "proxy" {
     }
   }
 
-  depends_on = [aws_route.internet, aws_s3_bucket_policy.certificates, aws_iam_role_policy.proxy, aws_ssm_parameter.proxy_config]
+  depends_on = [aws_route.internet, aws_s3_bucket_policy.certificates, aws_iam_role_policy.proxy, aws_s3_object.document]
 }

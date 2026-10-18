@@ -123,10 +123,6 @@ override_resource {
   values = { allocation_id = "eipalloc-0123456789abcdef0", public_ip = "203.0.113.10" }
 }
 
-override_resource {
-  target = aws_ssm_parameter.proxy_config
-  values = { arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/spin/proxy-config" }
-}
 
 # The CA's certificate, which the proxy's and the runners' documents carry.
 override_resource {
@@ -255,7 +251,7 @@ run "a_machines_user_data_is_its_role_and_its_document" {
   assert {
     condition = alltrue([for role, u in local.user_data : jsondecode(u) == { "systemd.credentials" = [
       { name = "spin.role", text = role },
-      { name = "spin.config", text = "ssm:///spin/spin/${role == "control-plane" ? "controlplane" : role}-config?region=us-east-2" },
+      { name = "spin.config", text = "s3://spin-docs-123456789012-us-east-2/${role}.yaml?region=us-east-2" },
     ] }])
     error_message = "a machine's user data is more than its role and its document, as systemd credentials"
   }
@@ -410,6 +406,24 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
     s.resources == toset(["*"]) && length(s.condition) == 0])
     error_message = "a machine of the installation can write a parameter another machine starts on"
   }
+  # Nor a document: of their bucket, a role may only read.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && length(setintersection(s.actions, ["s3:PutObject*", "s3:DeleteObject*", "s3:PutBucket*"])) == 3 &&
+      length(s.condition) == 0 && s.resources == toset([
+        "arn:aws:s3:::spin-docs-123456789012-us-east-2", "arn:aws:s3:::spin-docs-123456789012-us-east-2/*",
+    ])])
+    error_message = "a machine of the installation can write a document another machine starts on"
+  }
+  # Each machine's role reads its own document, and no other.
+  assert {
+    condition = alltrue([for role, d in { "control-plane" = data.aws_iam_policy_document.controlplane, proxy = data.aws_iam_policy_document.proxy } :
+      length([for s in d.statement : s if s.effect != "Deny" && contains(s.actions, "s3:GetObject") &&
+      s.resources == toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/${role}.yaml"])]) == 1 &&
+      !anytrue([for s in d.statement : anytrue([for r in s.resources : strcontains(r, "spin-docs-") &&
+    r != "arn:aws:s3:::spin-docs-123456789012-us-east-2/${role}.yaml"])])])
+    error_message = "a machine's role reads another role's document, or not its own"
+  }
   assert {
     condition = !anytrue([for d in [data.aws_iam_policy_document.controlplane, data.aws_iam_policy_document.proxy] :
     anytrue([for s in d.statement : s.effect != "Deny" && anytrue([for a in s.actions : startswith(a, "ssm:") && a != "ssm:GetParameter"])])])
@@ -417,7 +431,7 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
   }
 }
 
-# What a machine starts on is one document in the parameter store, and the machine is told where
+# What a machine starts on is one document in the documents' bucket, and the machine is told where
 # it is and nothing else: no value in the document is also a flag on the machine, which is a fact
 # in two places where the one that loses loses silently.
 # The operator's file is what the installation declares, with what this module knows laid over it:
@@ -459,11 +473,12 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
   }
   assert {
     condition = (
-      aws_ssm_parameter.controlplane_config.type == "String" && aws_ssm_parameter.controlplane_config.value == yamlencode(local.controlplane_document) &&
-      aws_ssm_parameter.proxy_config.type == "String" && aws_ssm_parameter.proxy_config.value == yamlencode(local.proxy_document) &&
-      aws_ssm_parameter.runner_config.type == "String" && aws_ssm_parameter.runner_config.value == yamlencode(local.runner_document)
+      aws_s3_object.document["control-plane"].content == yamlencode(local.controlplane_document) &&
+      aws_s3_object.document["proxy"].content == yamlencode(local.proxy_document) &&
+      aws_s3_object.document["runner"].content == yamlencode(local.runner_document) &&
+      alltrue([for role, o in aws_s3_object.document : o.key == "${role}.yaml" && o.content_type == "application/yaml"])
     )
-    error_message = "a document is not what its parameter holds"
+    error_message = "a document is not what its object holds"
   }
   # The installation's own configuration is read by the control plane at every start, which seeds
   # the database from it: nothing applies it by hand on a machine.
@@ -593,7 +608,8 @@ run "a_destroy_keeps_the_data" {
     condition = (
       !aws_s3_bucket.volumes.force_destroy && !aws_s3_bucket.database.force_destroy && !aws_s3_bucket.logs.force_destroy &&
       length(aws_s3_bucket_policy.volumes) == 1 && length(aws_s3_bucket_policy.database) == 1 &&
-      length(aws_s3_bucket_policy.logs) == 1 && length(aws_s3_bucket_policy.certificates) == 1
+      length(aws_s3_bucket_policy.logs) == 1 && length(aws_s3_bucket_policy.certificates) == 1 &&
+      length(aws_s3_bucket_policy.documents) == 1
     )
     error_message = "a destroy empties a bucket of data, or a bucket answers from outside the VPC"
   }
@@ -610,14 +626,16 @@ run "an_installation_being_removed_is_emptied_by_its_destroy" {
   assert {
     condition = (
       aws_s3_bucket.volumes.force_destroy && aws_s3_bucket.database.force_destroy &&
-      aws_s3_bucket.logs.force_destroy && aws_s3_bucket.certificates.force_destroy
+      aws_s3_bucket.logs.force_destroy && aws_s3_bucket.certificates.force_destroy &&
+      aws_s3_bucket.documents.force_destroy
     )
     error_message = "a bucket stops the destroy of an installation being removed"
   }
   assert {
     condition = (
       length(aws_s3_bucket_policy.volumes) == 0 && length(aws_s3_bucket_policy.database) == 0 &&
-      length(aws_s3_bucket_policy.logs) == 0 && length(aws_s3_bucket_policy.certificates) == 0
+      length(aws_s3_bucket_policy.logs) == 0 && length(aws_s3_bucket_policy.certificates) == 0 &&
+      length(aws_s3_bucket_policy.documents) == 0
     )
     error_message = "a bucket still refuses the destroy's deletes from outside the VPC"
   }
@@ -648,8 +666,7 @@ run "an_account_holds_several_installations" {
   assert {
     condition = alltrue([for n in [
       aws_ssm_parameter.claim.name, aws_ssm_parameter.ca.name,
-      aws_ssm_parameter.admin_password.name, aws_ssm_parameter.controlplane_config.name, aws_ssm_parameter.proxy_config.name,
-      aws_ssm_parameter.runner_config.name, aws_ssm_parameter.installation.name,
+      aws_ssm_parameter.admin_password.name, aws_ssm_parameter.installation.name,
       aws_cloudwatch_log_group.boot.name, aws_cloudwatch_log_group.flow[0].name,
     ] : startswith(n, "/spin/spin/")])
     error_message = "a parameter or a log group is not under the installation's /spin/<name>/"
@@ -798,8 +815,9 @@ run "the_roles" {
   }
   assert {
     condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
-    anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2")])])
-    error_message = "the proxy's role reaches a bucket other than its certificates'"
+      anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2") &&
+    s.resources != toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/proxy.yaml"])])])
+    error_message = "the proxy's role reaches a bucket other than its certificates' and its own document"
   }
 }
 
@@ -944,12 +962,10 @@ run "no_machine_reads_the_control_planes_secrets" {
     ]))) == 3])
     error_message = "a role other than the control plane's can read the CA's key, the administrator's password or the installation's configuration"
   }
-  # Each of the other machines reads its own document and nothing else of SSM.
+  # The proxy's document is an object (config.tf): it reads nothing of SSM.
   assert {
-    condition = anytrue([for s in data.aws_iam_policy_document.proxy.statement :
-      s.actions == toset(["ssm:GetParameter"]) && length(s.resources) == 1]) && alltrue([for s in data.aws_iam_policy_document.proxy.statement :
-    !anytrue([for a in s.actions : startswith(a, "ssm:")]) || s.resources == toset([aws_ssm_parameter.proxy_config.arn])])
-    error_message = "the proxy reads more of SSM than its document"
+    condition     = !anytrue([for s in data.aws_iam_policy_document.proxy.statement : anytrue([for a in s.actions : startswith(a, "ssm:")])])
+    error_message = "the proxy reads SSM"
   }
 }
 
@@ -1308,7 +1324,7 @@ run "a_host_joins_only_as_the_runners_build" {
   command = plan
 
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == var.image_measurements["runner"]
+    condition     = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.runner == var.image_measurements["runner"]
     error_message = "the control plane is told other builds than the runner's a host may join as, or not what its release signed of it"
   }
 }
@@ -1319,7 +1335,7 @@ run "the_control_plane_writes_as_its_own_signed_build" {
   command = plan
 
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.control_plane == var.image_measurements["control-plane"]
+    condition     = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.control_plane == var.image_measurements["control-plane"]
     error_message = "the control plane is told another build than its own, or not what its release signed of it"
   }
 }
@@ -1356,14 +1372,14 @@ run "the_proxy_proves_it_is_the_proxys_build" {
   command = plan
 
   assert {
-    condition = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.proxy == {
+    condition = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.proxy == {
       principal = "arn:aws:iam::123456789012:role/spin-us-east-2-proxy"
       builds    = [for b in var.image_measurements["proxy"] : { for pcr in ["pcr4", "pcr7", "pcr12"] : pcr => b[pcr] }]
     }
     error_message = "the control plane is told another role or build than the proxy's for the proxy's token"
   }
   assert {
-    condition     = yamldecode(aws_ssm_parameter.proxy_config.value).install.join == { audience = local.join_audience }
+    condition     = yamldecode(aws_s3_object.document["proxy"].content).install.join == { audience = local.join_audience }
     error_message = "the proxy is not told the installation it proves it is the proxy to"
   }
 }
@@ -1671,7 +1687,7 @@ run "every_build_not_revoked_is_trusted" {
     error_message = "a runner of a revoked build may open a volume's key or the identity key"
   }
   assert {
-    condition     = yamldecode(aws_ssm_parameter.controlplane_config.value).host_attestation.runner == [{ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => var.image_measurements["runner"][1][k] }]
+    condition     = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.runner == [{ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => var.image_measurements["runner"][1][k] }]
     error_message = "a host may join as a revoked build of the runner's image"
   }
 }

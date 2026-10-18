@@ -1,7 +1,8 @@
-# What each machine starts on: one document per role in the parameter store, written by this
-# apply and read by that role's machines (spin's internal/bootstrap). A machine is told its role
-# and where its document is and nothing else - its user data is those two, as systemd credentials
-# (user_data below) - and the image's spin-boot does the rest from what the document says.
+# What each machine starts on: one document per role, an object in its own bucket
+# (documents_bucket.tf), written by this apply and read by that role's machines (spin's
+# internal/bootstrap). A machine is told its role and where its document is and nothing else - its
+# user data is those two, as systemd credentials (user_data below) - and the image's spin-boot does
+# the rest from what the document says.
 #
 # Beside the documents, the installation's own configuration (installation.yaml, as it would be
 # kept in git): where the installation starts, which an administrator changes from the dashboard
@@ -14,17 +15,19 @@
 # role reads them.
 
 locals {
-  config_parameter       = "/spin/${local.name}/controlplane-config"
-  proxy_parameter        = "/spin/${local.name}/proxy-config"
-  runner_parameter       = "/spin/${local.name}/runner-config"
   installation_parameter = "/spin/${local.name}/installation"
 
-  # A parameter, as spin reads one: with its region, which a machine's SDK does not otherwise
-  # know.
+  # Each role's document, by its bucket's name rather than the bucket's attributes: known at plan,
+  # as the user data that names it and the policies that grant it are. "docs" and not "documents":
+  # the longest name a bucket of this installation may have is "<name>-database-...".
+  documents_bucket = "${local.name}-docs-${local.account}-${local.region}"
+  document_key     = { for role in ["control-plane", "proxy", "runner"] : role => "${role}.yaml" }
+  document_arn     = { for role, key in local.document_key : role => "${local.arn}:s3:::${local.documents_bucket}/${key}" }
+
+  # A document and a parameter, as spin reads one: with its region, which a machine's SDK does not
+  # otherwise know.
+  document_at = { for role, key in local.document_key : role => "s3://${local.documents_bucket}/${key}?region=${local.region}" }
   ssm = { for k, p in {
-    config         = local.config_parameter
-    proxy          = local.proxy_parameter
-    runner         = local.runner_parameter
     installation   = local.installation_parameter
     ca             = local.ca_parameter
     admin_password = local.admin_password_parameter
@@ -196,34 +199,19 @@ locals {
   })
 }
 
-# The documents are Intelligent-Tiering, like installation below: the control plane's passed a
-# standard parameter's 4 KiB on a first install (fresh-install run 39161868759), and the tier is
-# advanced only while a document needs it.
-resource "aws_ssm_parameter" "controlplane_config" {
-  name        = local.config_parameter
-  description = "What ${local.name}'s control plane machines start on"
-  type        = "String"
-  tier        = "Intelligent-Tiering"
-  value       = yamlencode(local.controlplane_document)
-  tags        = local.tags
-}
-
-resource "aws_ssm_parameter" "proxy_config" {
-  name        = local.proxy_parameter
-  description = "What ${local.name}'s proxy machines start on"
-  type        = "String"
-  tier        = "Intelligent-Tiering"
-  value       = yamlencode(local.proxy_document)
-  tags        = local.tags
-}
-
-resource "aws_ssm_parameter" "runner_config" {
-  name        = local.runner_parameter
-  description = "What ${local.name}'s runners start on"
-  type        = "String"
-  tier        = "Intelligent-Tiering"
-  value       = yamlencode(local.runner_document)
-  tags        = local.tags
+resource "aws_s3_object" "document" {
+  for_each = {
+    "control-plane" = local.controlplane_document
+    proxy           = local.proxy_document
+    runner          = local.runner_document
+  }
+  bucket       = aws_s3_bucket.documents.id
+  key          = local.document_key[each.key]
+  content      = yamlencode(each.value)
+  content_type = "application/yaml"
+  tags         = local.tags
+  # Written once the bucket refuses what is not TLS and holds every version an apply replaces.
+  depends_on = [aws_s3_bucket_policy.documents, aws_s3_bucket_versioning.documents]
 }
 
 # The operator's file may say whom the installation registers, so it is the control plane's
@@ -241,7 +229,7 @@ resource "aws_ssm_parameter" "installation" {
 # systemd credentials Spin OS's spin-boot unit takes. systemd-imds imports them from IMDS into
 # /run/credstore; nothing on the machine runs the user data.
 locals {
-  user_data = { for role, doc in { "control-plane" = local.ssm.config, proxy = local.ssm.proxy, runner = local.ssm.runner } :
+  user_data = { for role, doc in local.document_at :
     role => jsonencode({ "systemd.credentials" = [
       { name = "spin.role", text = role },
       { name = "spin.config", text = doc },

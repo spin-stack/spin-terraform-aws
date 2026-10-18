@@ -7,17 +7,17 @@
 variable "controlplane" {
   description = "The control plane module's outputs, as they are: its name, where the runners go, their document, and what a runner's machine runs at its first boot."
   type = object({
-    name                        = string
-    iam_name                    = string
-    vpc_id                      = string
-    subnet_ids                  = list(string)
-    security_group_id           = string
-    runner_config_parameter_arn = string
-    runner_user_data            = string
-    images                      = map(object({ id = string, root_device = string }))
-    boot_log_policy_arn         = string
-    standard_vcpus              = number
-    boundary_arn                = string
+    name                = string
+    iam_name            = string
+    vpc_id              = string
+    subnet_ids          = list(string)
+    security_group_id   = string
+    runner_document_arn = string
+    runner_user_data    = string
+    images              = map(object({ id = string, root_device = string }))
+    boot_log_policy_arn = string
+    standard_vcpus      = number
+    boundary_arn        = string
   })
 }
 

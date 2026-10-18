@@ -221,16 +221,18 @@ first sign-in and this removal - in an account of its own, and says what that ac
   machine boots Spin OS of `spin_version`: a read-only root the kernel checks every block of, into
   which spin laid what its `release.yml` signed, checked against the signature when the image was
   built. A machine fetches nothing. Its user data is two systemd credentials - its role and the
-  SSM parameter its document is in - which systemd-imds imports and nothing runs. Everything else -
+  S3 object its document is - which systemd-imds imports and nothing runs. Everything else -
   where the database's archive is, the name it takes, the collector - is in that document, and every step is
   `spin-boot`'s, in Go with tests (spin's `internal/installation/boot`); a document naming another
   release than the image's is refused. Nothing is a container: each role is a binary under systemd,
   as its own user.
-- **This apply writes every parameter, and no machine writes one.** The documents, the
-  installation's configuration, the CA, the encryption key and the first administrator's
+- **This apply writes every document and parameter, and no machine writes one.** The documents,
+  the installation's configuration, the CA, the encryption key and the first administrator's
   password are all this module's; the permissions boundary denies every role of the
-  installation `ssm:PutParameter`. A machine that was taken cannot leave a value for the next
-  one to start on.
+  installation `ssm:PutParameter` and all but a read of the documents' bucket. A machine that was
+  taken cannot leave a value for the next one to start on. The documents are objects, not
+  parameters: the control plane's carries what each image's release signed of it, past the 8 KB
+  a parameter holds.
 - **The encryption key and the first password never reach the state.** Both are ephemeral values
   written through write-only attributes, once (`value_wo_version`). The key is, with the
   database, the installation: a new one is a database nothing can open, so nothing here makes one
@@ -297,7 +299,7 @@ first sign-in and this removal - in an account of its own, and says what that ac
   elsewhere in the VPC, cannot pass as the proxy.
 - **No role can make itself more.** Every role both modules create carries one permissions
   boundary: none may write IAM or pass a role, assume any role but the runner scope, touch the
-  VPC's network or a security group, write a parameter, run commands on another machine through
+  VPC's network or a security group, write a parameter or a document, run commands on another machine through
   SSM, or lift the bucket's lock or the logs; and none but the control plane's reaches the
   database's archive. A policy attached later, by mistake or from a
   machine that was taken, cannot grant past it.

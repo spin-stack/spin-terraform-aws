@@ -96,6 +96,17 @@ data "aws_iam_policy_document" "boundary" {
     actions   = ["ssm:PutParameter", "ssm:DeleteParameter*", "ssm:LabelParameterVersion", "ssm:AddTagsToResource"]
     resources = ["*"]
   }
+  # Nor a document (documents_bucket.tf), for the same reason: of that bucket a role may read an
+  # object its own policy names, and change nothing - an object, a version, or the bucket.
+  statement {
+    sid    = "NoMachineWritesADocument"
+    effect = "Deny"
+    actions = [
+      "s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject", "s3:ReplicateObject", "s3:ReplicateDelete",
+      "s3:AbortMultipartUpload", "s3:PutBucket*", "s3:DeleteBucket*",
+    ]
+    resources = ["${local.arn}:s3:::${local.documents_bucket}", "${local.arn}:s3:::${local.documents_bucket}/*"]
+  }
   # The machines are reached by a person through Session Manager; a role is never the one
   # starting a session or running a command on another.
   statement {
