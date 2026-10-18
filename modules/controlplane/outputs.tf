@@ -38,9 +38,9 @@ output "ca_cert" {
   value       = tls_self_signed_cert.ca.cert_pem
 }
 
-output "runner_config_parameter_arn" {
-  description = "The runners' document, which the runners' role reads and nothing else of SSM."
-  value       = aws_ssm_parameter.runner_config.arn
+output "runner_document_arn" {
+  description = "The runners' document, the one object of the documents' bucket the runners' role reads."
+  value       = aws_s3_object.document["runner"].arn
 }
 
 output "runner_user_data" {

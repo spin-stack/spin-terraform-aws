@@ -159,12 +159,17 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["sts:AssumeRole"]
     resources = [aws_iam_role.identity_keys.arn]
   }
-  # What it starts on, and the secrets its document names. Read, never written: every parameter
-  # of the installation is this module's to write (secrets.tf).
+  # What it starts on, and the secrets its document names. Read, never written: every document and
+  # parameter of the installation is this module's to write (config.tf, secrets.tf).
   statement {
-    sid     = "ItsDocumentAndSecrets"
+    sid       = "ItsDocument"
+    actions   = ["s3:GetObject"]
+    resources = [local.document_arn["control-plane"]]
+  }
+  statement {
+    sid     = "ItsSecrets"
     actions = ["ssm:GetParameter"]
-    resources = [for p in [local.config_parameter, local.installation_parameter, local.ca_parameter, local.admin_password_parameter] :
+    resources = [for p in [local.installation_parameter, local.ca_parameter, local.admin_password_parameter] :
     "${local.arn}:ssm:${local.region}:${local.account}:parameter${p}"]
   }
   # Its own name in the internal zone, and nothing else there: what a new machine takes when it

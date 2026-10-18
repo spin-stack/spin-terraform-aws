@@ -23,13 +23,13 @@ override_data {
 
 variables {
   controlplane = {
-    name                        = "spin"
-    iam_name                    = "spin-us-east-2"
-    vpc_id                      = "vpc-00000000000000000"
-    subnet_ids                  = ["subnet-00000000000000000"]
-    security_group_id           = "sg-00000000000000000"
-    runner_config_parameter_arn = "arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"
-    runner_user_data            = "{\"systemd.credentials\":[{\"name\":\"spin.role\",\"text\":\"runner\"},{\"name\":\"spin.config\",\"text\":\"ssm:///spin/runner-config?region=us-east-2\"}]}"
+    name                = "spin"
+    iam_name            = "spin-us-east-2"
+    vpc_id              = "vpc-00000000000000000"
+    subnet_ids          = ["subnet-00000000000000000"]
+    security_group_id   = "sg-00000000000000000"
+    runner_document_arn = "arn:aws:s3:::spin-docs-123456789012-us-east-2/runner.yaml"
+    runner_user_data    = "{\"systemd.credentials\":[{\"name\":\"spin.role\",\"text\":\"runner\"},{\"name\":\"spin.config\",\"text\":\"s3://spin-docs-123456789012-us-east-2/runner.yaml?region=us-east-2\"}]}"
     images = {
       "control-plane" = { id = "ami-0aaaaaaaaaaaaaaaa", root_device = "/dev/sda1" }
       runner          = { id = "ami-0123456789abcdef0", root_device = "/dev/xvda" }
@@ -137,7 +137,7 @@ run "a_runners_role_reads_its_document" {
   }
   assert {
     condition = length(data.aws_iam_policy_document.runner.statement) == 1 && alltrue([for s in data.aws_iam_policy_document.runner.statement :
-    s.actions == toset(["ssm:GetParameter"]) && s.resources == toset(["arn:aws:ssm:us-east-2:123456789012:parameter/spin/runner-config"])])
+    s.actions == toset(["s3:GetObject"]) && s.resources == toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/runner.yaml"])])
     error_message = "the runners' role may do more than read its document"
   }
   # The role's name is the one the installation's configuration names as a host's

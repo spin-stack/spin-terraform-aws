@@ -77,8 +77,8 @@ resource "aws_iam_role" "runner" {
 # machine could use against another tenant.
 data "aws_iam_policy_document" "runner" {
   statement {
-    actions   = ["ssm:GetParameter"]
-    resources = [var.controlplane.runner_config_parameter_arn]
+    actions   = ["s3:GetObject"]
+    resources = [var.controlplane.runner_document_arn]
   }
 }
 
