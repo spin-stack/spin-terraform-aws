@@ -60,7 +60,7 @@ jobs:
 
       - name: Tools
         run: |
-          task tools:tofu
+          task tools:tofu tools:cosign tools:oras
           echo "${GITHUB_WORKSPACE}/.tools/bin" >> "${GITHUB_PATH}"
 
       # The newest release this commit can install in the region: an image of every role and its
@@ -75,6 +75,41 @@ jobs:
             echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"; exit 1
           fi
           echo "TF_VAR_spin_version=${release}" >> "${GITHUB_ENV}"
+
+      # The CLI of the release installed, from its public package, checked as docs/releases.md in
+      # spin checks a file: signed by release.yml at main, and its provenance naming this release.
+      # Before anything is made, so a release whose CLI does not check costs no installation.
+      - name: CLI
+        id: cli
+        env:
+          IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/heads/main
+          ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/cli"
+          oras pull --no-tty -o "${dir}" "ghcr.io/spin-stack/spin-release:${TF_VAR_spin_version}-spin-linux-amd64"
+          cosign verify-blob --bundle "${dir}/spin-linux-amd64.sigstore.json" --certificate-identity "${IDENTITY}" \
+            --certificate-oidc-issuer "${ISSUER}" "${dir}/spin-linux-amd64"
+          cosign verify-blob-attestation --type slsaprovenance1 --bundle "${dir}/spin-linux-amd64.provenance.sigstore.json" \
+            --digest "$(sha256sum "${dir}/spin-linux-amd64" | cut -d' ' -f1)" --digestAlg sha256 \
+            --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}"
+          built=$(jq -r .dsseEnvelope.payload "${dir}/spin-linux-amd64.provenance.sigstore.json" | base64 -d |
+            jq -r .predicate.buildDefinition.externalParameters.version)
+          if [ "${built}" != "${TF_VAR_spin_version}" ]; then
+            echo "::error::spin-linux-amd64 of ${TF_VAR_spin_version} says it was built as ${built}"; exit 1
+          fi
+          mkdir -p "${RUNNER_TEMP}/bin"
+          install -m 755 "${dir}/spin-linux-amd64" "${RUNNER_TEMP}/bin/spin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          # Only while the newest release images.json names predates `spin smoke` (v20261015.01 did,
+          # when this was written): an older CLI's `smoke --help` is its root's help, exit 0. Once
+          # one that has it is merged, a CLI without it is a failure and this goes.
+          usage=$("${RUNNER_TEMP}/bin/spin" smoke --help)
+          if grep -q '^  spin smoke ' <<< "${usage}"; then
+            echo "smoke=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning::spin ${TF_VAR_spin_version} has no 'spin smoke': the installation is signed in to and not used"
+          fi
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -133,23 +168,74 @@ jobs:
 
       # The first sign-in as a person makes it: the one-time password from SSM, over the proxy's
       # certificate, to the control plane. Retried while the delegation spreads and the certificate
-      # is issued; curl refuses until there is a valid one.
+      # is issued; curl refuses until there is a valid one. The session is kept, in a file, for the
+      # smoke: a session is the person, every procedure an API key's scopes would name included.
       - name: First sign-in
         working-directory: examples/complete
         timeout-minutes: 30
         run: |
           set -euo pipefail
+          umask 077
           sign_in=$(tofu output -json first_sign_in)
           password=$(eval "$(jq -r .password <<< "${sign_in}")")
           echo "::add-mask::${password}"
           jq -n --arg e "$(jq -r .user <<< "${sign_in}")" --arg p "${password}" '{email: $e, password: $p}' > "${RUNNER_TEMP}/login.json"
-          url="$(jq -r .url <<< "${sign_in}")/spin.v1.SetupService/PasswordLogin"
-          until curl -fsS -o "${RUNNER_TEMP}/session.json" -H 'Content-Type: application/json' --data-binary "@${RUNNER_TEMP}/login.json" "${url}"; do
+          endpoint=$(jq -r .url <<< "${sign_in}")
+          until curl -fsS -o "${RUNNER_TEMP}/session.json" -H 'Content-Type: application/json' --data-binary "@${RUNNER_TEMP}/login.json" \
+            "${endpoint}/spin.v1.SetupService/PasswordLogin"; do
             sleep 30
           done
-          jq -e '.sessionToken | length > 0' "${RUNNER_TEMP}/session.json" > /dev/null
-          echo "signed in; force_password_change: $(jq -r '.forcePasswordChange // false' "${RUNNER_TEMP}/session.json")"
+          token=$(jq -r '.sessionToken // empty' "${RUNNER_TEMP}/session.json")
+          [ -n "${token}" ]
+          echo "::add-mask::${token}"
+          printf '%s' "${token}" > "${RUNNER_TEMP}/session-token"
+          echo "SPIN_ENDPOINT=${endpoint}" >> "${GITHUB_ENV}"
+          force=$(jq -r '.forcePasswordChange // false' "${RUNNER_TEMP}/session.json")
+          echo "signed in; force_password_change: ${force}"
+          # A session opened with the one-time password may only change it (whileChangingThePassword
+          # in spin), so it is changed, to one nobody needs again: the session stays, the others go.
+          # An upper, a lower and a digit, as the control plane's strength check asks.
+          if [ "${force}" = true ]; then
+            fresh="Aa1$(openssl rand -hex 24)"
+            echo "::add-mask::${fresh}"
+            jq -n --arg c "${password}" --arg n "${fresh}" '{currentPassword: $c, newPassword: $n}' > "${RUNNER_TEMP}/change.json"
+            printf 'Authorization: Bearer %s\n' "${token}" > "${RUNNER_TEMP}/bearer"
+            curl -fsS -o /dev/null -H 'Content-Type: application/json' -H "@${RUNNER_TEMP}/bearer" \
+              --data-binary "@${RUNNER_TEMP}/change.json" "${endpoint}/spin.v1.SetupService/ChangePassword"
+            rm "${RUNNER_TEMP}/change.json" "${RUNNER_TEMP}/bearer"
+          fi
           rm "${RUNNER_TEMP}/login.json" "${RUNNER_TEMP}/session.json"
+
+      # The contract as a person meets it, with a key of their own: registered, their keyring signed
+      # with it, and `spin smoke` - a workspace made, run in, kept from the cloud's metadata,
+      # suspended and resumed, erased. Its egress root is pinned on first use, as anybody's is. The
+      # runner group starts at none, and its first machine is a spot one booting: hence the time.
+      - name: Smoke
+        if: steps.cli.outputs.smoke == 'true'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          export HOME="${RUNNER_TEMP}/spin-home"
+          SPIN_TOKEN=$(cat "${RUNNER_TEMP}/session-token")
+          export SPIN_TOKEN
+          mkdir -m 700 "${HOME}" "${HOME}/.ssh"
+          ssh-keygen -q -t ed25519 -N '' -C fresh-install -f "${HOME}/.ssh/id_ed25519"
+          spin ssh-key add fresh-install "${HOME}/.ssh/id_ed25519.pub"
+          spin sign --yes
+          status=0
+          spin -o json smoke --timeout 20m > "${RUNNER_TEMP}/smoke.json" || status=$?
+          jq . "${RUNNER_TEMP}/smoke.json" || cat "${RUNNER_TEMP}/smoke.json"
+          if [ "${status}" -ne 0 ]; then
+            failed=$(jq -r '[.steps[]? | select(.error) | .step] | join(", ")' "${RUNNER_TEMP}/smoke.json" 2> /dev/null || true)
+            case "${status}" in
+              69) why="the installation did not answer" ;;
+              70) why="a scenario failed: ${failed}" ;;
+              77) why="the session was refused" ;;
+              *) why="it could not run as configured" ;;
+            esac
+            echo "::error::spin smoke exited ${status}: ${why}"
+            exit "${status}"
+          fi
 
       - name: Why
         if: failure() && steps.install.outcome != 'skipped'
