@@ -11,8 +11,9 @@
 #     installation makes most of an account) and a maximum session of at least two hours, trusting
 #     only the subject of this repository's `fresh-install` environment on main
 #     (bootstrap/github.tf has the subject's form). Its ARN is the variable FRESH_INSTALL_ROLE.
-#   - A public Route 53 zone delegated from its parent, whose id is FRESH_INSTALL_ZONE_ID: each run
-#     installs on r<run>.<zone> and delegates it there, so the proxy's certificate is a real one.
+#   - A public Route 53 zone the account already has, whose id is FRESH_INSTALL_ZONE_ID: each run
+#     installs on r<run>.qa.<zone> and delegates it there, so the proxy's certificate is a real one.
+#     No zone is kept for this: the run's own is deleted within the 12 hours Route 53 does not bill.
 #   - Launch permission on the release's images in us-east-1, and on their snapshots: spin-stack/ami
 #     registers them in its own account.
 #   - Nothing else, and nothing of spin: each run makes the state's KMS key and bucket and the three
@@ -123,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           zone=$(aws route53 get-hosted-zone --id "${ZONE_ID}" --query HostedZone.Name --output text)
-          echo "TF_VAR_domain=r${GITHUB_RUN_NUMBER}.${zone%.}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_domain=r${GITHUB_RUN_NUMBER}.qa.${zone%.}" >> "${GITHUB_ENV}"
 
       - name: Bootstrap
         id: bootstrap
