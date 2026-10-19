@@ -117,5 +117,19 @@
       "us-east-1": "ami-04795660f2faee241",
       "us-west-2": "ami-00cf6c22b860b7d5f"
     }
+  },
+  "v20261019.02": {
+    "control-plane": {
+      "us-east-1": "ami-0dc9ac38b49de8d33",
+      "us-west-2": "ami-06e684cd6f90c11fb"
+    },
+    "proxy": {
+      "us-east-1": "ami-00f3f3b5733281305",
+      "us-west-2": "ami-0a066cfde3dac4085"
+    },
+    "runner": {
+      "us-east-1": "ami-0bd146ffda6b24636",
+      "us-west-2": "ami-06cc71ed19ee1a754"
+    }
   }
 }
