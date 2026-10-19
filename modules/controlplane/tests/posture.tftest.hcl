@@ -1113,15 +1113,34 @@ run "a_volumes_signed_history_is_erased_by_nobody" {
     error_message = "a role can lift the lock that keeps a volume's HEADs"
   }
   assert {
-    condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
-    s.actions == toset(["s3:GetObject"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/writers/*"])])
-    error_message = "a runner cannot read who a volume's writers are, and would believe no HEAD"
-  }
-  assert {
     condition = !anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
       anytrue([for a in s.actions : a != "s3:GetObject" && a != "s3:GetObjectVersion"]) &&
     anytrue([for r in s.resources : strcontains(r, "/writers/")])])
     error_message = "a runner can write who a writer is"
+  }
+}
+
+# A runner's credential is this role narrowed by the session policy spin asks it for (spin's
+# internal/storage/bucketpolicy: For, and ForVolume), and a session grants only what both do: an
+# action the session asks and the role lacks is a 403 at its first use, which no plan shows - a
+# writer's record read at its version stopped the first workspace of a fresh install. The table is
+# what those two functions ask, resource by resource; one of them changing is a row here.
+run "a_runners_role_grants_what_its_session_asks" {
+  command = plan
+
+  assert {
+    condition = alltrue([for want in [
+      { r = "", a = ["s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration", "s3:ListBucketVersions", "s3:ListBucket"] },
+      { r = "/layers/*", a = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"] },
+      { r = "/volumes/*", a = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"] },
+      { r = "/writers/*", a = ["s3:GetObject", "s3:GetObjectVersion"] },
+      { r = "/identity/issued/*", a = ["s3:GetObject", "s3:PutObject"] },
+      { r = "/identity/x509-ca.der", a = ["s3:GetObject", "s3:PutObject"] },
+      { r = "/rosters/*", a = ["s3:GetObject"] },
+      { r = "/access/*", a = ["s3:GetObject", "s3:GetObjectVersion"] },
+      ] : alltrue([for a in want.a : anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+    contains(s.actions, a) && contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2${want.r}")])])])
+    error_message = "a runner's session asks an action of the volumes' bucket its role does not grant"
   }
 }
 

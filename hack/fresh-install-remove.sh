@@ -88,6 +88,26 @@ remaining() {
   left=$(jq -r '.values.root_module // {} | .. | objects | select(has("address") and .mode? == "managed") | .address' <<< "${shown}") || return 1
 }
 
+# Every version's legal hold lifted, in each Object Lock bucket the state has: the README's
+# removal, step 2. A bucket already gone has nothing to lift.
+unhold() {
+  local buckets b out key id
+  if ! buckets=$(tofu -chdir="${install}" show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_s3_bucket" and .values.object_lock_enabled? == true) | .values.bucket'); then
+    fail "the installation's locked buckets could not be read"
+    return
+  fi
+  for b in ${buckets}; do
+    if ! out=$(aws s3api list-object-versions --bucket "${b}" --expected-bucket-owner "${account}" --output json 2> "${tmp}/err"); then
+      grep -q NoSuchBucket "${tmp}/err" || fail "${b}'s versions could not be listed: $(< "${tmp}/err")"
+      continue
+    fi
+    while IFS=$'\t' read -r key id; do
+      aws s3api put-object-legal-hold --bucket "${b}" --expected-bucket-owner "${account}" --key "${key}" \
+        --version-id "${id}" --legal-hold Status=OFF || fail "${b}/${key} (${id}) is still held"
+    done < <(jq -r '(.Versions // [])[] | [.Key, .VersionId] | @tsv' <<< "${out}")
+  done
+}
+
 # The README's removal, as an operator runs it: decommission applied to the buckets the state has,
 # what refuses a destroy taken out of the state, the destroy, and the keys. -lock=false: the
 # workflow's concurrency group is the lock, and a run killed mid-apply left its own behind.
@@ -116,6 +136,7 @@ installation() {
     # shellcheck disable=SC2086 # one -target= per word
     tofu -chdir="${install}" apply -auto-approve -lock=false ${targets} || fail "decommission was not applied"
   fi
+  unhold
   # `// empty`: an install that stopped halfway has a key with no id yet (run 39161868759).
   keys=$(tofu -chdir="${install}" show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_kms_key") | .values.key_id // empty') ||
     fail "the installation's keys could not be read"
