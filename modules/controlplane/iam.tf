@@ -258,9 +258,10 @@ data "aws_iam_policy_document" "runner_scope" {
     resources = ["${aws_s3_bucket.volumes.arn}/layers/*", "${aws_s3_bucket.volumes.arn}/volumes/*"]
   }
   # Who wrote a volume's HEAD: a writer's record, read to hold the HEAD's signature to before a
-  # restore believes it. Written by the control plane alone, at a host's join.
+  # restore believes it - at its one version (spin's writer.Get), so GetObjectVersion. Written by
+  # the control plane alone, at a host's join.
   statement {
-    actions   = ["s3:GetObject"]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
     resources = ["${aws_s3_bucket.volumes.arn}/writers/*"]
   }
   # The identity a host signs for its machines (spin's internal/runner/identityserver): the record

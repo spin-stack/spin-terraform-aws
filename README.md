@@ -181,14 +181,25 @@ deletes from outside the VPC - the root account's included, so they cannot be em
 laptop either. Removing one is said first, applied, and only then destroyed:
 
 1. Set `decommission = true` on the module and apply. Nothing but the buckets changes: their
-   VPC-only policies go, and each is marked to be emptied by a destroy - every version, legal
-   holds lifted, the GOVERNANCE retention bypassed.
+   VPC-only policies go, and each is marked to be emptied by a destroy - every version, the
+   GOVERNANCE retention bypassed.
 
    ```bash
    tofu apply   # with decommission = true in module "spin"
    ```
 
-2. The KMS keys - the encryption key's, the volumes' and the identity's - and the CA refuse to be
+2. Lift every legal hold. spin holds what each image is rebuilt from, and the provider's destroy
+   (hashicorp/aws 6.66) lifts a hold and then deletes that version without the bypass, which the
+   retention refuses: the destroy stops on the volumes' bucket.
+
+   ```bash
+   for b in $(tofu show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_s3_bucket" and .values.object_lock_enabled? == true) | .values.bucket'); do
+     aws s3api list-object-versions --bucket $b --output json | jq -r '(.Versions // [])[] | [.Key, .VersionId] | @tsv' |
+       while IFS=$'\t' read -r key id; do aws s3api put-object-legal-hold --bucket $b --key "$key" --version-id "$id" --legal-hold Status=OFF; done
+   done
+   ```
+
+3. The KMS keys - the encryption key's, the volumes' and the identity's - and the CA refuse to be
    destroyed, because an apply that replaced one would leave an installation nothing can open.
    Note the keys, take them out of the state, destroy, and schedule each key's deletion (the
    destroy takes their aliases):
@@ -204,10 +215,11 @@ The apply has to come first: a destroy empties a bucket as its state says, so `d
 set only on the destroy changes nothing - it stops with `BucketNotEmpty`. A destroy that already
 stopped takes the same apply, limited to the buckets and policies the state still has: a bucket
 named that the destroy already removed would be made again. Its plan is those buckets'
-`force_destroy` turned on and their policies removed, and nothing else:
+`force_destroy` turned on and their policies removed, and nothing else; then step 2 again:
 
 ```bash
 tofu apply $(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])?$' | sed 's/^/-target=/')
+# step 2's loop
 tofu destroy
 ```
 

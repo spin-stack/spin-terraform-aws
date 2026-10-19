@@ -140,7 +140,7 @@ variable "proxy_instance_type" {
 }
 
 variable "decommission" {
-  description = "Set to true, and applied, before destroying the installation: its buckets lose the policies that refuse every object write from outside the VPC - the destroy runs from outside it - and a destroy empties every bucket, data included, lifting legal holds and bypassing the GOVERNANCE retention. Never set on an installation that is to keep its data."
+  description = "Set to true, and applied, before destroying the installation: its buckets lose the policies that refuse every object write from outside the VPC - the destroy runs from outside it - and a destroy empties every bucket, data included, bypassing the GOVERNANCE retention once the legal holds are lifted (README.md, \"Removing an installation\"). Never set on an installation that is to keep its data."
   type        = bool
   default     = false
   nullable    = false
