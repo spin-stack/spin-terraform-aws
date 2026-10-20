@@ -8,7 +8,7 @@
 # Versioned, so a document an apply replaced can be read back; nothing is under Object Lock, as
 # what is here is the apply's to write again.
 
-# No access log, as the volumes'.
+# No access log: its one writer is the apply, its readers each a role's own machines.
 #trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "documents" {
   bucket = local.documents_bucket

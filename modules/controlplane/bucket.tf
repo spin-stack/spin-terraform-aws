@@ -4,9 +4,6 @@
 # every write to the bucket's configuration (iam.tf, boundary.tf), because one able to write the
 # lifecycle could expire every volume in it without touching an object.
 
-# No access log: another bucket for every request a host makes, where CloudTrail's data events are
-# the account's to turn on for the buckets it wants them for.
-#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "volumes" {
   bucket              = "${local.name}-volumes-${local.account}-${local.region}"
   object_lock_enabled = true
@@ -149,4 +146,22 @@ resource "aws_s3_bucket_policy" "volumes" {
   bucket     = aws_s3_bucket.volumes.id
   policy     = data.aws_iam_policy_document.bucket.json
   depends_on = [aws_s3_bucket_public_access_block.volumes]
+}
+
+# Every request to the bucket, by whom, into the logs bucket (logs_bucket.tf). A host's credential
+# writes only its own subtree, and the control plane stops minting one for a host that left - but
+# what it was given lasts up to fifteen minutes, and a host that writes with it after it left is
+# seen nowhere else: its HEAD is passed over (spin's unadmitted_heads_total), and this is where its
+# requests are. CloudTrail's data events would say the same at a charge per request; S3's delivery
+# is free, and what it costs is the logs' bytes, which expire (logs_bucket.tf).
+resource "aws_s3_bucket_logging" "volumes" {
+  bucket        = aws_s3_bucket.volumes.id
+  target_bucket = aws_s3_bucket.logs.id
+  target_prefix = local.volumes_access_log_prefix
+  target_object_key_format {
+    partitioned_prefix {
+      partition_date_source = "EventTime"
+    }
+  }
+  depends_on = [aws_s3_bucket_policy.logs]
 }

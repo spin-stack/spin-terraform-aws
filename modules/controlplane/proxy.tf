@@ -120,7 +120,7 @@ resource "aws_eip" "proxy" {
 # Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock -
 # a certificate is replaced every sixty days and an old one is worth nothing. Reached, like the
 # volumes' bucket, only through the VPC's endpoint.
-# No access log, as the volumes'.
+# No access log: the proxy's role alone reaches it, unlike the volumes' (bucket.tf).
 #trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "certificates" {
   bucket        = "${local.name}-proxy-${local.account}-${local.region}"
