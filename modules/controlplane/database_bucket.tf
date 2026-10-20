@@ -19,7 +19,7 @@ locals {
   database_lock_days = var.database_lock_days
 }
 
-# No access log, as the volumes'.
+# No access log: the control plane's role alone reaches it, unlike the volumes' (bucket.tf).
 #trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "database" {
   bucket              = "${local.name}-database-${local.account}-${local.region}"

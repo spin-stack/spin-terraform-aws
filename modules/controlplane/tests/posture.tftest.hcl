@@ -733,10 +733,24 @@ run "the_logs_bucket" {
     s.effect == "Deny" && anytrue([for c in s.condition : c.variable == "aws:SecureTransport"])])
     error_message = "the logs bucket answers without TLS"
   }
-  # A lifecycle deleting under the store would leave its metastore naming splits that are gone.
+  # A lifecycle deleting under the store would leave its metastore naming splits that are gone; the
+  # volumes' access log is the one prefix that expires.
   assert {
-    condition     = alltrue([for r in aws_s3_bucket_lifecycle_configuration.logs.rule : length(r.expiration) == 0])
+    condition = alltrue([for r in aws_s3_bucket_lifecycle_configuration.logs.rule :
+    length(r.expiration) == 0 || (length(r.filter) == 1 && r.filter[0].prefix == "s3-access/volumes/")])
     error_message = "a lifecycle rule expires what the store's retention decides"
+  }
+  assert {
+    condition     = aws_s3_bucket_logging.volumes.target_bucket == aws_s3_bucket.logs.id && aws_s3_bucket_logging.volumes.target_prefix == "s3-access/volumes/"
+    error_message = "the volumes' requests are not logged into the logs bucket"
+  }
+  # S3's delivery is the one writer from outside the VPC: for the volumes' log alone.
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.logs_bucket.statement :
+      s.effect != "Allow" || (s.actions == toset(["s3:PutObject"]) &&
+        s.resources == toset(["arn:aws:s3:::spin-logs-123456789012-us-east-2/s3-access/volumes/*"]) &&
+    anytrue([for c in s.condition : c.variable == "aws:SourceArn" && c.values == tolist([aws_s3_bucket.volumes.arn])]))])
+    error_message = "the logs bucket lets a writer in other than the volumes' access log"
   }
 }
 

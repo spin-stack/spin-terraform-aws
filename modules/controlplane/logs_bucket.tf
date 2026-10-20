@@ -1,17 +1,25 @@
 # The installation's logs, traces and metrics: the stores the leading control plane's machine runs
 # keep them here - Quickwit its indexes and its metastore (spin's internal/logstore), and the metric
 # store its backups under metrics/, a prefix per backup of which spin keeps the last three
-# (internal/metricstore). A bucket of its own and not a prefix of the volumes': what is in it has
-# another owner, another retention and another reader, and nothing in it needs the volumes' Object
-# Lock.
+# (internal/metricstore) - and S3's access log of the volumes' bucket under s3-access/volumes/
+# (bucket.tf). A bucket of its own and not a prefix of the volumes': what is in it has another
+# owner, another retention and another reader, and nothing in it needs the volumes' Object Lock,
+# which S3 refuses to deliver an access log into anyway.
 #
 # No versioning: Quickwit rewrites its metastore in place, and the metric store's backups are
 # removed as newer ones complete; every old copy kept would be paid for and never read. No
-# expiration rule either: retention is the stores', and a rule deleting under Quickwit would leave
-# its metastore naming splits that are gone. What a lifecycle does do here is clear uploads a
-# machine abandoned halfway.
+# expiration rule for the stores: retention is theirs, and a rule deleting under Quickwit would
+# leave its metastore naming splits that are gone. The access log is nobody's store, so its prefix
+# expires; and the lifecycle clears uploads a machine abandoned halfway.
 
-# Unversioned on purpose (above); no access log, as the volumes'.
+locals {
+  volumes_access_log_prefix = "s3-access/volumes/"
+  # Long enough to look back past a revoked host's last credential on a report that came late;
+  # every request a host makes is a line, so it is not kept for ever.
+  volumes_access_log_days = 90
+}
+
+# Unversioned on purpose (above); its own access log would be a log of S3 writing this one.
 #trivy:ignore:AWS-0090
 #trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "logs" {
@@ -59,10 +67,21 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
       days_after_initiation = 7
     }
   }
+  rule {
+    id     = "volumes-access-log"
+    status = "Enabled"
+    filter {
+      prefix = local.volumes_access_log_prefix
+    }
+    expiration {
+      days = local.volumes_access_log_days
+    }
+  }
 }
 
 data "aws_iam_policy_document" "logs_bucket" {
-  # As the volumes' bucket: objects only through the VPC's endpoint, and TLS always.
+  # As the volumes' bucket: objects only through the VPC's endpoint, and TLS always. S3's log
+  # delivery is the one writer from outside the VPC, and only into the access log's prefix.
   statement {
     sid     = "ObjectsOnlyFromTheVPC"
     effect  = "Deny"
@@ -76,6 +95,33 @@ data "aws_iam_policy_document" "logs_bucket" {
       test     = "StringNotEquals"
       variable = "aws:SourceVpce"
       values   = [aws_vpc_endpoint.s3.id]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:PrincipalServiceName"
+      values   = ["logging.s3.amazonaws.com"]
+    }
+  }
+  statement {
+    sid       = "VolumesAccessLogDelivery"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.logs.arn}/${local.volumes_access_log_prefix}*"]
+    principals {
+      type        = "Service"
+      identifiers = ["logging.s3.amazonaws.com"]
+    }
+    # Only the volumes' bucket's log, in this account: another bucket naming this one as its
+    # target is refused.
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = [aws_s3_bucket.volumes.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.account]
     }
   }
   statement {
