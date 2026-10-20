@@ -253,9 +253,21 @@ data "aws_iam_policy_document" "runner_scope" {
     "s3:ListBucket"]
     resources = [aws_s3_bucket.volumes.arn]
   }
+  # The layers and the volumes. The session policy a host's credential is minted under (spin's
+  # bucketpolicy.For) narrows the volumes to what it writes of each: its own subtree,
+  # volumes/*/hosts/<host>/*, which names the host and no volume.
   statement {
     actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"]
     resources = ["${aws_s3_bucket.volumes.arn}/layers/*", "${aws_s3_bucket.volumes.arn}/volumes/*"]
+  }
+  # A volume's grant and its descriptor are the control plane's: the grant is the fence a restore
+  # holds every HEAD to, and the descriptor names the volume's key. The session policy denies them
+  # too; denied here as well, so neither policy alone is what keeps them.
+  statement {
+    sid       = "NotAGrantNorADescriptor"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.volumes.arn}/volumes/*/epoch", "${aws_s3_bucket.volumes.arn}/volumes/*/descriptor.json"]
   }
   # Who wrote a volume's HEAD: a writer's record, read to hold the HEAD's signature to before a
   # restore believes it - at its one version (spin's writer.Get), so GetObjectVersion. Written by

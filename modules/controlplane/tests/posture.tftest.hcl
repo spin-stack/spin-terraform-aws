@@ -1121,7 +1121,7 @@ run "a_volumes_signed_history_is_erased_by_nobody" {
 }
 
 # A runner's credential is this role narrowed by the session policy spin asks it for (spin's
-# internal/storage/bucketpolicy: For, and ForVolume), and a session grants only what both do: an
+# internal/storage/bucketpolicy.For), and a session grants only what both do: an
 # action the session asks and the role lacks is a 403 at its first use, which no plan shows - a
 # writer's record read at its version stopped the first workspace of a fresh install. The table is
 # what those two functions ask, resource by resource; one of them changing is a row here.
@@ -1141,6 +1141,15 @@ run "a_runners_role_grants_what_its_session_asks" {
       ] : alltrue([for a in want.a : anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
     contains(s.actions, a) && contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2${want.r}")])])])
     error_message = "a runner's session asks an action of the volumes' bucket its role does not grant"
+  }
+  # And what neither may grant: a volume's grant and its descriptor are the control plane's, denied
+  # in the role as in the session, so a widened Allow in one does not reach them.
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
+      s.effect == "Deny" && contains(s.actions, "s3:PutObject") &&
+      contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/volumes/*/epoch") &&
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/volumes/*/descriptor.json")])
+    error_message = "a runner's role does not deny writing a volume's grant and descriptor"
   }
 }
 
