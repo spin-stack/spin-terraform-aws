@@ -1288,10 +1288,12 @@ run "a_teams_secret_is_read_only_as_the_team" {
     error_message = "the team-secrets role can be assumed by another, or without a team, or with other tags"
   }
   assert {
-    condition = alltrue([for s in data.aws_iam_policy_document.team_secrets.statement :
-      toset(s.actions) == toset(["secretsmanager:GetSecretValue"]) &&
-    anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "secretsmanager:ResourceTag/spin-team-id" && toset(c.values) == toset(["$${aws:PrincipalTag/spin-team-id}"])])])
-    error_message = "a team's session reads a secret not tagged with its team, or does more than read"
+    condition = length(data.aws_iam_policy_document.team_secrets.statement) == 2 && alltrue([for s in data.aws_iam_policy_document.team_secrets.statement :
+      (toset(s.actions) == toset(["secretsmanager:GetSecretValue"]) &&
+      anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "secretsmanager:ResourceTag/spin-team-id" && toset(c.values) == toset(["$${aws:PrincipalTag/spin-team-id}"])])) ||
+      (toset(s.actions) == toset(["ssm:GetParameter"]) &&
+    anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "ssm:ResourceTag/spin-team-id" && toset(c.values) == toset(["$${aws:PrincipalTag/spin-team-id}"])]))])
+    error_message = "a team's session reads a secret or a parameter not tagged with its team, or does more than read"
   }
   assert {
     condition     = local.installation.settings.team_secrets_role == "arn:aws:iam::123456789012:role/spin-us-east-2-team-secrets"
