@@ -33,8 +33,10 @@ data "aws_iam_policy_document" "team_secrets_trust" {
   }
 }
 
-# A secret of the account's, read, and only one tagged with the session's team. A secret under a
-# customer-managed key is also that key's policy to open.
+# A secret of the account's, read, and only one tagged with the session's team; a parameter the
+# same, which costs nothing where a secret is billed by the month and the read. Either under a
+# customer-managed key is also that key's policy to open; a SecureString under aws/ssm opens on
+# the read alone.
 data "aws_iam_policy_document" "team_secrets" {
   statement {
     sid       = "TheTeamsOwnSecrets"
@@ -43,6 +45,16 @@ data "aws_iam_policy_document" "team_secrets" {
     condition {
       test     = "StringEquals"
       variable = "secretsmanager:ResourceTag/spin-team-id"
+      values   = ["$${aws:PrincipalTag/spin-team-id}"]
+    }
+  }
+  statement {
+    sid       = "TheTeamsOwnParameters"
+    actions   = ["ssm:GetParameter"]
+    resources = ["${local.arn}:ssm:*:${local.account}:parameter/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:ResourceTag/spin-team-id"
       values   = ["$${aws:PrincipalTag/spin-team-id}"]
     }
   }
