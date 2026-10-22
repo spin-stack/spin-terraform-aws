@@ -349,7 +349,7 @@ first sign-in and this removal - in an account of its own, and says what that ac
   it opens nothing. Bucket-level calls stay open to the account, so this module can still be
   applied from outside the VPC.
 - **The control plane's role cannot lift the lock.** It may not bypass a retention, rewrite
-  the bucket's policy or change its Object Lock rule. Spin writes the bucket's lifecycle rules
+  the bucket's policy or change its Object Lock rule. Spinbox writes the bucket's lifecycle rules
   itself, so this module declares none.
 - **The control plane sizes the group, not a schedule or a metric.** It is the one that knows a
   workspace is waiting for a host, and that the last one stopped an hour ago. The first create
