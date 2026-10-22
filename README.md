@@ -1,6 +1,6 @@
-# spin on AWS
+# Spinbox on AWS
 
-A [spin](https://github.com/spin-stack/spin) installation on AWS, as one module:
+A [Spinbox](https://github.com/spin-stack/spin) installation on AWS, as one module:
 
 ![An installation: the proxy, the control plane and the runners in one VPC, and what is kept beside it](docs/diagrams/installation.svg)
 
