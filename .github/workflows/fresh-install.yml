@@ -62,57 +62,20 @@ jobs:
       - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
 
       - name: Tools
-        run: |
-          task tools:tofu tools:cosign tools:oras
-          echo "${GITHUB_WORKSPACE}/.tools/bin" >> "${GITHUB_PATH}"
+        run: task fresh-install:tools
 
       # The newest release this commit can install in the region: an image of every role and its
       # measurements. None is a failure: main installs nothing. spin-stack/ami's release publishes
       # in the regions its release.yml names, which must include this one.
       - name: Release
-        run: |
-          set -euo pipefail
-          release=$(jq -r --arg r "${AWS_REGION}" --slurpfile m measurements.json '[to_entries[] | .key as $v | .value as $img
-            | select(all("control-plane", "runner", "proxy"; $img[.][$r] and ($m[0][$v][.] // {} | length > 0))) | $v] | sort | last // empty' images.json)
-          if [ -z "${release}" ]; then
-            echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"; exit 1
-          fi
-          echo "TF_VAR_spin_version=${release}" >> "${GITHUB_ENV}"
+        run: task fresh-install -- release
 
       # The CLI of the release installed, from its public package, checked as docs/releases.md in
       # spin checks a file: signed by release.yml at main, and its provenance naming this release.
       # Before anything is made, so a release whose CLI does not check costs no installation.
       - name: CLI
         id: cli
-        env:
-          IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/heads/main
-          ISSUER: https://token.actions.githubusercontent.com
-        run: |
-          set -euo pipefail
-          dir="${RUNNER_TEMP}/cli"
-          oras pull --no-tty -o "${dir}" "ghcr.io/spin-stack/spin-release:${TF_VAR_spin_version}-spin-linux-amd64"
-          cosign verify-blob --bundle "${dir}/spin-linux-amd64.sigstore.json" --certificate-identity "${IDENTITY}" \
-            --certificate-oidc-issuer "${ISSUER}" "${dir}/spin-linux-amd64"
-          cosign verify-blob-attestation --type slsaprovenance1 --bundle "${dir}/spin-linux-amd64.provenance.sigstore.json" \
-            --digest "$(sha256sum "${dir}/spin-linux-amd64" | cut -d' ' -f1)" --digestAlg sha256 \
-            --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}"
-          built=$(jq -r .dsseEnvelope.payload "${dir}/spin-linux-amd64.provenance.sigstore.json" | base64 -d |
-            jq -r .predicate.buildDefinition.externalParameters.version)
-          if [ "${built}" != "${TF_VAR_spin_version}" ]; then
-            echo "::error::spin-linux-amd64 of ${TF_VAR_spin_version} says it was built as ${built}"; exit 1
-          fi
-          mkdir -p "${RUNNER_TEMP}/bin"
-          install -m 755 "${dir}/spin-linux-amd64" "${RUNNER_TEMP}/bin/spin"
-          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
-          # Only while the newest release images.json names predates `spin smoke` (v20261015.01 did,
-          # when this was written): an older CLI's `smoke --help` is its root's help, exit 0. Once
-          # one that has it is merged, a CLI without it is a failure and this goes.
-          usage=$("${RUNNER_TEMP}/bin/spin" smoke --help)
-          if grep -q '^  spin smoke ' <<< "${usage}"; then
-            echo "smoke=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::warning::spin ${TF_VAR_spin_version} has no 'spin smoke': the installation is signed in to and not used"
-          fi
+        run: task fresh-install -- cli
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -123,98 +86,42 @@ jobs:
       - name: Domain
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: |
-          set -euo pipefail
-          zone=$(aws route53 get-hosted-zone --id "${ZONE_ID}" --query HostedZone.Name --output text)
-          echo "TF_VAR_domain=r${GITHUB_RUN_NUMBER}.qa.${zone%.}" >> "${GITHUB_ENV}"
+        run: task fresh-install -- domain
 
       # What a run before this one left - cancelled, or its removal refused - removed before anything
       # is made, by the removal that runs at the end: bootstrap's apply refuses a bucket or an alias
       # that is already there. One that cannot finish stops the run with nothing of its own made.
       - name: Sweep
         timeout-minutes: 60
-        run: bash hack/fresh-install-remove.sh
+        run: task fresh-install:remove
 
       - name: Bootstrap
         id: bootstrap
-        working-directory: bootstrap
-        run: |
-          tofu init -lockfile=readonly
-          tofu apply -auto-approve
+        run: task fresh-install -- bootstrap
 
       - name: Install
         id: install
-        working-directory: examples/complete
-        run: |
-          $(tofu -chdir=../../bootstrap output -raw init) -lockfile=readonly
-          tofu apply -auto-approve
+        run: task fresh-install -- installation
 
       - name: Delegate the domain
         id: delegate
-        working-directory: examples/complete
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: |
-          set -euo pipefail
-          jq -n --arg d "${TF_VAR_domain}" --argjson ns "$(tofu output -json name_servers)" \
-            '{Changes: [{Action: "UPSERT", ResourceRecordSet: {Name: $d, Type: "NS", TTL: 60, ResourceRecords: [$ns[] | {Value: .}]}}]}' \
-            > "${RUNNER_TEMP}/delegation.json"
-          aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" --change-batch "file://${RUNNER_TEMP}/delegation.json"
+        run: task fresh-install -- delegate
 
       # The launch hook puts a machine in service only once its boot says it is up. A first install
       # has no refresh, so update_status has nothing to say until a second apply.
       - name: Wait for the machines
-        working-directory: examples/complete
         timeout-minutes: 30
-        run: |
-          set -euo pipefail
-          for group in $(tofu output -json update_status | jq -r 'keys[]'); do
-            until aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "${group}" \
-              --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService']" --output text | grep -q .; do
-              sleep 30
-            done
-            echo "${group} is in service"
-          done
+        run: task fresh-install -- wait-machines
 
       # The first sign-in as a person makes it: the one-time password from SSM, over the proxy's
       # certificate, to the control plane. Retried while the delegation spreads and the certificate
       # is issued; curl refuses until there is a valid one. The session is kept, in a file, for the
       # smoke: a session is the person, every procedure an API key's scopes would name included.
       - name: First sign-in
-        working-directory: examples/complete
         timeout-minutes: 30
-        run: |
-          set -euo pipefail
-          umask 077
-          sign_in=$(tofu output -json first_sign_in)
-          password=$(eval "$(jq -r .password <<< "${sign_in}")")
-          echo "::add-mask::${password}"
-          jq -n --arg e "$(jq -r .user <<< "${sign_in}")" --arg p "${password}" '{email: $e, password: $p}' > "${RUNNER_TEMP}/login.json"
-          endpoint=$(jq -r .url <<< "${sign_in}")
-          until curl -fsS -o "${RUNNER_TEMP}/session.json" -H 'Content-Type: application/json' --data-binary "@${RUNNER_TEMP}/login.json" \
-            "${endpoint}/spin.v1.SetupService/PasswordLogin"; do
-            sleep 30
-          done
-          token=$(jq -r '.sessionToken // empty' "${RUNNER_TEMP}/session.json")
-          [ -n "${token}" ]
-          echo "::add-mask::${token}"
-          printf '%s' "${token}" > "${RUNNER_TEMP}/session-token"
-          echo "SPIN_ENDPOINT=${endpoint}" >> "${GITHUB_ENV}"
-          force=$(jq -r '.forcePasswordChange // false' "${RUNNER_TEMP}/session.json")
-          echo "signed in; force_password_change: ${force}"
-          # A session opened with the one-time password may only change it (whileChangingThePassword
-          # in spin), so it is changed, to one nobody needs again: the session stays, the others go.
-          # An upper, a lower and a digit, as the control plane's strength check asks.
-          if [ "${force}" = true ]; then
-            fresh="Aa1$(openssl rand -hex 24)"
-            echo "::add-mask::${fresh}"
-            jq -n --arg c "${password}" --arg n "${fresh}" '{currentPassword: $c, newPassword: $n}' > "${RUNNER_TEMP}/change.json"
-            printf 'Authorization: Bearer %s\n' "${token}" > "${RUNNER_TEMP}/bearer"
-            curl -fsS -o /dev/null -H 'Content-Type: application/json' -H "@${RUNNER_TEMP}/bearer" \
-              --data-binary "@${RUNNER_TEMP}/change.json" "${endpoint}/spin.v1.SetupService/ChangePassword"
-            rm "${RUNNER_TEMP}/change.json" "${RUNNER_TEMP}/bearer"
-          fi
-          rm "${RUNNER_TEMP}/login.json" "${RUNNER_TEMP}/session.json"
+        run: task fresh-install -- sign-in
 
       # The contract as a person meets it, with a key of their own: registered, their keyring signed
       # with it, and `spin smoke` - a workspace made, run in, kept from the cloud's metadata,
@@ -223,36 +130,11 @@ jobs:
       - name: Smoke
         if: steps.cli.outputs.smoke == 'true'
         timeout-minutes: 30
-        run: |
-          set -euo pipefail
-          export HOME="${RUNNER_TEMP}/spin-home"
-          SPIN_TOKEN=$(cat "${RUNNER_TEMP}/session-token")
-          export SPIN_TOKEN
-          mkdir -m 700 "${HOME}" "${HOME}/.ssh"
-          ssh-keygen -q -t ed25519 -N '' -C fresh-install -f "${HOME}/.ssh/id_ed25519"
-          spin ssh-key add fresh-install "${HOME}/.ssh/id_ed25519.pub"
-          spin sign --yes
-          status=0
-          spin -o json smoke --timeout 20m > "${RUNNER_TEMP}/smoke.json" || status=$?
-          jq . "${RUNNER_TEMP}/smoke.json" || cat "${RUNNER_TEMP}/smoke.json"
-          if [ "${status}" -ne 0 ]; then
-            failed=$(jq -r '[.steps[]? | select(.error) | .step] | join(", ")' "${RUNNER_TEMP}/smoke.json" 2> /dev/null || true)
-            case "${status}" in
-              69) why="the installation did not answer" ;;
-              70) why="a scenario failed: ${failed}" ;;
-              77) why="the session was refused" ;;
-              *) why="it could not run as configured" ;;
-            esac
-            echo "::error::spin smoke exited ${status}: ${why}"
-            exit "${status}"
-          fi
+        run: task fresh-install -- smoke
 
       - name: Why
         if: failure() && steps.install.outcome != 'skipped'
-        working-directory: examples/complete
-        run: |
-          tofu output -json boot_log | jq -r '.[] | rtrimstr(" --follow")' | while read -r cmd; do eval "${cmd}" || true; done
-          tofu output -json update_status | jq -r '.[]' | while read -r cmd; do eval "${cmd}" || true; done
+        run: task fresh-install -- why
 
       # Everything below runs whatever happened above, on credentials of its own: the ones above may
       # have run out while a step waited.
@@ -267,9 +149,7 @@ jobs:
         if: always() && steps.delegate.outcome == 'success'
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: |
-          jq '.Changes[0].Action = "DELETE"' "${RUNNER_TEMP}/delegation.json" > "${RUNNER_TEMP}/undelegation.json"
-          aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" --change-batch "file://${RUNNER_TEMP}/undelegation.json"
+        run: task fresh-install -- undelegate
 
       # The removal the run began with (Sweep), on what this one made: the installation as the
       # README removes it, what still carries its tag, and bootstrap once the installation's state
@@ -277,4 +157,4 @@ jobs:
       - name: Remove everything
         if: always() && steps.bootstrap.outcome != 'skipped'
         timeout-minutes: 60
-        run: bash hack/fresh-install-remove.sh
+        run: task fresh-install:remove

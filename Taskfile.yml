@@ -27,6 +27,8 @@ vars:
   ORAS_SHA256: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer modules/terminal
+  # spin-stack/go-tools' gates, by commit: this repository has no go.mod to pin them as tools.
+  GO_TOOLS_VERSION: 8cf54b031efe905bbe67262927a420bb9e84dcf8
   # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
   # size. Its release's own build rather than its image: the image came from Docker Hub, which
   # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
@@ -212,6 +214,10 @@ tasks:
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
       # The pinned shellcheck, named: given none, actionlint takes whichever is on PATH, or skips.
       - "{{.TOOLS_BIN}}/actionlint -shellcheck={{.TOOLS_BIN}}/shellcheck"
+      # Every workflow step one task, so what CI does is what a task here does; and no package
+      # installed but by pnpm through Socket's firewall.
+      - go run github.com/spin-stack/go-tools/cmd/taskgate@{{.GO_TOOLS_VERSION}}
+      - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} check
       - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete, examples/minimal, bootstrap]
@@ -231,3 +237,31 @@ tasks:
       # against its plan, with no account.
       - for: [modules/controlplane, modules/runners, modules/identity-issuer, modules/terminal]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"
+
+  # The fresh install's steps (.github/workflows/fresh-install.yml), each against the account the
+  # run assumed: run here, they need its credentials and the variables the workflow sets.
+  fresh-install:tools:
+    desc: Install what the fresh install runs, and put it on the run's PATH.
+    cmds:
+      - task: tools:tofu
+      - task: tools:cosign
+      - task: tools:oras
+      - echo '{{.TOOLS_BIN}}' >> "${GITHUB_PATH:-/dev/stdout}"
+
+  fresh-install:
+    desc: >-
+      Run one step of the fresh install: task fresh-install -- release|cli|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why.
+    cmds:
+      - bash hack/fresh-install.sh {{.CLI_ARGS}}
+
+  fresh-install:remove:
+    desc: Remove the fresh install and its bootstrap, whatever a run left of them.
+    cmds:
+      - bash hack/fresh-install-remove.sh
+
+  propose:
+    desc: >-
+      Propose this commit to a deployment: a pull request in REPOSITORY moving it to this ref and
+      the newest release in REGION, as the app GH_TOKEN and APP_SLUG name.
+    cmds:
+      - bash hack/propose.sh
