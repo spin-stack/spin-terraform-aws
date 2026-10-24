@@ -259,6 +259,14 @@ tasks:
     cmds:
       - bash hack/fresh-install-remove.sh
 
+  release:
+    desc: >-
+      Cut this module's next release: GITHUB_SHA, once Gate passed on it, tagged v<YYYYMMDD>.<NN>,
+      the next one today, with its GitHub release in GITHUB_REPOSITORY, as GH_TOKEN
+      (.github/workflows/release.yml).
+    cmds:
+      - bash hack/release.sh
+
   propose:
     desc: >-
       Propose this commit to a deployment: a pull request in REPOSITORY moving it to this ref and
