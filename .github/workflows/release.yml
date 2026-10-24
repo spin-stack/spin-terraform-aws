@@ -1,0 +1,44 @@
+# This module's release, made from main and nothing else: dispatched there by a person, it names the
+# next v<YYYYMMDD>.<NN> today - as spin names its own - and makes it a tag on the commit with its
+# GitHub release, once Gate has passed on that commit. A release is what `?ref=` pins and what a
+# deployment on the release track (spin-stack/shipset's shipset.yaml) is proposed next: shipset
+# reads the newest release and dispatches propose.yml on its tag, so nothing here starts that. A
+# person decides when, and nothing else cuts one:
+#
+#   gh workflow run release.yml --ref main
+name: Release
+
+on:
+  workflow_dispatch:
+
+# One at a time: the version is named from the tags there are, so two at once would name the same.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  # The tag and the release.
+  contents: write
+  # Whether Gate passed on the commit.
+  checks: read
+
+jobs:
+  release:
+    name: Release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The release is made through the API with this run's token, so git needs none of it.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+
+      - name: Cut the next release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: task release
