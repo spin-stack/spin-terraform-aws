@@ -28,7 +28,7 @@ vars:
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners modules/identity-issuer modules/terminal
   # spin-stack/go-tools' gates, by commit: this repository has no go.mod to pin them as tools.
-  GO_TOOLS_VERSION: 8cf54b031efe905bbe67262927a420bb9e84dcf8
+  GO_TOOLS_VERSION: dfcf2c10f30b2b2c65cea37558cbf12881f8fde9
   # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
   # size. Its release's own build rather than its image: the image came from Docker Hub, which
   # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
