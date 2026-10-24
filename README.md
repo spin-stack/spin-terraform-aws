@@ -6,11 +6,15 @@ A [Spinbox](https://github.com/spin-stack/spin) installation on AWS, as one modu
 
 ```hcl
 module "spin" {
-  source       = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
-  spin_version = "v20260921.02"
+  source       = "github.com/spin-stack/spin-terraform-aws?ref=<release>"
+  spin_version = "v20261019.02"
   domain       = "example.com"
 }
 ```
+
+`<release>` is one of this module's releases, `v<YYYYMMDD>.<NN>` tags: the newest is the first
+on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases)
+(`gh release list -R spin-stack/spin-terraform-aws`). `spin_version` is a spin release.
 
 Every machine boots **Spin OS** of that release, one image per role - the control plane's, the
 runners' and the proxy's, each laid with that role's part of the release and signed by that role's
@@ -22,7 +26,7 @@ release with none in the installation's region is refused at plan, naming the re
 in, and `image_ids` names images of your own build instead, one per role.
 
 The root composes two modules, and each can be used on its own
-(`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<tag>`) where the root does
+(`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<release>`) where the root does
 not expose what an installation needs to decide:
 
 - **`modules/controlplane`** - the VPC, the buckets, the database's archive, the control plane's
@@ -89,26 +93,31 @@ ten minutes the first time) and where to look if it is not, and the first sign-i
 
 ## Updating
 
-Move the module's ref to a commit whose `images.json` has the new release in the installation's
-region, change `spin_version` in `terraform.tfvars` to it, then:
+<!-- BEGIN website:aws/update - spin-stack/website's refgen includes what is between these
+markers, verbatim, as its page on updating: this section is that page's one source. -->
+Move the module's ref to a release of spin-terraform-aws - or a commit - whose `images.json` has
+the new spin release in the installation's region, change `spin_version` in `terraform.tfvars` to
+it, then:
 
 ```bash
 tofu plan     # the image, the launch templates and the documents change, and nothing else
 tofu apply
 ```
 
-This repository has releases of its own, `v<YYYYMMDD>.<N>` tags a person cuts
-(`gh release create`): an installation that pins one (`?ref=v20260929.01`) gets an update when
-somebody decides this module - its shapes and the images its `images.json` has - is ready for it,
-not when main moves. main is what spin-stack's own installation, spinbox.dev, runs first.
+spin-terraform-aws has releases of its own, `v<YYYYMMDD>.<NN>` tags a person cuts from main
+(`gh workflow run release.yml --ref main`, which names the next one today):
+an installation that pins one (`?ref=v<YYYYMMDD>.<NN>`) gets an update when somebody decides this
+module - its shapes and the images its `images.json` has - is ready for it, not when main moves.
+The newest is the first on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases).
+main is what spin-stack's own installation, spinbox.dev, runs first.
 
 For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
 of it is a workflow run, with its log: spin-stack/shipset, which coordinates them, dispatches
 spin-stack/ami's release workflow for each spin release, which builds and publishes its image and
-opens the pull request that adds it to `images.json` here; shipset merges that once its checks
-pass, and dispatches `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names -
-on main for one that follows main, on the newest release's tag for one that follows the releases -
-which opens, or rewrites, the pull request there that moves both. A person merges that, and
+opens the pull request that adds it to spin-terraform-aws's `images.json`; shipset merges that
+once its checks pass, and dispatches spin-terraform-aws's `.github/workflows/propose.yml` for each
+deployment its `shipset.yaml` names - on main for one that follows main, on the newest release's
+tag for one that follows the releases - which opens, or rewrites, the pull request there that moves both. A person merges that, and
 applies.
 
 The control plane and the proxy are each replaced beside themselves. The old proxy serves until the
@@ -116,15 +125,20 @@ new one does. The control plane's database has one writer, so the old control pl
 the new one asks for it, then archives what it wrote and stops: the installation has no control
 plane until the new one has restored the database and started - seconds, which `spin` waits out
 for a read and a workspace does not notice. How it went is `tofu output update_status`:
-`Successful`; or `RollbackSuccessful` with the reason. A new control plane that failed before it
-asked for the database leaves the old one serving; one that failed after hands the name back, and
+`InProgress`, `Successful`, or `RollbackSuccessful` with the reason. A new control plane that
+failed before it asked for the database leaves the old one serving; one that failed after hands the name back, and
 the old machine's watch starts its control plane within a minute, which restores the database from
 the archive first - or takes the name back after fifteen minutes when the new machine died without
 handing it. `tofu output boot_log` - one command per role, since a role's machines are one stream prefix - says
 why the new one did not come up. Until the launch hook gives up on a new machine that never comes
 up, the refresh holds the group and an apply that changes it is refused; `tofu output update_abort`,
 by group, is the command that rolls it back now. A change to anything else a machine starts on -
-`installation_config`, the autoscaling settings - rolls out the same way.
+`installation_config`, the autoscaling settings, the control plane's or the proxy's instance
+type - rolls out the same way. A change to a machine's document alone reaches it when it next starts; to start one now:
+
+```bash
+aws autoscaling start-instance-refresh --auto-scaling-group-name <group>
+```
 
 A runner cannot take a release in place either - its root is read-only and verified - and how it
 gets one is `runner_rollout`. `idle`, the default, moves no workspace for it: the control plane
@@ -137,6 +151,7 @@ workspaces suspended to the bucket and resumed on another host.
 A release older than the one that last started the database refuses to start on it: going back
 past a change to the schema is a restore of the database from its archive to a point before it,
 not an update.
+<!-- END website:aws/update -->
 
 ## Operating it
 
@@ -175,6 +190,9 @@ checks against its own runners alone - where several share a region, leave it to
 
 ## Removing an installation
 
+<!-- BEGIN website:aws/remove - spin-stack/website's refgen includes what is between these
+markers, verbatim, as its page on removing an installation: this section is that page's one
+source. -->
 An installation keeps its data past a plain `tofu destroy`: the volumes, the database's archive
 and the logs are in buckets a destroy does not empty, and every bucket refuses object writes and
 deletes from outside the VPC - the root account's included, so they cannot be emptied from a
@@ -223,9 +241,12 @@ tofu apply $(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])
 tofu destroy
 ```
 
-The installation's state bucket and key (`bootstrap/`) are removed apart, after this.
-`.github/workflows/fresh-install.yml` runs all of it every week - bootstrap, an installation, its
-first sign-in and this removal - in an account of its own, and says what that account needs.
+What is left are the keys, scheduled for deletion in seven days. The state bucket and its key
+(`bootstrap/`) are every installation's in the account and region, and are removed apart, after
+the last of them. `.github/workflows/fresh-install.yml` in spin-terraform-aws runs all of it every
+week - bootstrap, an installation, its first sign-in and this removal - in an account of its own,
+and says what that account needs.
+<!-- END website:aws/remove -->
 
 ## What it decides, and why
 

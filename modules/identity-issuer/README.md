@@ -30,6 +30,9 @@ X.509-SVID chains to, which a service outside spin trusts in mutual TLS, and the
 are signed with. The CA is the control plane's, made once and kept in its bucket, so the
 `identity_documents` output fetches it before it writes the documents.
 
+`<release>` is the release of spin-terraform-aws the installation's own module pins, from
+[its releases](https://github.com/spin-stack/spin-terraform-aws/releases), newest first.
+
 CloudFront takes a certificate only from us-east-1, so the module is given a provider for it:
 
 ```hcl
@@ -39,7 +42,7 @@ provider "aws" {
 }
 
 module "identity_issuer" {
-  source    = "github.com/spin-stack/spin-terraform-aws//modules/identity-issuer?ref=<tag>"
+  source    = "github.com/spin-stack/spin-terraform-aws//modules/identity-issuer?ref=<release>"
   providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 
   name      = module.spin.controlplane.name

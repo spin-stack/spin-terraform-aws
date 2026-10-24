@@ -5,11 +5,12 @@
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
 #   (a release images.json has an image of in the region)
-#   tofu apply -var spin_version=v20260921.02 -var domain=spin.example.com
+#   tofu apply -var spin_version=v20261019.02 -var domain=spin.example.com
 #
-# From elsewhere, the source is this repository at a tag:
+# From elsewhere, the source is this repository at one of its releases (README.md says where they
+# are listed):
 #
-#   source = "github.com/spin-stack/spin-terraform-aws?ref=<tag>"
+#   source = "github.com/spin-stack/spin-terraform-aws?ref=<release>"
 #
 # This is also what `task lint` validates the modules through.
 
