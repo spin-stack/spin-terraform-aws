@@ -11,24 +11,28 @@ What it publishes is a spin release's signed `spin-term.tar.gz`, which `task ter
 against the signature the release's workflow made at its tag before it unpacks it:
 
 ```sh
-task term:fetch RELEASE=<tag> OUT=term
+task term:fetch RELEASE=<spin_version> OUT=term
 ```
 
-Point `files` at that directory and `release` at the tag: a plan refuses files of another release.
-Fetch the release the installation runs, so the terminal admits its hosts.
+Point `files` at that directory and `release` at the spin release it is: a plan refuses files of
+another release. Fetch the release the installation runs, its `spin_version`, so the terminal
+admits its hosts.
+
+`<release>` is the release of spin-terraform-aws the installation's own module pins, from
+[its releases](https://github.com/spin-stack/spin-terraform-aws/releases), newest first.
 
 CloudFront takes a certificate only from us-east-1, so the module is given a provider for it:
 
 ```hcl
 module "terminal" {
-  source    = "github.com/spin-stack/spin-terraform-aws//modules/terminal?ref=<tag>"
+  source    = "github.com/spin-stack/spin-terraform-aws//modules/terminal?ref=<release>"
   providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 
   name     = module.spin.controlplane.name
   iam_name = module.spin.controlplane.iam_name
   domain   = module.spin.controlplane.domain
   zone_id  = module.spin.controlplane.public_zone_id
-  release  = "<tag>"
+  release  = "<spin_version>"
   files    = "${path.module}/term"
 }
 ```
