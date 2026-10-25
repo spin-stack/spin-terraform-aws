@@ -31,6 +31,42 @@ variable "publish_regions" {
   default     = []
 }
 
+# Whether the images published here are public: anybody's account can start one, which is how an
+# installation is made from the site's instructions. AWS blocks public images by default, and lets
+# an account have five public images a region; a release is three (one a role) and spin-stack/ami
+# keeps a few releases public, so the quota is raised to public_image_quota. Being public costs
+# nothing: an account that starts one pays for its own instances.
+variable "public_images" {
+  description = "Whether the publish roles make their images public: unblocks public images and raises the quota in each publish region."
+  type        = bool
+  default     = false
+}
+
+variable "public_image_quota" {
+  description = "Public AMIs a region, when public_images: three a release, for the releases spin-stack/ami keeps public."
+  type        = number
+  default     = 15
+}
+
+locals {
+  public_regions = var.public_images && length(var.image_publishers) > 0 ? toset(coalescelist(var.publish_regions, [var.region])) : toset([])
+}
+
+resource "aws_ec2_image_block_public_access" "publish" {
+  for_each = local.public_regions
+  region   = each.key
+  state    = "unblocked"
+}
+
+# A request AWS grants; a destroy leaves the quota where it is.
+resource "aws_servicequotas_service_quota" "public_images" {
+  for_each     = local.public_regions
+  region       = each.key
+  service_code = "ec2"
+  quota_code   = "L-0E3CBAB9" # Public AMIs
+  value        = var.public_image_quota
+}
+
 # The Secure Boot key each role's image is signed with: three, so an instance's PCR7 says which role
 # it booted - a key the control plane's key policy, and later a join, can tell apart - and a runner's
 # image can never boot as a control plane's. RSA-2048 signing PKCS #1 v1.5 over SHA-256, the one
@@ -135,6 +171,16 @@ data "aws_iam_policy_document" "publish" {
     sid       = "RegisterTheImage"
     actions   = ["ec2:RegisterImage"]
     resources = concat(local.images, local.snapshots)
+  }
+  # Who may start an image: everybody, for a release spin-stack/ami makes public, and nobody else
+  # again for one it no longer keeps public.
+  dynamic "statement" {
+    for_each = var.public_images ? [1] : []
+    content {
+      sid       = "ShareTheImage"
+      actions   = ["ec2:ModifyImageAttribute", "ec2:DescribeImageAttribute"]
+      resources = local.images
+    }
   }
   # What a failed publish leaves: a snapshot its build tagged, and no other.
   statement {
