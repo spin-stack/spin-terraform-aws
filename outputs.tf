@@ -110,7 +110,7 @@ output "update_status" {
 # other is the refresh's. It waits on the launch hook until its heartbeat times out; abandoning it
 # ends that wait now, and the rollback, asked for first, keeps the refresh from launching another.
 output "update_abort" {
-  description = "After an apply whose new machine will not come up: the command that stops waiting for it - rolls the refresh back and abandons the launch the hook still holds - so the next apply can change the group (task update:abort)."
+  description = "After an apply whose new machine will not come up: the command that stops waiting for it - rolls the refresh back and abandons the launch the hook still holds - so the next apply can change the group. One command per group."
   value = {
     for g in [module.controlplane.controlplane_group, module.controlplane.proxy_group] :
     g => join(" ", [
