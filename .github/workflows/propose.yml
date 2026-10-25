@@ -47,7 +47,7 @@ jobs:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app
         with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
           private-key: ${{ secrets.RELEASE_APP_KEY }}
           owner: spin-stack
           repositories: ${{ inputs.repository }}
