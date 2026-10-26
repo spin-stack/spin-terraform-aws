@@ -37,6 +37,7 @@ module "runners" {
 
   controlplane   = module.controlplane
   instance_types = var.runner_instance_types
+  vcpus          = var.runner_vcpus
   spot           = var.runner_spot
   max_hosts      = var.max_runners
   rollout        = var.runner_rollout

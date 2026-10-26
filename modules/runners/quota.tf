@@ -2,19 +2,17 @@
 # than one runner of 48 vCPUs, and one runner of 32 beside nothing else. A group asked for a
 # machine the quota does not cover answers with MaxSpotInstanceCountExceeded, the workspace waits
 # for a host that never comes, and nothing says why. So the quota is read at plan, the increase
-# that covers max_hosts of the largest type is asked of AWS by this apply (request_quota), and
+# that covers max_hosts of the largest runner is asked of AWS by this apply (request_quota), and
 # the plan says so while it is pending.
-
-data "aws_ec2_instance_type" "runner" {
-  for_each      = toset(var.instance_types)
-  instance_type = each.value
-}
+#
+# The quota is the account's, not the installation's: anything else in the account and region that
+# runs the same kind of machine - a CI fleet - draws on it too, and none of that is counted here.
 
 locals {
   # Standard instances' quotas are in vCPUs: "All Standard (A, C, D, H, I, M, R, T, Z) Spot
   # Instance Requests", and the running on-demand one.
   quota_code = var.spot ? "L-34B43A08" : "L-1216C47A"
-  largest    = max([for t in data.aws_ec2_instance_type.runner : t.default_vcpus]...)
+  largest    = var.vcpus.max
   # max_hosts of the largest, and, on-demand, the control plane's and the proxy's machines, each
   # of which is two while an update replaces it.
   vcpus_needed = var.max_hosts * local.largest + (var.spot ? 0 : var.controlplane.standard_vcpus)

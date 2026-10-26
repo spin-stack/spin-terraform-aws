@@ -184,6 +184,8 @@ resource "aws_autoscaling_group" "runner" {
       # From the pools least likely to be reclaimed, and of those the cheapest: a runner reclaimed
       # is every workspace on it suspended, which costs more than any difference in price.
       spot_allocation_strategy = "price-capacity-optimized"
+      # The one a group whose types are attributes takes.
+      on_demand_allocation_strategy = "lowest-price"
     }
     launch_template {
       launch_template_specification {
@@ -192,10 +194,24 @@ resource "aws_autoscaling_group" "runner" {
         # rolling, the change that starts the refresh below, which "$Latest" never is.
         version = aws_launch_template.runner.latest_version
       }
-      dynamic "override" {
-        for_each = var.instance_types
-        content {
-          instance_type = override.value
+      # Attributes, not a list of types: every type and size they match is a pool, in every zone.
+      # Five types by name scored 1 of 10 for spot in three of us-west-2's zones (#65).
+      override {
+        instance_requirements {
+          allowed_instance_types = var.instance_types
+          vcpu_count {
+            min = var.vcpus.min
+            max = var.vcpus.max
+          }
+          # 2 GiB a vCPU, the least the compute families have: the families allowed decide the rest.
+          memory_mib {
+            min = var.vcpus.min * 2048
+          }
+          # The data goes on the instance store unless it has a volume of its own.
+          local_storage = var.data_volume_gb > 0 ? "included" : "required"
+          # A .metal type has KVM by being metal, and refuses the nested virtualization option.
+          bare_metal            = var.nested_virtualization ? "excluded" : "required"
+          burstable_performance = "excluded"
         }
       }
     }
