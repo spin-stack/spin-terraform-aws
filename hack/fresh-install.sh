@@ -59,6 +59,35 @@ cli() {
   fi
 }
 
+# What each run of the last five weeks cost, by its spin:run tag, into the job's summary. Cost
+# Explorer answers a day late, and only by a tag the account activated (fresh-install.yml says
+# how); what carries no tag - data transfer, some API calls - is in no run's line.
+cost() {
+  set -euo pipefail
+  local runs
+  aws ce get-cost-and-usage --time-period "Start=$(date -u -d '-35 days' +%F),End=$(date -u +%F)" \
+    --granularity MONTHLY --metrics UnblendedCost \
+    --filter '{"Tags": {"Key": "spin:purpose", "Values": ["fresh-install"]}}' \
+    --group-by Type=TAG,Key=spin:run > "${RUNNER_TEMP}/cost.json"
+  # A month is a period of its own, so a run is summed across the two a window may cross.
+  runs=$(jq -r --arg repo "${GITHUB_REPOSITORY:-spin-stack/spin-terraform-aws}" '
+    [.ResultsByTime[].Groups[] | {run: (.Keys[0] | sub("^spin:run\\$"; "")), usd: (.Metrics.UnblendedCost.Amount | tonumber)}]
+    | group_by(.run) | map({run: .[0].run, usd: (map(.usd) | add)}) | sort_by(.run) | .[]
+    | "| \(if .run == "" then "no spin:run" else "[\(.run)](https://github.com/\($repo)/actions/runs/\(.run))" end) | \(.usd * 100 | round / 100) |"' \
+    "${RUNNER_TEMP}/cost.json")
+  {
+    echo "### What the fresh installs cost"
+    echo
+    if [ -z "${runs}" ]; then
+      echo "Nothing in the bill by spin:purpose=fresh-install: the tags are not active yet, or no tagged run is a day old."
+    else
+      echo "| Run | USD |"
+      echo "|---|---|"
+      echo "${runs}"
+    fi
+  } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+}
+
 domain() {
   set -euo pipefail
   local zone
@@ -181,9 +210,9 @@ why() {
 }
 
 case "${1:-}" in
-  release | cli | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | why) "$1" ;;
+  release | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | why) "$1" ;;
   *)
-    echo "usage: $0 release|cli|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why" >&2
+    echo "usage: $0 release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why" >&2
     exit 2
     ;;
 esac

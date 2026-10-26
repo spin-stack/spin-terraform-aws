@@ -26,8 +26,17 @@ variable "region" {
   default     = "us-west-2"
 }
 
+variable "tags" {
+  description = "Tags on everything bootstrap creates: what the bill is read by."
+  type        = map(string)
+  default     = {}
+}
+
 provider "aws" {
   region = var.region
+  default_tags {
+    tags = var.tags
+  }
 }
 
 data "aws_caller_identity" "current" {}

@@ -16,6 +16,12 @@
 #     No zone is kept for this: the run's own is deleted within the 12 hours Route 53 does not bill.
 #   - Launch permission on the release's images in us-east-1, and on their snapshots: spin-stack/ami
 #     registers them in its own account.
+#   - spin:purpose and spin:run active as cost allocation tags, which is the account's to decide
+#     and outlives every run (bootstrap/cost.tf says why no run's bootstrap may own it), once a run
+#     has tagged something:
+#       aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
+#         TagKey=spin:purpose,Status=Active TagKey=spin:run,Status=Active
+#     Until then the step Cost says it has nothing to read, and the run goes on.
 #   - Nothing else, and nothing of spin: each run makes the state's KMS key and bucket and the three
 #     Secure Boot keys (bootstrap/), and removes them when it ends, every key scheduled for
 #     deletion. Nobody cleans the account by hand: hack/fresh-install-remove.sh is the removal, run
@@ -45,6 +51,9 @@ env:
   TF_INPUT: "0"
   TF_VAR_region: us-east-1
   TF_VAR_name: fresh
+  # On everything bootstrap and the installation make, so the bill says what each run cost: the
+  # account is not only this workflow's.
+  TF_VAR_tags: '{"spin:purpose": "fresh-install", "spin:run": "${{ github.run_id }}"}'
 
 jobs:
   install:
@@ -82,6 +91,12 @@ jobs:
           role-to-assume: ${{ vars.FRESH_INSTALL_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 7200
+
+      # What the runs of the last five weeks cost, in the job's summary. The bill has a run a day
+      # after it, so the newest one there is last week's. Reading it never stops an install.
+      - name: Cost
+        continue-on-error: true
+        run: task fresh-install -- cost
 
       - name: Domain
         env:
