@@ -46,13 +46,16 @@ tasks:
     desc: >-
       Fetch a spin release's browser terminal for modules/terminal: its spin-term.tar.gz, checked
       against the signature and the provenance release.yml made at main, the provenance naming
-      that RELEASE, unpacked into OUT with the RELEASE it is. RELEASE=<tag> [OUT=term]. Needs gh,
-      cosign and jq.
+      that RELEASE, unpacked into OUT with the RELEASE it is. RELEASE=<tag> [OUT=term, from where
+      task was run]. Needs oras, cosign and jq.
     # Checked before it is unpacked, against the workflow at main rather than any file's word:
     # whoever writes term.<domain> writes the code that asks a person's passkey. Every release is
     # signed at main, so which release the tarball is is what its provenance says, and it must be
-    # the one asked for.
+    # the one asked for. From spin's public package, which is only transport: an installation's
+    # apply needs no token for spin's private releases. Run from where it was asked, so a deployment
+    # can run this Taskfile from the module tofu init fetched and get term beside its main.tf.
     requires: {vars: [RELEASE]}
+    dir: '{{.USER_WORKING_DIR}}'
     vars:
       OUT: '{{.OUT | default "term"}}'
       IDENTITY: https://github.com/spin-stack/spin/.github/workflows/release.yml@refs/heads/main
@@ -60,8 +63,7 @@ tasks:
       - |
         set -euo pipefail
         tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-        gh release download '{{.RELEASE}}' -R spin-stack/spin -p 'spin-term.tar.gz' -p 'spin-term.tar.gz.sigstore.json' \
-          -p 'spin-term.tar.gz.provenance.sigstore.json' -D "$tmp"
+        oras pull --no-tty -o "$tmp" 'ghcr.io/spin-stack/spin-release:{{.RELEASE}}-spin-term'
         cosign verify-blob --bundle "$tmp/spin-term.tar.gz.sigstore.json" --certificate-identity '{{.IDENTITY}}' \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com "$tmp/spin-term.tar.gz"
         # By the file's digest: given the file, cosign reads it whole and refuses one over 128 MiB.

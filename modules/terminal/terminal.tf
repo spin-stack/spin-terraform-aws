@@ -41,6 +41,7 @@ variable "tags" {
   description = "Tags every resource carries."
   type        = map(string)
   default     = {}
+  nullable    = false
 }
 
 locals {
@@ -107,13 +108,6 @@ resource "aws_s3_object" "file" {
   # page and the terminal's Go keep theirs across releases, and are asked again each time.
   cache_control = startswith(each.value, "assets/") ? "public, max-age=31536000, immutable" : "no-cache"
   tags          = var.tags
-
-  lifecycle {
-    precondition {
-      condition     = trimspace(file("${var.files}/RELEASE")) == var.release
-      error_message = "the terminal's files are not release ${var.release}'s: run task term:fetch RELEASE=${var.release}"
-    }
-  }
 }
 
 data "aws_iam_policy_document" "terminal" {
@@ -273,6 +267,15 @@ resource "aws_cloudfront_distribution" "terminal" {
   }
 
   tags = var.tags
+
+  # Here and not on the files: a directory never fetched has none, and would publish an empty
+  # origin.
+  lifecycle {
+    precondition {
+      condition     = fileexists("${var.files}/RELEASE") && trimspace(file("${var.files}/RELEASE")) == var.release
+      error_message = "${var.files} is not release ${var.release}'s terminal: run task term:fetch RELEASE=${var.release}"
+    }
+  }
 }
 
 resource "aws_route53_record" "terminal" {

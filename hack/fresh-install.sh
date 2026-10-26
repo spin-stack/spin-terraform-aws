@@ -103,6 +103,7 @@ bootstrap() {
 
 installation() {
   cd examples/complete
+  task -t ../../Taskfile.yml term:fetch RELEASE="${TF_VAR_spin_version}"
   # Bootstrap's output is the whole init command, its backend's arguments included: split as words.
   # shellcheck disable=SC2046
   $(tofu -chdir=../../bootstrap output -raw init) -lockfile=readonly

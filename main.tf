@@ -1,7 +1,8 @@
 # A Spinbox installation on AWS: the control plane with its database, proxy and network
-# (modules/controlplane), and the runners' group it sizes (modules/runners). What an installation
-# usually decides is a variable here; everything else is each module's, used directly where it
-# matters - the two are this composed and nothing more.
+# (modules/controlplane), the runners' group it sizes (modules/runners), and the browser terminal
+# the dashboard opens a workspace in (modules/terminal). What an installation usually decides is a
+# variable here; everything else is each module's, used directly where it matters - the three are
+# this composed and nothing more.
 #
 # Every variable here but the three required ones defaults to null, which each module reads as
 # its own default: the defaults are said once, where they mean something.
@@ -45,4 +46,20 @@ module "runners" {
   data_volume_gb = var.runner_data_volume_gb
   root_volume_gb = var.runner_root_volume_gb
   tags           = var.tags
+}
+
+# term.<domain>. Its files are a spin release's, checked by `task term:fetch` before they are here:
+# OpenTofu can neither check a signature nor unpack the tarball. The module refuses a directory
+# that is not spin_version's, so an apply cannot publish one release's terminal for another.
+module "terminal" {
+  source    = "./modules/terminal"
+  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+
+  name     = module.controlplane.name
+  iam_name = module.controlplane.iam_name
+  domain   = var.domain
+  zone_id  = module.controlplane.public_zone_id
+  release  = var.spin_version
+  files    = coalesce(var.terminal_files, "${path.root}/term")
+  tags     = var.tags
 }

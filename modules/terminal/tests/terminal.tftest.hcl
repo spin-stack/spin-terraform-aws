@@ -118,5 +118,15 @@ run "files_of_another_release_are_refused" {
     release = "v20261004.1"
   }
 
-  expect_failures = [aws_s3_object.file]
+  expect_failures = [aws_cloudfront_distribution.terminal]
+}
+
+run "a_directory_never_fetched_is_refused" {
+  command = plan
+
+  variables {
+    files = "tests/never-fetched"
+  }
+
+  expect_failures = [aws_cloudfront_distribution.terminal]
 }

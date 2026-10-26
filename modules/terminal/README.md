@@ -7,35 +7,19 @@ holds, and it logs in with a passkey. Its own origin - CloudFront over a private
 nothing of the installation serves the code that asks a person's passkey, and the bucket's policy
 refuses a write by any role of the installation.
 
-What it publishes is a spin release's signed `spin-term.tar.gz`, which `task term:fetch` checks
-against the signature the release's workflow made at its tag before it unpacks it:
+The root module composes it, from `term/` beside the configuration that calls the root
+(`terminal_files` says elsewhere) and the release the installation runs.
+
+What it publishes is a spin release's signed `spin-term.tar.gz`, which `task term:fetch` pulls from
+spin's public package and checks against the signature the release's workflow made before it
+unpacks it, into `term/` where it is run:
 
 ```sh
-task term:fetch RELEASE=<spin_version> OUT=term
+task -t <this repository>/Taskfile.yml term:fetch RELEASE=<spin_version>
 ```
 
-Point `files` at that directory and `release` at the spin release it is: a plan refuses files of
-another release. Fetch the release the installation runs, its `spin_version`, so the terminal
-admits its hosts.
-
-`<release>` is the release of spin-terraform-aws the installation's own module pins, from
-[its releases](https://github.com/spin-stack/spin-terraform-aws/releases), newest first.
-
-CloudFront takes a certificate only from us-east-1, so the module is given a provider for it:
-
-```hcl
-module "terminal" {
-  source    = "github.com/spin-stack/spin-terraform-aws//modules/terminal?ref=<release>"
-  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
-
-  name     = module.spin.controlplane.name
-  iam_name = module.spin.controlplane.iam_name
-  domain   = module.spin.controlplane.domain
-  zone_id  = module.spin.controlplane.public_zone_id
-  release  = "<spin_version>"
-  files    = "${path.module}/term"
-}
-```
+A plan refuses a directory that is not `release`'s, or was never fetched. Fetch the release the
+installation runs, its `spin_version`, so the terminal admits its hosts.
 
 The page asks the dashboard's API with the person's own session, which the control plane takes from
 this origin for the terminal's calls alone, and the relay takes its WebSocket. Its Content Security

@@ -181,3 +181,9 @@ variable "tags" {
   type        = map(string)
   default     = null
 }
+
+variable "terminal_files" {
+  description = "Where `task term:fetch RELEASE=<spin_version>` unpacked the browser terminal. Null is term/ beside the configuration that calls this module, which is where term:fetch writes when it is run there."
+  type        = string
+  default     = null
+}

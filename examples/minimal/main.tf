@@ -17,8 +17,16 @@ provider "aws" {
   region = "us-west-2"
 }
 
+# The browser terminal's certificate: CloudFront takes one only from us-east-1.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# Its terminal in term/ here: task term:fetch RELEASE=<spin_version>.
 module "spin" {
   source       = "../.."
+  providers    = { aws = aws, aws.us_east_1 = aws.us_east_1 }
   spin_version = "v20260928.02"
   domain       = "example.com"
 }

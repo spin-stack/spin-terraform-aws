@@ -78,6 +78,11 @@ output "dashboard" {
   value       = "https://app.${var.domain}"
 }
 
+output "terminal" {
+  description = "The browser terminal, which the dashboard opens a workspace at."
+  value       = module.terminal.url
+}
+
 output "first_sign_in" {
   description = "The setup page, the first administrator, and the command that reads their one-time password: an SSM SecureString this apply wrote without it ever being in the state."
   value       = local.sign_in

@@ -5,6 +5,7 @@
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
 #   (a release images.json has an image of in the region)
+#   task -t ../../Taskfile.yml term:fetch RELEASE=v20261019.02
 #   tofu apply -var spin_version=v20261019.02 -var domain=spin.example.com
 #
 # From elsewhere, the source is this repository at one of its releases (README.md says where they
@@ -82,8 +83,15 @@ provider "aws" {
   region = var.region
 }
 
+# The browser terminal's certificate: CloudFront takes one only from us-east-1.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 module "spin" {
   source       = "../.."
+  providers    = { aws = aws, aws.us_east_1 = aws.us_east_1 }
   name         = var.name
   spin_version = var.spin_version
   domain       = var.domain

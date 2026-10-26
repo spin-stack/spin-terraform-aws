@@ -25,7 +25,7 @@ updates here by a pull request. A module ref is then a set of releases with thei
 release with none in the installation's region is refused at plan, naming the regions it has one
 in, and `image_ids` names images of your own build instead, one per role.
 
-The root composes two modules, and each can be used on its own
+The root composes three modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<release>`) where the root does
 not expose what an installation needs to decide:
 
@@ -36,6 +36,9 @@ not expose what an installation needs to decide:
   default, that the control plane sizes: none until a workspace waits for a host, and none again
   once nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`). It takes the
   control plane module's outputs whole, its name among them.
+- **`modules/terminal`** - the browser terminal, `term.<domain>`: a spin release's signed files,
+  which `task term:fetch` checks and unpacks before a plan, behind CloudFront. Its certificate is
+  us-east-1's, so the root is given a second AWS provider, `aws.us_east_1`.
 
 A variable of the root left unset is the module's own default: each defaults to null, which
 the modules read as their default, so a default is said once. `examples/complete` is an
@@ -87,6 +90,7 @@ Then the installation. `examples/complete` is one; copy it anywhere, or use it a
 ```bash
 cd ../examples/complete
 cp terraform.tfvars.example terraform.tfvars    # and fill it in
+task -t ../../Taskfile.yml term:fetch RELEASE=<spin_version>    # cosign, oras and jq
 $(tofu -chdir=../../bootstrap output -raw init)
 tofu apply
 tofu output -raw next_steps
@@ -105,7 +109,8 @@ the new spin release in the installation's region, change `spin_version` in `ter
 it, then:
 
 ```bash
-tofu plan     # the image, the launch templates and the documents change, and nothing else
+task -t ../../Taskfile.yml term:fetch RELEASE=<spin_version>    # the new release's terminal
+tofu plan     # the image, the launch templates, the documents and the terminal's files change
 tofu apply
 ```
 
