@@ -174,11 +174,13 @@ data "aws_iam_policy_document" "publish" {
   }
   # Who may start an image: everybody, for a release spin-stack/ami makes public, and nobody else
   # again for one it no longer keeps public.
+  # And no deregistering it while installations may boot it: a release's image is protected
+  # before it is public (spin-stack/ami#95).
   dynamic "statement" {
     for_each = var.public_images ? [1] : []
     content {
       sid       = "ShareTheImage"
-      actions   = ["ec2:ModifyImageAttribute", "ec2:DescribeImageAttribute"]
+      actions   = ["ec2:ModifyImageAttribute", "ec2:DescribeImageAttribute", "ec2:EnableImageDeregistrationProtection"]
       resources = local.images
     }
   }
