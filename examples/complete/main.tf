@@ -72,6 +72,12 @@ variable "domain" {
   type        = string
 }
 
+variable "tags" {
+  description = "Tags on everything the installation creates, beside spin's own: what the bill is read by."
+  type        = map(string)
+  default     = {}
+}
+
 provider "aws" {
   region = var.region
 }
@@ -81,6 +87,7 @@ module "spin" {
   name         = var.name
   spin_version = var.spin_version
   domain       = var.domain
+  tags         = var.tags
 
   runner_idle_minutes = 60
   quiet_hours         = "20:00-07:00"

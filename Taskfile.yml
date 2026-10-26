@@ -250,7 +250,7 @@ tasks:
 
   fresh-install:
     desc: >-
-      Run one step of the fresh install: task fresh-install -- release|cli|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why.
+      Run one step of the fresh install: task fresh-install -- release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why.
     cmds:
       - bash hack/fresh-install.sh {{.CLI_ARGS}}
 
