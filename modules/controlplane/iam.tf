@@ -124,6 +124,8 @@ data "aws_iam_policy_document" "controlplane" {
   # starts a host when a workspace waits for one, empties the group when nothing runs, and gives
   # back one host that holds nothing only it has, by its instance, with the group one smaller.
   # Describe has no resource-level permission; the resize and the removal are held to that group.
+  # The group's activities are how the control plane says why a host it asked for did not come
+  # (spin#702): the image gone, the spot quota spent, no capacity.
   statement {
     sid       = "SizeTheRunners"
     actions   = ["autoscaling:SetDesiredCapacity", "autoscaling:TerminateInstanceInAutoScalingGroup"]
@@ -131,7 +133,7 @@ data "aws_iam_policy_document" "controlplane" {
   }
   statement {
     sid       = "SeeTheRunners"
-    actions   = ["autoscaling:DescribeAutoScalingGroups"]
+    actions   = ["autoscaling:DescribeAutoScalingGroups", "autoscaling:DescribeScalingActivities"]
     resources = ["*"]
   }
   statement {
