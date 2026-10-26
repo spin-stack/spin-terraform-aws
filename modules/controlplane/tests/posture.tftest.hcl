@@ -163,6 +163,28 @@ variables {
   }
 }
 
+# A subnet in every zone the region has, up to availability_zones: a zone left out is spot pools a
+# runner is never drawn from. The region here has three.
+run "every_zone_has_a_subnet" {
+  command = plan
+
+  assert {
+    condition     = toset(aws_subnet.public[*].availability_zone) == toset(["us-east-2a", "us-east-2b", "us-east-2c"])
+    error_message = "a zone of the region has no subnet for the machines"
+  }
+}
+
+run "no_more_zones_than_asked" {
+  command = plan
+  variables {
+    availability_zones = 2
+  }
+  assert {
+    condition     = length(aws_subnet.public) == 2 && length(aws_subnet.edge) == 2
+    error_message = "subnets in more zones than availability_zones"
+  }
+}
+
 run "the_internet_reaches_the_proxy_alone" {
   command = plan
 

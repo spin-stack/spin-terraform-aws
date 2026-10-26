@@ -61,9 +61,9 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "How many zones to make subnets in. The control plane, the proxy and the runners may each be started in any of them, which is what gives a group somewhere to go when a zone runs out."
+  description = "How many zones to make subnets in, at most: a region with fewer gets one in each. The control plane, the proxy and the runners may each be started in any of them, which is what gives a group somewhere to go when a zone runs out - and a zone left out is spot pools a runner is never drawn from. A subnet is its zone's by index, so raising this adds subnets and moves none."
   type        = number
-  default     = 3
+  default     = 8
   nullable    = false
   validation {
     condition     = var.availability_zones >= 2 && var.availability_zones <= 8

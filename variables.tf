@@ -111,8 +111,14 @@ variable "time_zone" {
 }
 
 variable "runner_instance_types" {
-  description = "What the runners' group may start, most preferred first, one CPU generation; see modules/runners."
+  description = "The types the runners' group may start, as names or patterns (c8id.*), one CPU generation; see modules/runners."
   type        = list(string)
+  default     = null
+}
+
+variable "runner_vcpus" {
+  description = "How many vCPUs a runner may have, { min, max }; modules/runners' default is 32 to 48."
+  type        = object({ min = number, max = number })
   default     = null
 }
 

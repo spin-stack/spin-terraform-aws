@@ -56,15 +56,20 @@ module's tests against its plan.
 - A domain, or a subdomain of one, that is the installation's alone: its zone is made here, in
   Route 53 ($0.50 a month), and whoever registered it points its nameservers at the
   `name_servers` output.
-- Room for runners. Each is a spot machine of 32 or 48 vCPUs, from five types of one generation
-  (`runner_instance_types`), and a new account's spot vCPU quota may be lower than one of them
-  (Service Quotas → EC2 → "All Standard Spot Instance Requests"). How likely spot is to give and
-  keep one in the region you chose, from 1 to 10 - below 7, name more types or use on-demand
-  (`runner_spot = false`):
+- Room for runners. Each is a spot machine of 32 to 48 vCPUs with a local NVMe, of any type and
+  size `runner_instance_types` matches (C8i, M8i and R8i by default: one generation, and their d
+  variants while the data is on the instance store), in any zone of the region, and a new
+  account's spot vCPU quota may be lower than one of them
+  (Service Quotas → EC2 → "All Standard Spot Instance Requests"). The quota is the account's: a
+  CI fleet in the same account and region draws on it too. How likely spot is to give and keep
+  one in the region you chose, per zone, from 1 to 10 - below 7, widen `runner_vcpus`, give the
+  runners an EBS data volume (`runner_data_volume_gb`, which lets the types without a local NVMe
+  in too) or use on-demand (`runner_spot = false`):
 
   ```bash
   aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \
-    --instance-types m8id.8xlarge c8id.8xlarge r8id.8xlarge m8id.12xlarge c8id.12xlarge
+    --single-availability-zone --instance-requirements-with-metadata \
+    '{"ArchitectureTypes":["x86_64"],"InstanceRequirements":{"VCpuCount":{"Min":32,"Max":48},"MemoryMiB":{"Min":65536},"LocalStorage":"required","AllowedInstanceTypes":["c8id.*","m8id.*","r8id.*"]}}'
   ```
 
 ## Installing

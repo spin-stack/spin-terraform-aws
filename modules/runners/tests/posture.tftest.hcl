@@ -10,12 +10,7 @@ provider "aws" {
   skip_metadata_api_check     = true
 }
 
-# Every type 48 vCPUs, and an account with room; the quota's runs give it a new account's 32.
-override_data {
-  target = data.aws_ec2_instance_type.runner
-  values = { default_vcpus = 48 }
-}
-
+# An account with room; the quota's runs give it a new account's 32.
 override_data {
   target = data.aws_servicequotas_service_quota.runners
   values = { value = 1000, quota_name = "All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests" }
@@ -160,6 +155,69 @@ run "the_group_is_the_control_planes_to_size" {
     h.lifecycle_transition == "autoscaling:EC2_INSTANCE_TERMINATING" && h.default_result == "CONTINUE"])
     error_message = "a host the group takes away is not held while it drains"
   }
+}
+
+# The group draws on every type the patterns match within the vCPUs, and only those that have
+# the disk the runner's data goes on: the instance store unless it has a volume of its own.
+run "a_runner_is_any_type_that_has_its_disk" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].local_storage == "required" &&
+      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].vcpu_count[0].min == 32 && aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].vcpu_count[0].max == 48 &&
+      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].bare_metal == "excluded" &&
+      contains(aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].allowed_instance_types, "c8id.*")
+    )
+    error_message = "the group may start a type with no local NVMe for the data, or outside the vCPUs"
+  }
+}
+
+run "a_data_volume_lets_in_the_types_without_one" {
+  command = plan
+  variables {
+    data_volume_gb = 200
+  }
+  assert {
+    condition     = aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].local_storage == "included"
+    error_message = "with an EBS data volume, the types without a local NVMe are still left out"
+  }
+}
+
+run "metal_is_all_there_is_without_nested_virtualization" {
+  command = plan
+  variables {
+    nested_virtualization = false
+  }
+  assert {
+    condition     = aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].bare_metal == "required"
+    error_message = "without nested virtualization the group may start a machine with no KVM"
+  }
+}
+
+run "the_quota_is_sized_by_the_largest_runner" {
+  command = plan
+  variables {
+    max_hosts = 2
+    vcpus     = { min = 32, max = 64 }
+  }
+  assert {
+    condition     = aws_servicequotas_service_quota.runners[0].value == 128
+    error_message = "the quota is not sized for two runners of the vCPUs' top"
+  }
+  expect_failures = [check.room_for_runners]
+  override_data {
+    target = data.aws_servicequotas_service_quota.runners
+    values = { value = 32, quota_name = "a new account's" }
+  }
+}
+
+run "vcpus_upside_down_are_refused" {
+  command = plan
+  variables {
+    vcpus = { min = 48, max = 32 }
+  }
+  expect_failures = [var.vcpus]
 }
 
 # A quota lower than max_hosts of the largest type is asked of AWS, for exactly that; spot and

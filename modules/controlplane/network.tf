@@ -23,7 +23,7 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 locals {
-  zones   = slice(data.aws_availability_zones.available.names, 0, var.availability_zones)
+  zones   = slice(data.aws_availability_zones.available.names, 0, min(var.availability_zones, length(data.aws_availability_zones.available.names)))
   region  = data.aws_region.current.region
   account = data.aws_caller_identity.current.account_id
   # What every ARN here begins with: aws, aws-us-gov or aws-cn, as the provider's region is.

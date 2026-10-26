@@ -23,25 +23,40 @@ variable "controlplane" {
 
 variable "instance_types" {
   description = <<-EOT
-    What the group may start. Keep them one CPU generation: a checkpoint records the processor
-    and its flags as -cpu host showed them (MachineIdentity in spin's internal/runner/vmm), and
-    resumes only onto a host that shows the same - a workspace suspended at night on one family
-    and brought back on another cold-boots. Nested virtualization is offered on C8i, M8i, R8i
-    (and their d variants), C7i, M7i, R7i and I7i; a d variant brings the local NVMe the runner's
-    data goes on.
+    The types the group may start, as EC2's allowed_instance_types takes them: names, or patterns
+    with * (c8id.*). The group starts any type they match that has vcpus and the disk data_volume_gb
+    leaves the data on - a local NVMe while it is 0, so a d variant - and AWS adds the sizes and
+    types it brings out without this list changing.
 
-    For spot, name several: AWS gives a spot machine from the pools a request can draw on, and
-    one type is one pool per zone. m8id.8xlarge alone scored 3 of 10 in us-west-2 and was reclaimed
-    within minutes; the five below score 9. How a list scores in a region, before installing:
+    Keep them one CPU generation: a checkpoint records the processor and its flags as -cpu host
+    showed them (MachineIdentity in spin's internal/runner/vmm), and resumes only onto a host that
+    shows the same - a workspace suspended at night on one family and brought back on another
+    cold-boots. Nested virtualization is offered on C8i, M8i, R8i (and their d variants), C7i, M7i,
+    R7i and I7i. Not c8i* for c8i.*: that matches the flex types too.
+
+    For spot, the more pools a request can draw on the likelier a machine, and one type is one
+    pool per zone. How the types these match score in a region, before installing:
       aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \
-        --instance-types <the types>
+        --single-availability-zone --instance-requirements-with-metadata \
+        '{"ArchitectureTypes":["x86_64"],"InstanceRequirements":{"VCpuCount":{"Min":32,"Max":48},"MemoryMiB":{"Min":65536},"LocalStorage":"required","AllowedInstanceTypes":[<the types>]}}'
   EOT
   type        = list(string)
-  default     = ["m8id.8xlarge", "c8id.8xlarge", "r8id.8xlarge", "m8id.12xlarge", "c8id.12xlarge"]
+  default     = ["c8i.*", "c8id.*", "m8i.*", "m8id.*", "r8i.*", "r8id.*"]
   nullable    = false
   validation {
     condition     = length(var.instance_types) > 0
     error_message = "instance_types names at least one."
+  }
+}
+
+variable "vcpus" {
+  description = "How many vCPUs a runner may have, at least and at most: each type instance_types matches within it is a pool the group may draw on. max is also what the quota is sized by (quota.tf)."
+  type        = object({ min = number, max = number })
+  default     = { min = 32, max = 48 }
+  nullable    = false
+  validation {
+    condition     = var.vcpus.min >= 2 && var.vcpus.min <= var.vcpus.max
+    error_message = "vcpus is min <= max, min at least 2."
   }
 }
 
