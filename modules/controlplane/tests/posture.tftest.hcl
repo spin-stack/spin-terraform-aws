@@ -794,8 +794,17 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope", "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys", "arn:aws:iam::123456789012:role/spin-us-east-2-team-secrets"])])
-    error_message = "the boundary lets a role become another than the runner scope, the volume keys or the team secrets"
+    s.effect == "Deny" && contains(s.actions, "sts:AssumeRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner-scope", "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys", "arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys", "arn:aws:iam::123456789012:role/spin-us-east-2-team-secrets"])])
+    error_message = "the boundary lets a role become another than the runner scope, the volume keys, the identity key or the team secrets"
+  }
+  # Every role the control plane may assume is one the boundary lets it: a grant the boundary denies
+  # is a feature that fails only on a real machine (the identity key, until this held).
+  assert {
+    condition = alltrue(flatten([for s in data.aws_iam_policy_document.controlplane.statement :
+      [for r in s.resources : anytrue([for b in data.aws_iam_policy_document.boundary.statement :
+      b.effect == "Deny" && contains(b.actions, "sts:AssumeRole") && contains(b.not_resources, r)])]
+    if contains(s.actions, "sts:AssumeRole")]))
+    error_message = "the control plane is granted a role its boundary denies it"
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
