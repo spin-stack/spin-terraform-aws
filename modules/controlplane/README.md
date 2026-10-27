@@ -221,7 +221,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | name | The installation's name, claimed in its region (claim.tf), which the runners' group and security group are named for. |
 | name\_servers | The domain's public zone's nameservers, which its registrar points at. |
 | proxy\_group | The proxy's group of one. Its machine, for `aws ssm start-session --target` (it has no SSH): aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <this> --query 'AutoScalingGroups[0].Instances[0].InstanceId'. |
-| proxy\_ip | The proxy's elastic IP, where app.<domain>, tunnel.app.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches. |
+| proxy\_ip | The proxy's elastic IP, where app.<domain>, tunnel.app.<domain>, term.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches. |
 | public\_zone\_id | The domain's public zone, where modules/identity-issuer puts id.<domain>. |
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
