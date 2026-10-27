@@ -139,14 +139,14 @@ data "aws_iam_policy_document" "controlplane" {
   statement {
     sid       = "MintRunnerCredentials"
     actions   = ["sts:AssumeRole"]
-    resources = [aws_iam_role.runner_scope.arn]
+    resources = [local.runner_scope_arn]
   }
   # A grant of a volume's key: a session tagged with its owner (volume_keys.tf). What the
   # control plane may do with the key itself is the key's policy.
   statement {
     sid       = "GrantVolumeKeys"
     actions   = ["sts:AssumeRole", "sts:TagSession"]
-    resources = [aws_iam_role.volume_keys.arn]
+    resources = [local.volume_keys_role_arn]
   }
   # A read of a team's secret: a session tagged with the team (team_secrets.tf).
   statement {
@@ -159,7 +159,7 @@ data "aws_iam_policy_document" "controlplane" {
   statement {
     sid       = "GrantTheIdentityKey"
     actions   = ["sts:AssumeRole"]
-    resources = [aws_iam_role.identity_keys.arn]
+    resources = [local.identity_keys_role_arn]
   }
   # What it starts on, and the secrets its document names. Read, never written: every document and
   # parameter of the installation is this module's to write (config.tf, secrets.tf).

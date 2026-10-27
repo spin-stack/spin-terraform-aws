@@ -29,6 +29,9 @@ locals {
   # The key as the control plane keeps it and the X.509 CA the first host to sign an SVID makes
   # beside it (spin's identity.KeyPath and identity.CAKey): what id.<domain> is written from.
   issuer_keys = ["identity/issuer.json", "identity/x509-ca.der"]
+  # By its name and not the role's attribute: the boundary every role here carries names it, and
+  # the role carries that boundary.
+  identity_keys_role_arn = "${local.arn}:iam::${local.account}:role/${local.iam_name}-identity-keys"
 }
 
 #trivy:ignore:AWS-0065
