@@ -114,7 +114,7 @@ output "boundary_arn" {
 }
 
 output "proxy_ip" {
-  description = "The proxy's elastic IP, where app.<domain>, tunnel.app.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches."
+  description = "The proxy's elastic IP, where app.<domain>, tunnel.app.<domain>, term.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches."
   value       = aws_eip.proxy.public_ip
 }
 

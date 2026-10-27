@@ -568,8 +568,8 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the domain's zone is not a public one of its own"
   }
   assert {
-    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "*.ws.${var.domain}"])
-    error_message = "the dashboard and the workspaces' names are not written into the domain's zone"
+    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "*.ws.${var.domain}"])
+    error_message = "the dashboard, the relay, the terminal and the workspaces' names are not written into the domain's zone"
   }
   assert {
     condition     = local.controlplane_document.install.launch.aws.ttl == 10 && local.proxy_document.install.launch.aws.ttl == 10
