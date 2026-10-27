@@ -184,7 +184,20 @@ data "aws_iam_policy_document" "publish" {
       resources = local.images
     }
   }
-  # What a failed publish leaves: a snapshot its build tagged, and no other.
+  # What a failed publish leaves (spin-stack/ami's images:withdraw): an image a publish registered
+  # and a snapshot its build tagged, and nothing else - by the tag, which is every release's too. What
+  # keeps a release's image is the deregistration protection images:public gives it (ShareTheImage),
+  # which this role cannot lift.
+  statement {
+    sid       = "DeregisterWhatAFailedPublishLeft"
+    actions   = ["ec2:DeregisterImage"]
+    resources = local.images
+    condition {
+      test     = "Null"
+      variable = "aws:ResourceTag/spin-os:commit"
+      values   = ["false"]
+    }
+  }
   statement {
     sid       = "DeleteWhatAFailedPublishLeft"
     actions   = ["ec2:DeleteSnapshot"]
