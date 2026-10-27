@@ -10,9 +10,9 @@
 # Decrypt and its kin, never of Sign - which is why the key is released to a host rather than
 # signed with in KMS.
 #
-# A new key is every relying party's trust in the old one gone, and the published key set
-# (modules/identity-issuer) is written from the one the control plane keeps: it is never destroyed
-# by a plan.
+# A new key is every relying party's trust in the old one gone, and the published key set - the
+# proxy's id.<domain> - is written from the first version of the one the control plane keeps: it is
+# never destroyed by a plan.
 variable "identity_record_days" {
   description = "How many days the record of each identity a host signs is kept (identity/issued/ in the volumes bucket): longer than the bucket's lock, and long enough to answer who took an identity when."
   type        = number
@@ -26,6 +26,9 @@ variable "identity_record_days" {
 locals {
   # The context the key is made under, which every use of it is held to.
   identity_purpose = "identity-issuer"
+  # The key as the control plane keeps it and the X.509 CA the first host to sign an SVID makes
+  # beside it (spin's identity.KeyPath and identity.CAKey): what id.<domain> is written from.
+  issuer_keys = ["identity/issuer.json", "identity/x509-ca.der"]
 }
 
 #trivy:ignore:AWS-0065

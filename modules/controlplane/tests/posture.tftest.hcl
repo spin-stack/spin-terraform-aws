@@ -568,8 +568,8 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the domain's zone is not a public one of its own"
   }
   assert {
-    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "*.ws.${var.domain}"])
-    error_message = "the dashboard, the relay, the terminal and the workspaces' names are not written into the domain's zone"
+    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "id.${var.domain}", "*.ws.${var.domain}"])
+    error_message = "the dashboard, the relay, the terminal, the issuer and the workspaces' names are not written into the domain's zone"
   }
   assert {
     condition     = local.controlplane_document.install.launch.aws.ttl == 10 && local.proxy_document.install.launch.aws.ttl == 10
@@ -852,8 +852,11 @@ run "the_roles" {
   assert {
     condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
       anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2") &&
-    s.resources != toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/proxy.yaml"])])])
-    error_message = "the proxy's role reaches a bucket other than its certificates' and its own document"
+        s.resources != toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/proxy.yaml"]) &&
+        !(toset(s.actions) == toset(["s3:GetObjectVersion"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json", "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/x509-ca.der"])) &&
+        !(toset(s.actions) == toset(["s3:ListBucketVersions"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2"]) &&
+    anytrue([for c in s.condition : c.variable == "s3:prefix" && toset(c.values) == toset(["identity/issuer.json", "identity/x509-ca.der"])]))])])
+    error_message = "the proxy's role reaches a bucket other than its certificates', its own document and the versions of the identity key and its CA"
   }
 }
 

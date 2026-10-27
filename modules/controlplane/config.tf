@@ -132,6 +132,8 @@ locals {
           ttl          = local.internal_record_ttl
           elastic_ip   = aws_eip.proxy.allocation_id
           certificates = aws_s3_bucket.certificates.bucket
+          # Where the identity key is kept, whose first version the proxy publishes as id.<domain>.
+          issuer = aws_s3_bucket.volumes.bucket
         }
       }
       # Who the proxy proves it is to, for its token: the installation hosts join.

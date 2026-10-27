@@ -36,12 +36,12 @@ resource "aws_route53_zone" "public" {
 }
 
 # app.<domain> is the dashboard, tunnel.app.<domain> the relay runners dial, term.<domain> the
-# browser terminal and *.ws.<domain> every workspace; all four are the proxy, at its elastic IP.
-# The workspaces are under a name of their own so that a workspace is never the dashboard's
-# subdomain: what a tenant serves there can set no cookie the dashboard reads, and no workspace
-# name can be the relay's.
+# browser terminal, id.<domain> the identity issuer and *.ws.<domain> every workspace; all are the
+# proxy, at its elastic IP. The workspaces are under a name of their own so that a workspace is
+# never the dashboard's subdomain: what a tenant serves there can set no cookie the dashboard
+# reads, and no workspace name can be the relay's.
 resource "aws_route53_record" "app" {
-  for_each = toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "*.ws.${var.domain}"])
+  for_each = toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "id.${var.domain}", "*.ws.${var.domain}"])
   zone_id  = aws_route53_zone.public.zone_id
   name     = each.value
   type     = "A"

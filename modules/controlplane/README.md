@@ -214,7 +214,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | database\_bucket | The database's archive: the base backups and WAL the control plane ships as it writes, and restores from when its machine is replaced. Its role alone reaches it. |
 | domain | The base domain; the runners' relay is tunnel.app.<domain>, dialled at relay\_dial. |
 | iam\_name | What the installation's IAM names begin with: its name and its region, since IAM is the account's and two regions may each have an installation of one name. The runners' role and instance profile are named for it. |
-| identity\_documents | The commands that write the identity issuer's documents - discovery, key set, allowed signers and SPIFFE bundle - for modules/identity-issuer to publish: the identity key as the control plane keeps it in its bucket (its public half is all that is read) and the X.509 CA the first host to sign an SVID made beside it, then the documents from them. Run them with credentials that may read both, and commit what they write. |
 | identity\_key\_arn | The KMS key the installation's identity key is sealed under, which only an attested runner opens. |
 | images | The Spin OS images of the installation's release, by role - the control plane's, the runners' and the proxy's: each one's id and root device. The runners module boots the runner's. |
 | internal\_zone\_id | The private zone the components reach each other by, cp.<internal\_zone> and proxy.<internal\_zone>. |
@@ -222,7 +221,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | name\_servers | The domain's public zone's nameservers, which its registrar points at. |
 | proxy\_group | The proxy's group of one. Its machine, for `aws ssm start-session --target` (it has no SSH): aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <this> --query 'AutoScalingGroups[0].Instances[0].InstanceId'. |
 | proxy\_ip | The proxy's elastic IP, where app.<domain>, tunnel.app.<domain>, term.<domain> and *.ws.<domain> point: the one address of the installation the internet reaches. |
-| public\_zone\_id | The domain's public zone, where modules/identity-issuer puts id.<domain>. |
+| public\_zone\_id | The domain's public zone, where the installation's names are. |
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
 | runner\_document\_arn | The runners' document, the one object of the documents' bucket the runners' role reads. |

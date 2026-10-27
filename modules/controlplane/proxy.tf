@@ -39,14 +39,32 @@ resource "aws_iam_role_policy_attachment" "proxy_ssm" {
   policy_arn = aws_iam_policy.session_manager.arn
 }
 
-# Its document; its own certificates' bucket; and, to take the installation over, its name, the
-# elastic IP and its group's word. No credential to the volumes' bucket or to anything the
-# control plane has.
+# Its document; its own certificates' bucket; the versions of the identity key and its CA; and, to
+# take the installation over, its name, the elastic IP and its group's word. Nothing else of the
+# volumes' bucket, and nothing the control plane has.
 data "aws_iam_policy_document" "proxy" {
   statement {
     sid       = "ItsDocument"
     actions   = ["s3:GetObject"]
     resources = [local.document_arn["proxy"]]
+  }
+  # Read and never written: it publishes the first version of each as id.<domain> (spin's
+  # provider.IssuerSource), which no role may delete (boundary.tf), so a control plane that writes
+  # another key publishes nothing of it.
+  statement {
+    sid       = "TheIssuersVersions"
+    actions   = ["s3:GetObjectVersion"]
+    resources = [for k in local.issuer_keys : "${aws_s3_bucket.volumes.arn}/${k}"]
+  }
+  statement {
+    sid       = "WhichVersionsTheyHave"
+    actions   = ["s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.volumes.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "s3:prefix"
+      values   = local.issuer_keys
+    }
   }
   statement {
     sid       = "ItsCertificates"
