@@ -93,6 +93,11 @@ override_resource {
 }
 
 override_resource {
+  target = aws_s3_bucket.database_handover
+  values = { arn = "arn:aws:s3:::spin-database-handover-123456789012-us-east-2" }
+}
+
+override_resource {
   target = aws_s3_bucket.volumes
   values = { arn = "arn:aws:s3:::spin-volumes-123456789012-us-east-2" }
 }
@@ -487,7 +492,10 @@ run "the_installation_is_in_its_document_and_not_on_its_machines" {
 
   assert {
     condition = (
-      local.controlplane_document.database == { archive = { bucket = "spin-database-123456789012-us-east-2", region = "us-east-2" } } &&
+      local.controlplane_document.database == {
+        archive  = { bucket = "spin-database-123456789012-us-east-2", region = "us-east-2" }
+        handover = { bucket = "spin-database-handover-123456789012-us-east-2", region = "us-east-2" }
+      } &&
       local.controlplane_document.production &&
       local.controlplane_document.tls.extra_sans == ["cp.spin.internal"]
     )
@@ -630,6 +638,7 @@ run "a_destroy_keeps_the_data" {
     condition = (
       !aws_s3_bucket.volumes.force_destroy && !aws_s3_bucket.database.force_destroy && !aws_s3_bucket.logs.force_destroy &&
       length(aws_s3_bucket_policy.volumes) == 1 && length(aws_s3_bucket_policy.database) == 1 &&
+      length(aws_s3_bucket_policy.database_handover) == 1 &&
       length(aws_s3_bucket_policy.logs) == 1 && length(aws_s3_bucket_policy.certificates) == 1 &&
       length(aws_s3_bucket_policy.documents) == 1
     )
@@ -1069,6 +1078,26 @@ run "the_databases_archive" {
     )
     error_message = "the control plane is not told where its database's archive is, or it is another bucket's"
   }
+  # The handover records' own bucket: named to the control plane, apart from the archive's, and
+  # reached by its role alone - whoever writes who holds the database decides which machine
+  # restores it.
+  assert {
+    condition = (
+      local.controlplane_document.database.handover.bucket == aws_s3_bucket.database_handover.bucket &&
+      aws_s3_bucket.database_handover.bucket != aws_s3_bucket.database.bucket &&
+      anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.sid == "TheDatabasesArchiveIsTheControlPlanes" && contains(s.resources, "${aws_s3_bucket.database_handover.arn}/*")]) &&
+      anytrue([for s in data.aws_iam_policy_document.controlplane.statement :
+      s.sid == "TheDatabasesHandoverObjects" && contains(s.resources, "${aws_s3_bucket.database_handover.arn}/*")])
+    )
+    error_message = "the database's handover records are not in a bucket of their own that the control plane is told of and alone reaches"
+  }
+  # Unversioned and unlocked, which is the point: every heartbeat in a versioned bucket is a
+  # version kept.
+  assert {
+    condition     = !aws_s3_bucket.database_handover.object_lock_enabled
+    error_message = "the handover bucket is under a lock, which keeps a version of every heartbeat"
+  }
   assert {
     condition = (
       aws_s3_bucket_versioning.database.versioning_configuration[0].status == "Enabled" &&
@@ -1122,7 +1151,8 @@ run "the_databases_archive" {
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "s3:*") &&
-      s.resources == toset(["arn:aws:s3:::spin-database-123456789012-us-east-2", "arn:aws:s3:::spin-database-123456789012-us-east-2/*"]) &&
+      s.resources == toset(["arn:aws:s3:::spin-database-123456789012-us-east-2", "arn:aws:s3:::spin-database-123456789012-us-east-2/*",
+      "arn:aws:s3:::spin-database-handover-123456789012-us-east-2", "arn:aws:s3:::spin-database-handover-123456789012-us-east-2/*"]) &&
       anytrue([for c in s.condition : c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" &&
     toset(c.values) == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-controlplane"])])])
     error_message = "a role other than the control plane's can reach the database's archive"

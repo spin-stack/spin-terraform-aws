@@ -128,6 +128,11 @@ output "database_bucket" {
   value       = aws_s3_bucket.database.bucket
 }
 
+output "database_handover_bucket" {
+  description = "The database's handover records: which control plane machine holds it, and the requests for it. Unversioned, its role alone reaches it."
+  value       = aws_s3_bucket.database_handover.bucket
+}
+
 output "controlplane_group" {
   description = "The control plane's group of one. `aws autoscaling start-instance-refresh --auto-scaling-group-name <this>` replaces its machine beside itself; its machine is reached with `aws ssm start-session`, as the proxy's is."
   value       = aws_autoscaling_group.controlplane.name
