@@ -400,8 +400,8 @@ and says what that account needs.
   ships a base backup and every WAL segment as it is written to a bucket of its own,
   `<name>-database-<account>-<region>` (the `database_bucket` output), sealed under the
   installation's key before it leaves the machine; the machine that replaces it restores from
-  there before it serves. The bucket is versioned under a GOVERNANCE Object Lock of fourteen
-  days, as spin requires of every store it opens, and what a delete or an overwrite left goes a
+  there before it serves. The bucket is versioned under a GOVERNANCE Object Lock of seven
+  days (`database_lock_days`), as spin requires of every store it opens, and what a delete or an overwrite left goes a
   day after the lock lets it. Only the control plane's role reaches it - list, read, write and
   delete, read its versioning and its lock, and no version - and the boundary refuses it to every other role and refuses every role the erasing of
   a version. It is never the volumes' bucket, whose credentials hosts hold, and where it is is in

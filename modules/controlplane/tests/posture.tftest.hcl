@@ -1074,7 +1074,7 @@ run "the_databases_archive" {
       aws_s3_bucket_versioning.database.versioning_configuration[0].status == "Enabled" &&
       aws_s3_bucket.database.force_destroy != true &&
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
-      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 15])]) &&
+      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 8])]) &&
       anytrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : r.status == "Enabled" &&
       length(r.abort_incomplete_multipart_upload) > 0])
     )
@@ -1086,11 +1086,11 @@ run "the_databases_archive" {
     condition = (
       aws_s3_bucket.database.object_lock_enabled &&
       aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].mode == "GOVERNANCE" &&
-      aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].days == 14 &&
+      aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].days == 7 &&
       alltrue([for r in aws_s3_bucket_lifecycle_configuration.database.rule : alltrue([for n in r.noncurrent_version_expiration :
       n.noncurrent_days > aws_s3_bucket_object_lock_configuration.database.rule[0].default_retention[0].days])])
     )
-    error_message = "the archive is not under a GOVERNANCE lock of two weeks, or its lifecycle expires what the lock still holds"
+    error_message = "the archive is not under a GOVERNANCE lock of a week, or its lifecycle expires what the lock still holds"
   }
   assert {
     condition = alltrue([
