@@ -405,7 +405,11 @@ and says what that account needs.
   day after the lock lets it. Only the control plane's role reaches it - list, read, write and
   delete, read its versioning and its lock, and no version - and the boundary refuses it to every other role and refuses every role the erasing of
   a version. It is never the volumes' bucket, whose credentials hosts hold, and where it is is in
-  the control plane's document, since the database cannot say where its own backup is.
+  the control plane's document, since the database cannot say where its own backup is. Which
+  machine holds the database, beating every fifteen seconds, and a machine asking for it are in a
+  bucket of their own, `<name>-database-handover-<account>-<region>` (the
+  `database_handover_bucket` output): unversioned and unlocked, since in the archive's every beat
+  was a version kept, and reached by the control plane's role alone.
 - **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.medium` by default:
   the control plane's machine holds the control plane, its database, Alloy and the stores of logs,
   traces and metrics it runs. Two of them are the whole standing cost when no runner is up.

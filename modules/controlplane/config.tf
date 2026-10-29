@@ -59,6 +59,12 @@ locals {
         bucket = aws_s3_bucket.database.bucket
         region = local.region
       }
+      # Who holds the database and the requests for it, in a bucket that keeps no versions
+      # (database_bucket.tf).
+      handover = {
+        bucket = aws_s3_bucket.database_handover.bucket
+        region = local.region
+      }
     }
     # Agreed with KMS at every start by a machine whose NitroTPM proves this release's image
     # (attested_key.tf): named here, held nowhere.

@@ -142,3 +142,110 @@ resource "aws_s3_bucket_policy" "database" {
   policy     = data.aws_iam_policy_document.database_bucket.json
   depends_on = [aws_s3_bucket_public_access_block.database]
 }
+
+# The database's handover records: which control plane machine holds the database, written over
+# every fifteen seconds, and a machine asking for it and the answer. A bucket of their own, apart
+# from the archive's: under its versioning and lock every beat was a version kept for the lock's
+# days - some 5,760 a day. Nothing is restored from these, and the newest record is all anything
+# reads, so this one keeps no versions and has no lock. spin opens it as such
+# (storecfg.Flags.Unversioned) and seals what it writes here as it seals the archive.
+#
+# Named in the control plane's document (config.tf) from the spin release that reads it: one before
+# refuses a document key it does not know, so this is applied with that release or after it.
+#trivy:ignore:AWS-0089
+#trivy:ignore:AWS-0090
+resource "aws_s3_bucket" "database_handover" {
+  bucket        = "${local.name}-database-handover-${local.account}-${local.region}"
+  force_destroy = var.decommission
+  tags          = merge(local.tags, { "spin:role" = "database-handover" })
+}
+
+resource "aws_s3_bucket_public_access_block" "database_handover" {
+  bucket                  = aws_s3_bucket.database_handover.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "database_handover" {
+  bucket = aws_s3_bucket.database_handover.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+#trivy:ignore:AWS-0132
+resource "aws_s3_bucket_server_side_encryption_configuration" "database_handover" {
+  bucket = aws_s3_bucket.database_handover.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# A request and its answer are written once and read during one handover; the holder's record is
+# written over in place and is the one that stays. Three days is past any handover and any look
+# at one after it.
+resource "aws_s3_bucket_lifecycle_configuration" "database_handover" {
+  bucket = aws_s3_bucket.database_handover.id
+  rule {
+    id     = "answered-requests"
+    status = "Enabled"
+    filter {
+      prefix = "handover/2"
+    }
+    expiration {
+      days = 3
+    }
+  }
+  rule {
+    id     = "abandoned-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+data "aws_iam_policy_document" "database_handover_bucket" {
+  statement {
+    sid     = "ObjectsOnlyFromTheVPC"
+    effect  = "Deny"
+    actions = ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:AbortMultipartUpload"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    resources = ["${aws_s3_bucket.database_handover.arn}/*"]
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:SourceVpce"
+      values   = [aws_vpc_endpoint.s3.id]
+    }
+  }
+  statement {
+    sid     = "TLSOnly"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    resources = [aws_s3_bucket.database_handover.arn, "${aws_s3_bucket.database_handover.arn}/*"]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "database_handover" {
+  count      = var.decommission ? 0 : 1
+  bucket     = aws_s3_bucket.database_handover.id
+  policy     = data.aws_iam_policy_document.database_handover_bucket.json
+  depends_on = [aws_s3_bucket_public_access_block.database_handover]
+}

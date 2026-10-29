@@ -133,10 +133,15 @@ data "aws_iam_policy_document" "boundary" {
   # The database's archive is the database: whoever writes it decides what a restore brings back,
   # who administers the installation among it. The control plane's role alone reaches it.
   statement {
-    sid       = "TheDatabasesArchiveIsTheControlPlanes"
-    effect    = "Deny"
-    actions   = ["s3:*"]
-    resources = [aws_s3_bucket.database.arn, "${aws_s3_bucket.database.arn}/*"]
+    sid     = "TheDatabasesArchiveIsTheControlPlanes"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    # And its handover records: whoever writes who holds the database decides which machine
+    # restores it.
+    resources = [
+      aws_s3_bucket.database.arn, "${aws_s3_bucket.database.arn}/*",
+      aws_s3_bucket.database_handover.arn, "${aws_s3_bucket.database_handover.arn}/*",
+    ]
     condition {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"

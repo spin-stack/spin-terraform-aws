@@ -120,6 +120,18 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.database.arn}/*"]
   }
+  # The database's handover records (database_bucket.tf): who holds it, a request for it and the
+  # answer, read and written over in place.
+  statement {
+    sid       = "TheDatabasesHandover"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.database_handover.arn]
+  }
+  statement {
+    sid       = "TheDatabasesHandoverObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.database_handover.arn}/*"]
+  }
   # The runners' group, which the runners module names ${name}-runners: the control plane
   # starts a host when a workspace waits for one, empties the group when nothing runs, and gives
   # back one host that holds nothing only it has, by its instance, with the group one smaller.
