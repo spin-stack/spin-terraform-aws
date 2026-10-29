@@ -154,9 +154,9 @@ variable "object_lock_days" {
 }
 
 variable "database_lock_days" {
-  description = "The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database_bucket.tf)."
+  description = "The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database_bucket.tf). Every base backup and WAL segment the archive prunes is held this long, so the archive's size is this many days of it on top of what it keeps: a week is the window to notice a wrong delete."
   type        = number
-  default     = 14
+  default     = 7
   nullable    = false
   validation {
     condition     = var.database_lock_days >= 1
