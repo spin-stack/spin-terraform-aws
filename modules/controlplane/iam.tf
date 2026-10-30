@@ -132,22 +132,8 @@ data "aws_iam_policy_document" "controlplane" {
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.database_handover.arn}/*"]
   }
-  # The runners' group, which the runners module names ${name}-runners: the control plane
-  # starts a host when a workspace waits for one, empties the group when nothing runs, and gives
-  # back one host that holds nothing only it has, by its instance, with the group one smaller.
-  # Describe has no resource-level permission; the resize and the removal are held to that group.
-  # The group's activities are how the control plane says why a host it asked for did not come
-  # (spin#702): the image gone, the spot quota spent, no capacity.
-  statement {
-    sid       = "SizeTheRunners"
-    actions   = ["autoscaling:SetDesiredCapacity", "autoscaling:TerminateInstanceInAutoScalingGroup"]
-    resources = ["${local.arn}:autoscaling:${local.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/${local.runner_group}"]
-  }
-  statement {
-    sid       = "SeeTheRunners"
-    actions   = ["autoscaling:DescribeAutoScalingGroups", "autoscaling:DescribeScalingActivities"]
-    resources = ["*"]
-  }
+  # The runners' groups are the runners module's to grant (its controlplane_fleet policy), beside
+  # the template they start.
   statement {
     sid       = "MintRunnerCredentials"
     actions   = ["sts:AssumeRole"]

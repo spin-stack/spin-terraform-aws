@@ -1,6 +1,6 @@
-output "autoscaling_group" {
-  description = "The runners' group, which the control plane sizes: empty until a workspace waits for a host."
-  value       = aws_autoscaling_group.runner.name
+output "launch_template" {
+  description = "The runners' launch template, which every host class's group the control plane makes starts its machines from; its default version is the release's."
+  value       = aws_launch_template.runner.name
 }
 
 output "security_group_id" {

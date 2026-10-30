@@ -167,7 +167,7 @@ another, which joins by its role as a new host.
 
 ```bash
 aws autoscaling describe-auto-scaling-instances \
-  --query 'AutoScalingInstances[?AutoScalingGroupName==`<name>-runners`].[InstanceId,LifecycleState,HealthStatus]' --output table
+  --query 'AutoScalingInstances[?starts_with(AutoScalingGroupName, `<name>-runners-`)].[InstanceId,LifecycleState,HealthStatus]' --output table
 aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <i-...> --no-should-decrement-desired-capacity
 ```
 
@@ -383,8 +383,17 @@ and says what that account needs.
   and install; the control plane has asked the group for one, and places the workspace on it
   when it registers. It only ever goes from none to one, adds one while a workspace has waited
   longer than a host takes to come, and goes back to none: it never picks one host of several
-  to take away, since the group would choose which. Its role may resize that one group and
-  nothing else, and the group's name, `<name>-runners`, is the contract between the modules.
+  to take away, since the group would choose which.
+- **The control plane makes the groups, one per kind of runner.** A host class (Admin ->
+  Runners) is what its group's machines are - instance types, vCPUs, spot or on-demand, how many
+  at most - and the control plane makes the group `<name>-runners-<class>` from the runners
+  module's launch template and holds it to the class; this module seeds the default class from
+  its `runner_*` variables. What a machine boots is the template's alone: the control plane's role
+  may start that template and pass the runners' role, and nothing else (the runners module's
+  `controlplane_fleet`, and the boundary's `iam:PassRole` statements). A release moves the
+  template's default version, which each group takes - at once when `runner_rollout` is
+  `rolling`. None of the groups is in this state, so `tofu destroy` takes them away itself
+  (`modules/controlplane/runner_groups.tf`), with the AWS CLI it already asks for.
 - **The installation's configuration is this module's.** `installation_config` is the
   installation's config file (spin's `configs/spin-example.yaml`); this module adds the domain,
   who joins as a host and the autoscaling settings, and writes it where the control plane reads

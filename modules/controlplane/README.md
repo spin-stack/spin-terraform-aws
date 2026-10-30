@@ -19,6 +19,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | Name | Version |
 | ---- | ------- |
 | aws | ~> 6.0 |
+| terraform | n/a |
 | tls | ~> 4.1 |
 
 ## Resources
@@ -136,6 +137,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_vpc_security_group_ingress_rule.proxy_http](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
+| [terraform_data.runner_groups](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [tls_private_key.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [tls_self_signed_cert.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/self_signed_cert) | resource |
 | [aws_ami.spin_os](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -192,6 +194,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | instance\_type | The control plane's machine: the control plane, its database (PostgreSQL), the collector, and the stores of logs, traces and metrics it runs. | `string` | `"t8i.medium"` | no |
 | internal\_zone | The private zone the components reach each other by: cp.<this> and proxy.<this>, resolved only inside the VPC. | `string` | `"spin.internal"` | no |
 | log\_retention\_days | How long the flow and query logs are kept. | `number` | `30` | no |
+| max\_runners | The most runners the group may have. How many it has is the control plane's to decide: none until a workspace waits for a host, and none again once nothing has run for the control plane module's runner\_idle\_minutes. | `number` | `1` | no |
 | monthly\_budget\_usd | What the installation may cost in a month, in US dollars: an AWS Budget on its spin:installation tag (budget.tf), which the control plane reads and alerts reach. Null is no budget. | `number` | `null` | no |
 | name | The installation's name, one per region of an account: every resource's prefix, the SSM path (/spin/<name>/...) each machine's document is at, and - with the region - every IAM name. Two installations of one account may share a name in two regions, and not in one (claim.tf). | `string` | `"spin"` | no |
 | object\_lock\_days | The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and the bucket's lifecycle (bucket.tf) removes them a day after. | `number` | `30` | no |
@@ -199,8 +202,15 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | proxy\_instance\_type | The proxy's machine: Caddy and nothing else, the one address the internet reaches. | `string` | `"t8i.micro"` | no |
 | quiet\_hours | HH:MM-HH:MM in time\_zone when an idle fleet is emptied at once rather than after runner\_idle\_minutes. A workspace asked for then still brings a runner up. Empty is none. | `string` | `""` | no |
 | root\_volume\_gb | The control plane's disk: beside the read-only OS, /var takes the rest - the database, the logs' and metrics' stores and their caches. A new size is a new machine, replaced beside the old. | `number` | `40` | no |
+| runner\_data\_volume\_gb | An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more. A machine's boot takes an empty EBS volume where it has one, and the instance store otherwise. | `number` | `0` | no |
+| runner\_drain\_seconds | How long a host the group is taking away is held while it empties itself: the termination hook's timeout. At least the pool token's --shutdown-grace; the hook is left to expire, so this is also how long each scale-in takes. | `number` | `150` | no |
 | runner\_idle\_minutes | How long the fleet has no workspace running, starting or waiting before the runners' group is emptied. | `number` | `60` | no |
+| runner\_instance\_types | The types the group may start, as EC2's allowed\_instance\_types takes them: names, or patterns with * (c8id.*). The group starts any type they match that has vcpus and the disk data\_volume\_gb leaves the data on - a local NVMe while it is 0, so a d variant - and AWS adds the sizes and types it brings out without this list changing.  Keep them one CPU generation: a checkpoint records the processor and its flags as -cpu host showed them (MachineIdentity in spin's internal/runner/vmm), and resumes only onto a host that shows the same - a workspace suspended at night on one family and brought back on another cold-boots. Nested virtualization is offered on C8i, M8i, R8i (and their d variants), C7i, M7i, R7i and I7i. Not c8i* for c8i.*: that matches the flex types too.  For spot, the more pools a request can draw on the likelier a machine, and one type is one pool per zone. How the types these match score in a region, before installing:   aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \     --single-availability-zone --instance-requirements-with-metadata \     '{"ArchitectureTypes":["x86\_64"],"InstanceRequirements":{"VCpuCount":{"Min":32,"Max":48},"MemoryMiB":{"Min":65536},"LocalStorage":"required","AllowedInstanceTypes":[<the types>]}}' | `list(string)` | ```[ "c8i.*", "c8id.*", "m8i.*", "m8id.*", "r8i.*", "r8id.*" ]``` | no |
+| runner\_nested\_virtualization | Enable KVM inside the instance. False for .metal types, which have it by being metal and refuse the option. | `bool` | `true` | no |
 | runner\_policy | The host policy a runner starts with when it joins: how long it stays up once told to stop - a little less than the two minutes a spot reclaim gives - and the cloud that announces a reclaim. | ```object({ shutdown_grace = optional(string, "100s") preemption_source = optional(string, "aws") })``` | `{}` | no |
+| runner\_rollout | How a new release reaches the runners. idle: when the fleet next empties - no workspace running, starting or being saved - the next host boots it, and no workspace is moved for it; a host keeps the old release until then, which its control plane allows for 90 days. rolling: the hosts are replaced at once, one at a time, each old one's workspaces suspended to the bucket and resumed on the new one - for a fleet that never empties. | `string` | `"idle"` | no |
+| runner\_spot | Every host a spot instance. The policy a runner joins under (the control plane module's runner\_policy) is what tells each one a stop is a reclaim. | `bool` | `true` | no |
+| runner\_vcpus | How many vCPUs a runner may have, at least and at most: each type instance\_types matches within it is a pool the group may draw on. max is also what the quota is sized by (quota.tf). | `object({ min = number, max = number })` | ```{ "max": 48, "min": 32 }``` | no |
 | tags | Tags on everything this module creates. | `map(string)` | `{}` | no |
 | time\_zone | The IANA zone quiet\_hours are in. | `string` | `"UTC"` | no |
 | vpc\_cidr | The VPC's range, a /16. One /20 public subnet per availability zone is carved from its first half, and one /24 for the proxy per zone from x.x.136.0 on. | `string` | `"10.42.0.0/16"` | no |
@@ -235,6 +245,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | runner\_document\_arn | The runners' document, the one object of the documents' bucket the runners' role reads. |
 | runner\_idle\_minutes | How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot. |
 | runner\_user\_data | A runner's user data: its role and the runners' document, as the systemd credentials Spin OS's spin-boot takes. |
+| runners | What this module decides of the runners, for the runners module: the launch template's name, which the control plane makes each host class's group from, its role, which the runners module grants the groups to, what a template's machine needs of an instance type, and what the quota is sized by. |
 | security\_group\_id | The control plane's group; the runners module opens 8080 on it to its own. |
 | session\_manager\_policy\_arn | Session Manager into a machine, and nothing else of SSM: what the runners' role is given in place of AmazonSSMManagedInstanceCore, which reads every parameter. |
 | standard\_vcpus | The on-demand standard vCPUs the control plane's and the proxy's machines take at most: two of each while an update replaces one. The runners module counts them against the quota on-demand runners share. |
