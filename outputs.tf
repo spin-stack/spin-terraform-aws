@@ -3,6 +3,8 @@
 # commands: /login offers the identity providers there are, and a new installation has none.
 locals {
   aws = "aws --region ${module.controlplane.region}"
+  # The default kind of runner's group, as the control plane names the one it makes.
+  default_runners = "${module.controlplane.name}-runners-default"
 
   sign_in = {
     url  = "https://app.${var.domain}"
@@ -48,8 +50,9 @@ locals {
       "   The first page asks you for a password of your own.",
       "",
       "4. The runners start at zero: the first workspace you create starts one, which takes a few",
-      "   minutes, and the group is emptied after ${module.controlplane.runner_idle_minutes} idle minutes${var.quiet_hours == null ? "" : " (or at once during ${var.quiet_hours} ${coalesce(var.time_zone, "UTC")})"}.",
-      "     ${format(local.status, module.runners.autoscaling_group)}",
+      "   minutes, and a group is emptied after ${module.controlplane.runner_idle_minutes} idle minutes${var.quiet_hours == null ? "" : " (or at once during ${var.quiet_hours} ${coalesce(var.time_zone, "UTC")})"}.",
+      "   The control plane makes a group per kind of runner (Admin -> Runners), the default's first:",
+      "     ${format(local.status, local.default_runners)}",
       "",
       "5. A shell on a machine, when you need one:",
       "     ${format(local.session, module.controlplane.controlplane_group)}",
@@ -128,8 +131,8 @@ output "boot_log" {
 }
 
 output "runners_group" {
-  description = "The runners' group, which the control plane sizes: empty until a workspace waits for one."
-  value       = module.runners.autoscaling_group
+  description = "The default kind of runner's group, which the control plane makes and sizes: empty until a workspace waits for one. Each other kind's is <name>-runners-<kind>."
+  value       = local.default_runners
 }
 
 output "controlplane" {

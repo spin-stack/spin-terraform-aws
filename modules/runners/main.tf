@@ -1,8 +1,10 @@
-# An autoscaling group of runners that join by themselves: each reads its document, proves to the
-# control plane who it is with its instance role (spin's internal/domain/hostjoin) and joins under
-# the policy the installation declares for that role. There is no token to publish or read.
-# Nothing reaches a runner - its group has no ingress - and it reaches the control plane on 8080,
-# the proxy's relay on 443 and the bucket through the gateway endpoint.
+# The runners: the launch template every host class's group starts its machines from, the role they
+# run under, and the control plane's leave to make, hold and size those groups (one per class, the
+# control plane's to make: spin's internal/controlplane/domain/hostclass). Each runner reads its
+# document, proves to the control plane who it is with its instance role (spin's
+# internal/domain/hostjoin) and joins under the policy the installation declares for that role.
+# Nothing reaches a runner - it has no ingress - and it reaches the control plane on 8080, the
+# proxy's relay on 443 and the bucket through the gateway endpoint.
 
 # A runner boots the runner's image of the installation's release, which is the only one a
 # runner's control plane serves (spin's CheckRelease refuses a runner of another). Nothing reaches
@@ -100,7 +102,9 @@ resource "aws_iam_instance_profile" "runner" {
 }
 
 resource "aws_launch_template" "runner" {
-  name_prefix            = "${local.name}-runner-"
+  # By name: the control plane makes each host class's group from it, and the name is what it is
+  # told (its autoscaling_fleet setting) before the template's id exists.
+  name                   = var.runners.launch_template
   image_id               = var.controlplane.images["runner"].id
   vpc_security_group_ids = [aws_security_group.runner.id]
   update_default_version = true
@@ -117,7 +121,7 @@ resource "aws_launch_template" "runner" {
   }
 
   dynamic "cpu_options" {
-    for_each = var.nested_virtualization ? [1] : []
+    for_each = var.runners.nested_virtualization ? [1] : []
     content {
       nested_virtualization = "enabled"
     }
@@ -134,12 +138,12 @@ resource "aws_launch_template" "runner" {
   }
 
   dynamic "block_device_mappings" {
-    for_each = var.data_volume_gb > 0 ? [1] : []
+    for_each = var.runners.data_volume_gb > 0 ? [1] : []
     content {
       device_name = "/dev/sdf"
       ebs {
         volume_type           = "gp3"
-        volume_size           = var.data_volume_gb
+        volume_size           = var.runners.data_volume_gb
         encrypted             = true
         delete_on_termination = true
       }
@@ -162,98 +166,82 @@ resource "aws_launch_template" "runner" {
   tags = local.tags
 }
 
-resource "aws_autoscaling_group" "runner" {
-  name                = "${local.name}-runners"
-  vpc_zone_identifier = var.controlplane.subnet_ids
-  # From none, and sized by the control plane (spin's internal/domain/autoscale): it starts a host when
-  # a workspace waits for one and empties the group when nothing runs. Terraform sets neither
-  # the size nor the name's contract with the control plane module, ${name}-runners, can change.
-  min_size = 0
-  max_size = var.max_hosts
-  # A spot recommendation to leave starts the replacement first; the host being replaced then
-  # leaves by the termination hook below, so its workspaces have somewhere to resume.
-  capacity_rebalance = var.spot
-  # Ten minutes to boot and install before the group asks: a runner is healthy when EC2 says it
-  # is, and whether spin takes it is the control plane's to say (Admin -> Hosts).
-  health_check_grace_period = 600
 
-  mixed_instances_policy {
-    instances_distribution {
-      on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = var.spot ? 0 : 100
-      # From the pools least likely to be reclaimed, and of those the cheapest: a runner reclaimed
-      # is every workspace on it suspended, which costs more than any difference in price.
-      spot_allocation_strategy = "price-capacity-optimized"
-      # The one a group whose types are attributes takes.
-      on_demand_allocation_strategy = "lowest-price"
-    }
-    launch_template {
-      launch_template_specification {
-        launch_template_id = aws_launch_template.runner.id
-        # The version by number, so a new image is a change to this group the plan shows - and,
-        # rolling, the change that starts the refresh below, which "$Latest" never is.
-        version = aws_launch_template.runner.latest_version
-      }
-      # Attributes, not a list of types: every type and size they match is a pool, in every zone.
-      # Five types by name scored 1 of 10 for spot in three of us-west-2's zones (#65).
-      override {
-        instance_requirements {
-          allowed_instance_types = var.instance_types
-          vcpu_count {
-            min = var.vcpus.min
-            max = var.vcpus.max
-          }
-          # 2 GiB a vCPU, the least the compute families have: the families allowed decide the rest.
-          memory_mib {
-            min = var.vcpus.min * 2048
-          }
-          # The data goes on the instance store unless it has a volume of its own.
-          local_storage = var.data_volume_gb > 0 ? "included" : "required"
-          # A .metal type has KVM by being metal, and refuses the nested virtualization option.
-          bare_metal            = var.nested_virtualization ? "excluded" : "required"
-          burstable_performance = "excluded"
-        }
-      }
+# The runners' groups are the control plane's: one per host class, which it makes from this
+# template, holds to its class and sizes (spin's internal/controlplane/domain/autoscale). Each is
+# named <name>-runners-<class> and carries the installation's tag, and what the role may do to a
+# group is held to both - nothing of another installation's, or of the control plane's and the
+# proxy's own groups of one. Granted here, beside the template, because what makes a group is
+# leave to start this template and to pass its role, and no other: the control plane decides
+# what kind of machine a runner is, never what it boots.
+data "aws_partition" "current" {}
+
+locals {
+  groups_arn = "arn:${data.aws_partition.current.partition}:autoscaling:*:*:autoScalingGroup:*:autoScalingGroupName/${local.name}-runners-*"
+}
+
+data "aws_iam_policy_document" "controlplane_fleet" {
+  statement {
+    sid       = "MakeTheRunnersGroups"
+    actions   = ["autoscaling:CreateAutoScalingGroup", "autoscaling:CreateOrUpdateTags", "autoscaling:PutLifecycleHook"]
+    resources = [local.groups_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/spin:installation"
+      values   = [local.name]
     }
   }
-
-  # A new release is a new image, and a runner cannot take one in place: its root is read-only.
-  # Idle, nothing replaces a host: the next one the group starts - after the control plane has
-  # emptied it, once no workspace runs, starts or is still being saved - boots the new image, and
-  # the old one serves until then, which its control plane allows for compat.Window (spin's
-  # internal/controlplane/compat). Rolling, the group replaces its hosts now, one at a time and the
-  # new one first, each old one leaving by the termination hook below: its workspaces suspended to
-  # the bucket and resumed on another host.
-  dynamic "instance_refresh" {
-    for_each = var.rollout == "rolling" ? [1] : []
-    content {
-      strategy = "Rolling"
-      preferences {
-        min_healthy_percentage = 100
-        max_healthy_percentage = 200
-        # The grace a host has to boot and join before the group judges it.
-        instance_warmup = 600
-      }
+  statement {
+    sid = "HoldAndSizeTheRunnersGroups"
+    actions = [
+      "autoscaling:UpdateAutoScalingGroup", "autoscaling:SetDesiredCapacity",
+      "autoscaling:TerminateInstanceInAutoScalingGroup", "autoscaling:StartInstanceRefresh",
+      "autoscaling:DeleteAutoScalingGroup", "autoscaling:PutLifecycleHook",
+    ]
+    resources = [local.groups_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/spin:installation"
+      values   = [local.name]
     }
   }
-
-  # On the group from its first instance, so no host the group ever takes away skips the drain.
-  initial_lifecycle_hook {
-    name                 = "drain"
-    lifecycle_transition = "autoscaling:EC2_INSTANCE_TERMINATING"
-    heartbeat_timeout    = var.drain_seconds
-    # Left to expire: the host empties itself on seeing the state and does not answer the hook,
-    # so it holds no permission to call the group.
-    default_result = "CONTINUE"
+  # Describe has no resource-level permission. The groups' activities are how the control plane
+  # says why a host it asked for did not come (spin#702), and a machine's group is its class.
+  statement {
+    sid = "SeeTheRunners"
+    actions = [
+      "autoscaling:DescribeAutoScalingGroups", "autoscaling:DescribeScalingActivities",
+      "autoscaling:DescribeAutoScalingInstances", "ec2:DescribeLaunchTemplates",
+      "ec2:DescribeLaunchTemplateVersions",
+    ]
+    resources = ["*"]
   }
-
-  dynamic "tag" {
-    for_each = merge(local.tags, { Name = "${local.name}-runner" })
-    content {
-      key                 = tag.key
-      value               = tag.value
-      propagate_at_launch = false
+  # What Auto Scaling asks of whoever names a launch template in a group: leave to start it,
+  # which these hold to this template and nothing else, and to pass its machines' role.
+  statement {
+    sid       = "StartOnlyTheRunnersTemplate"
+    actions   = ["ec2:RunInstances", "ec2:CreateTags"]
+    resources = ["*"]
+    condition {
+      test     = "ArnLike"
+      variable = "ec2:LaunchTemplate"
+      values   = [aws_launch_template.runner.arn]
+    }
+  }
+  statement {
+    sid       = "PassTheRunnersRole"
+    actions   = ["iam:PassRole"]
+    resources = [aws_iam_role.runner.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ec2.amazonaws.com"]
     }
   }
 }
 
+resource "aws_iam_role_policy" "controlplane_fleet" {
+  name   = "runners"
+  role   = var.runners.controlplane_role
+  policy = data.aws_iam_policy_document.controlplane_fleet.json
+}

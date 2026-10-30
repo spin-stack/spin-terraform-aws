@@ -79,8 +79,9 @@ locals {
   controlplane_group = "${local.name}-controlplane"
   proxy_group        = "${local.name}-proxy"
 
-  # The group the runners module makes; its name is the contract between the two modules.
-  runner_group = "${local.name}-runners"
+  # The launch template the runners module makes, which the control plane makes each host class's
+  # group from; its name is the contract between the two modules.
+  runner_template = "${local.name}-runner"
 }
 
 data "aws_ec2_instance_type" "controlplane" {
@@ -196,6 +197,8 @@ resource "aws_autoscaling_group" "controlplane" {
   }
 
   depends_on = [
+    # Gone before the groups it makes are taken away (runner_groups.tf), so none is made again.
+    terraform_data.runner_groups,
     # What the machine starts on, and what the document names.
     aws_s3_object.document,
     aws_ssm_parameter.installation,

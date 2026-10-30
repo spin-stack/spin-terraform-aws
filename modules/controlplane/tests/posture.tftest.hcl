@@ -128,6 +128,13 @@ override_resource {
   values = { allocation_id = "eipalloc-0123456789abcdef0", public_ip = "203.0.113.10" }
 }
 
+# The runners' subnets, which the installation's fleet names, and so what its document is hashed
+# over: known once the network is, as they are on every apply but the first.
+override_resource {
+  target = aws_subnet.public
+  values = { id = "subnet-0spin" }
+}
+
 
 # The CA's certificate, which the proxy's and the runners' documents carry.
 override_resource {
@@ -487,6 +494,73 @@ run "the_operators_file_is_the_installations" {
   }
 }
 
+# The runners' groups are the control plane's to make (spin's hostclass), from what this seeds: the
+# template by name, never an image; where and how its machines start; the default kind of runner
+# from the runner_* variables, beside the operator's own kinds; and the most runners together.
+run "the_installation_is_told_how_to_make_its_runners_groups" {
+  command = plan
+  variables {
+    runner_vcpus          = { min = 16, max = 32 }
+    runner_spot           = false
+    runner_rollout        = "rolling"
+    runner_data_volume_gb = 200
+    max_runners           = 4
+    installation_config   = <<-EOT
+      host_classes:
+        - {name: default, vcpus: {min: 2, max: 4}}
+        - {name: gpu, instance_types: ["g6.*"], vcpus: {min: 8, max: 16}}
+    EOT
+  }
+
+  assert {
+    condition = merge(jsondecode(local.installation.settings.autoscaling_fleet), { subnets = [] }) == {
+      region        = "us-east-2", name = "spin", launch_template = "spin-runner", subnets = [],
+      drain_seconds = 150, local_storage = "included", bare_metal = "excluded", rolling = true,
+      tags          = { "spin:installation" = "spin" }
+    } && length(jsondecode(local.installation.settings.autoscaling_fleet).subnets) == length(aws_subnet.public)
+    error_message = "the installation is told something other than its template, subnets and how its machines start"
+  }
+  assert {
+    condition     = !strcontains(local.installation.settings.autoscaling_fleet, "ami-")
+    error_message = "the control plane is told an image: what a runner boots is the template's alone"
+  }
+  assert {
+    condition     = local.installation.settings.autoscaling_max_hosts == 4
+    error_message = "the installation is not told how many runners it may have"
+  }
+  # The default is the module's, whatever the file says of it; the file's others are its own.
+  assert {
+    condition = (
+      length(local.installation.host_classes) == 2 &&
+      local.installation.host_classes[0].name == "default" && local.installation.host_classes[0].vcpus.min == 16 &&
+      local.installation.host_classes[0].spot == false &&
+      local.installation.host_classes[1].name == "gpu"
+    )
+    error_message = "the default kind of runner is not this module's, or the operator's kinds are lost"
+  }
+}
+
+# The runners' role is passed - which making a group of their template asks - by the control plane
+# alone, and no other role by anyone: passing one is starting a machine as something else.
+run "only_the_control_plane_passes_only_the_runners_role" {
+  command = plan
+
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "iam:PassRole") && s.not_resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner"])
+    ])
+    error_message = "a role other than the runners' may be passed"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && contains(s.actions, "iam:PassRole") && anytrue([for c in s.condition :
+        c.test == "ArnNotEquals" && c.variable == "aws:PrincipalArn" && contains(c.values, "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane")
+      ])
+    ])
+    error_message = "a role other than the control plane's may pass the runners' role"
+  }
+}
+
 run "the_installation_is_in_its_document_and_not_on_its_machines" {
   command = plan
 
@@ -798,7 +872,7 @@ run "the_roles" {
   }
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
-    s.effect == "Deny" && contains(s.actions, "iam:PassRole") && contains(s.actions, "iam:Attach*")])
+    s.effect == "Deny" && contains(s.actions, "iam:Create*") && contains(s.actions, "iam:Attach*")])
     error_message = "the boundary lets a role write IAM"
   }
   assert {
@@ -1563,8 +1637,8 @@ run "the_arns_are_the_partitions" {
   assert {
     condition = (
       local.controlplane_role_arn == "arn:aws-us-gov:iam::123456789012:role/spin-us-east-2-controlplane" &&
-      anytrue([for s in data.aws_iam_policy_document.controlplane.statement : s.sid == "SizeTheRunners" &&
-      alltrue([for r in s.resources : startswith(r, "arn:aws-us-gov:autoscaling:")])]) &&
+      anytrue([for s in data.aws_iam_policy_document.boundary.statement : s.sid == "OnlyTheRunnersRoleIsPassed" &&
+      alltrue([for r in s.not_resources : startswith(r, "arn:aws-us-gov:iam:")])]) &&
       anytrue([for s in data.aws_iam_policy_document.boundary.statement : s.sid == "OnlyTheProxysAddress" &&
       alltrue([for r in s.not_resources : startswith(r, "arn:aws-us-gov:ec2:")])])
     )

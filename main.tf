@@ -30,19 +30,22 @@ module "controlplane" {
   monthly_budget_usd  = var.monthly_budget_usd
   budget_emails       = var.budget_emails
   tags                = var.tags
+  # The default kind of runner, which the control plane holds its groups to and the dashboard
+  # then changes; and what the runners module's launch template needs of an instance type.
+  runner_instance_types = var.runner_instance_types
+  runner_vcpus          = var.runner_vcpus
+  runner_spot           = var.runner_spot
+  max_runners           = var.max_runners
+  runner_rollout        = var.runner_rollout
+  runner_data_volume_gb = var.runner_data_volume_gb
 }
 
 module "runners" {
   source = "./modules/runners"
 
   controlplane   = module.controlplane
-  instance_types = var.runner_instance_types
-  vcpus          = var.runner_vcpus
-  spot           = var.runner_spot
-  max_hosts      = var.max_runners
-  rollout        = var.runner_rollout
+  runners        = module.controlplane.runners
   request_quota  = var.request_quota
-  data_volume_gb = var.runner_data_volume_gb
   root_volume_gb = var.runner_root_volume_gb
   tags           = var.tags
 }

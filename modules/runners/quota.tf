@@ -11,11 +11,11 @@
 locals {
   # Standard instances' quotas are in vCPUs: "All Standard (A, C, D, H, I, M, R, T, Z) Spot
   # Instance Requests", and the running on-demand one.
-  quota_code = var.spot ? "L-34B43A08" : "L-1216C47A"
-  largest    = var.vcpus.max
+  quota_code = var.runners.spot ? "L-34B43A08" : "L-1216C47A"
+  largest    = var.runners.vcpus_max
   # max_hosts of the largest, and, on-demand, the control plane's and the proxy's machines, each
   # of which is two while an update replaces it.
-  vcpus_needed = var.max_hosts * local.largest + (var.spot ? 0 : var.controlplane.standard_vcpus)
+  vcpus_needed = var.runners.max_hosts * local.largest + (var.runners.spot ? 0 : var.controlplane.standard_vcpus)
 }
 
 data "aws_servicequotas_service_quota" "runners" {
@@ -37,7 +37,7 @@ check "room_for_runners" {
     condition = data.aws_servicequotas_service_quota.runners.value >= local.vcpus_needed
     error_message = join("", [
       "This account's ${data.aws_servicequotas_service_quota.runners.quota_name} quota in this region is ",
-      "${data.aws_servicequotas_service_quota.runners.value} vCPUs, and ${var.max_hosts} runner(s) of up to ",
+      "${data.aws_servicequotas_service_quota.runners.value} vCPUs, and ${var.runners.max_hosts} runner(s) of up to ",
       "${local.largest} vCPUs need ${local.vcpus_needed}. ",
       var.request_quota ? "The increase is requested by this apply; until AWS grants it, a workspace waits for a runner that cannot start. " : "Request it (Service Quotas, code ${local.quota_code}) or set request_quota. ",
       "aws service-quotas list-requested-service-quota-change-history --service-code ec2 says how the request is going.",

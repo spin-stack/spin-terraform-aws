@@ -34,13 +34,28 @@ variables {
     standard_vcpus      = 8
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
   }
+  runners = {
+    launch_template       = "spin-runner"
+    controlplane_role     = "spin-us-east-2-controlplane"
+    vcpus_max             = 48
+    max_hosts             = 1
+    spot                  = true
+    data_volume_gb        = 0
+    nested_virtualization = true
+  }
 }
 
-# The template's version, which a plan knows only once it is applied.
+# The runners' role's ARN, and the template's id and version, which a plan knows only once
+# they are applied.
+override_resource {
+  target = aws_iam_role.runner
+  values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-runner" }
+}
 override_resource {
   target = aws_launch_template.runner
-  values = { id = "lt-00000000000000000", latest_version = 7 }
+  values = { id = "lt-00000000000000000", latest_version = 7, arn = "arn:aws:ec2:us-east-2:123456789012:launch-template/lt-00000000000000000" }
 }
+
 
 run "a_runner_is_reached_by_nothing" {
   command = plan
@@ -78,47 +93,16 @@ run "a_runner_is_reached_by_nothing" {
     error_message = "a runner's machine is told something other than its role and its document"
   }
   # And it boots the runner's image of the installation's release - not the control plane's nor the
-  # proxy's, each signed by another key - on that image's root device. The group names the template's version by number: a new image is a change to the group
-  # the plan shows, where "$Latest" is the same string before and after.
+  # proxy's, each signed by another key - on that image's root device. The template is the one
+  # the control plane makes its groups from, by name, and a release is its default version.
   assert {
     condition = (
       aws_launch_template.runner.image_id == "ami-0123456789abcdef0" &&
       anytrue([for b in aws_launch_template.runner.block_device_mappings : b.device_name == "/dev/xvda"]) &&
-      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].launch_template_specification[0].version == "7"
+      aws_launch_template.runner.name == "spin-runner" && aws_launch_template.runner.update_default_version
     )
-    error_message = "a runner boots another image than the installation's runner's, or the group cannot tell a new one"
+    error_message = "a runner boots another image than the installation's runner's, or the groups would not start a new one"
   }
-  # A release moves no workspace unless the installation says so: nothing refreshes the group, and
-  # the next host it starts once the control plane has emptied it boots the new image.
-  assert {
-    condition     = length(aws_autoscaling_group.runner.instance_refresh) == 0
-    error_message = "a new release replaces the runners under their workspaces"
-  }
-}
-
-# Rolling, for a fleet that never empties: the new release replaces the hosts at once, one at a
-# time and the new one first, each old one's workspaces leaving by the drain.
-run "a_rolling_fleet_is_replaced_at_once" {
-  command = plan
-  variables {
-    rollout = "rolling"
-  }
-  assert {
-    condition = (
-      aws_autoscaling_group.runner.instance_refresh[0].strategy == "Rolling" &&
-      aws_autoscaling_group.runner.instance_refresh[0].preferences[0].min_healthy_percentage == 100 &&
-      aws_autoscaling_group.runner.instance_refresh[0].preferences[0].max_healthy_percentage == 200
-    )
-    error_message = "a rolling fleet keeps its old release, or loses a host before its replacement is up"
-  }
-}
-
-run "a_rollout_that_is_neither_is_refused" {
-  command = plan
-  variables {
-    rollout = "nightly"
-  }
-  expect_failures = [var.rollout]
 }
 
 # A runner joins by who it is, so its role reads its document and nothing else: no token, and no
@@ -143,63 +127,48 @@ run "a_runners_role_reads_its_document" {
   }
 }
 
-run "the_group_is_the_control_planes_to_size" {
+# The groups are the control plane's to make, hold and size - this installation's alone, by name
+# and by tag - and what making one asks of it is to start this template and pass its role: never
+# another template, which is another image, nor another role.
+run "the_groups_are_the_control_planes_and_start_only_this_template" {
   command = plan
 
   assert {
-    condition     = aws_autoscaling_group.runner.name == "spin-runners" && aws_autoscaling_group.runner.min_size == 0
-    error_message = "the group is not the one the control plane's role may resize, or cannot be emptied"
+    condition     = aws_iam_role_policy.controlplane_fleet.role == "spin-us-east-2-controlplane"
+    error_message = "the runners' groups are granted to another role than the control plane's"
   }
   assert {
-    condition = anytrue([for h in aws_autoscaling_group.runner.initial_lifecycle_hook :
-    h.lifecycle_transition == "autoscaling:EC2_INSTANCE_TERMINATING" && h.default_result == "CONTINUE"])
-    error_message = "a host the group takes away is not held while it drains"
-  }
-}
-
-# The group draws on every type the patterns match within the vCPUs, and only those that have
-# the disk the runner's data goes on: the instance store unless it has a volume of its own.
-run "a_runner_is_any_type_that_has_its_disk" {
-  command = plan
-
-  assert {
-    condition = (
-      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].local_storage == "required" &&
-      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].vcpu_count[0].min == 32 && aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].vcpu_count[0].max == 48 &&
-      aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].bare_metal == "excluded" &&
-      contains(aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].allowed_instance_types, "c8id.*")
-    )
-    error_message = "the group may start a type with no local NVMe for the data, or outside the vCPUs"
-  }
-}
-
-run "a_data_volume_lets_in_the_types_without_one" {
-  command = plan
-  variables {
-    data_volume_gb = 200
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane_fleet.statement :
+      alltrue([for r in s.resources : r == "*" || endswith(r, "autoScalingGroupName/spin-runners-*") || r == aws_iam_role.runner.arn])
+    ])
+    error_message = "the control plane may touch a group that is not one of this installation's runners'"
   }
   assert {
-    condition     = aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].local_storage == "included"
-    error_message = "with an EBS data volume, the types without a local NVMe are still left out"
-  }
-}
-
-run "metal_is_all_there_is_without_nested_virtualization" {
-  command = plan
-  variables {
-    nested_virtualization = false
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane_fleet.statement :
+      anytrue([for c in s.condition : c.variable == "aws:RequestTag/spin:installation" || c.variable == "aws:ResourceTag/spin:installation"]) && alltrue([for c in s.condition : contains(c.values, "spin")])
+      if anytrue([for a in s.actions : startswith(a, "autoscaling:") && !startswith(a, "autoscaling:Describe")])
+    ])
+    error_message = "a group may be made or changed without being this installation's"
   }
   assert {
-    condition     = aws_autoscaling_group.runner.mixed_instances_policy[0].launch_template[0].override[0].instance_requirements[0].bare_metal == "required"
-    error_message = "without nested virtualization the group may start a machine with no KVM"
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane_fleet.statement :
+      anytrue([for c in s.condition : c.variable == "ec2:LaunchTemplate" && contains(c.values, "arn:aws:ec2:us-east-2:123456789012:launch-template/lt-00000000000000000") && length(c.values) == 1])
+      if contains(s.actions, "ec2:RunInstances")
+    ])
+    error_message = "the control plane may start a machine from another template than the runners'"
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.controlplane_fleet.statement :
+      s.resources == toset(["arn:aws:iam::123456789012:role/spin-us-east-2-runner"]) if contains(s.actions, "iam:PassRole")
+    ])
+    error_message = "the control plane may pass another role than the runners'"
   }
 }
 
 run "the_quota_is_sized_by_the_largest_runner" {
   command = plan
   variables {
-    max_hosts = 2
-    vcpus     = { min = 32, max = 64 }
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 64, max_hosts = 2, spot = true, data_volume_gb = 0, nested_virtualization = true }
   }
   assert {
     condition     = aws_servicequotas_service_quota.runners[0].value == 128
@@ -212,20 +181,12 @@ run "the_quota_is_sized_by_the_largest_runner" {
   }
 }
 
-run "vcpus_upside_down_are_refused" {
-  command = plan
-  variables {
-    vcpus = { min = 48, max = 32 }
-  }
-  expect_failures = [var.vcpus]
-}
-
 # A quota lower than max_hosts of the largest type is asked of AWS, for exactly that; spot and
 # on-demand are two quotas, and on-demand runners share theirs with the control plane and the proxy.
 run "the_quota_the_runners_need_is_asked_for" {
   command = plan
   variables {
-    max_hosts = 2
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 2, spot = true, data_volume_gb = 0, nested_virtualization = true }
   }
   assert {
     condition = (
@@ -244,7 +205,7 @@ run "the_quota_the_runners_need_is_asked_for" {
 run "on_demand_runners_share_their_quota" {
   command = plan
   variables {
-    spot = false
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = false, data_volume_gb = 0, nested_virtualization = true }
   }
   assert {
     condition = (

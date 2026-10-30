@@ -179,9 +179,25 @@ locals {
       # Whose word about a browser's address the control plane takes: the proxy's subnets, where
       # nothing but a proxy runs.
       trusted_proxies = aws_subnet.edge[*].cidr_block
-      # The runners' group as spin's AWS provider names one, <region>/<name>: known at plan, as
-      # the group's ARN, which carries an id AWS makes, is not.
-      autoscaling_group        = "${local.region}/${local.runner_group}"
+      # What the control plane makes the runners' groups from, one per host class, as spin's AWS
+      # provider reads it (awscp.Fleet): the template by its name, which the runners module gives
+      # it, and where and how its machines start. Never an image: what a machine boots is the
+      # template's, which only this apply writes.
+      autoscaling_fleet = jsonencode({
+        region          = local.region
+        name            = local.name
+        launch_template = local.runner_template
+        subnets         = aws_subnet.public[*].id
+        drain_seconds   = var.runner_drain_seconds
+        # The data goes on the instance store unless the template gives it a volume of its own,
+        # and a .metal type has KVM by being metal and refuses nested virtualization.
+        local_storage = var.runner_data_volume_gb > 0 ? "included" : "required"
+        bare_metal    = var.runner_nested_virtualization ? "excluded" : "required"
+        rolling       = var.runner_rollout == "rolling"
+        tags          = local.tags
+      })
+      # The most runners of every kind together, which the dashboard may lower or raise.
+      autoscaling_max_hosts    = var.max_runners
       autoscaling_idle_minutes = var.runner_idle_minutes
       }, var.quiet_hours == "" ? {} : {
       autoscaling_quiet_hours = var.quiet_hours
@@ -204,6 +220,17 @@ locals {
       # Its budget (budget.tf), by an ARN known at plan rather than read off the budget.
       bill_budget = "${local.arn}:budgets::${local.account}:budget/${local.name}-monthly"
     }))
+    # The default kind of runner, from this module's runner_* variables, beside the operator's
+    # own: each seeded once, and the dashboard's to change after (spin's hostclass).
+    host_classes = concat([{
+      name           = "default"
+      description    = "The runners this installation was made with."
+      instance_types = var.runner_instance_types
+      vcpus          = var.runner_vcpus
+      spot           = var.runner_spot
+      }], [
+      for c in try(local.operator.host_classes, []) : c if c.name != "default"
+    ])
   })
 }
 

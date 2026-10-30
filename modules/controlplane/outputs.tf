@@ -157,3 +157,16 @@ output "runner_idle_minutes" {
   description = "How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot."
   value       = var.runner_idle_minutes
 }
+
+output "runners" {
+  description = "What this module decides of the runners, for the runners module: the launch template's name, which the control plane makes each host class's group from, its role, which the runners module grants the groups to, what a template's machine needs of an instance type, and what the quota is sized by."
+  value = {
+    launch_template       = local.runner_template
+    controlplane_role     = aws_iam_role.controlplane.name
+    vcpus_max             = var.runner_vcpus.max
+    max_hosts             = var.max_runners
+    spot                  = var.runner_spot
+    data_volume_gb        = var.runner_data_volume_gb
+    nested_virtualization = var.runner_nested_virtualization
+  }
+}

@@ -16,11 +16,31 @@ data "aws_iam_policy_document" "boundary" {
     effect = "Deny"
     actions = [
       "iam:Add*", "iam:Attach*", "iam:Change*", "iam:Create*", "iam:Deactivate*", "iam:Delete*",
-      "iam:Detach*", "iam:Enable*", "iam:PassRole", "iam:Put*", "iam:Remove*", "iam:Reset*",
+      "iam:Detach*", "iam:Enable*", "iam:Put*", "iam:Remove*", "iam:Reset*",
       "iam:Resync*", "iam:Set*", "iam:Tag*", "iam:Untag*", "iam:Update*", "iam:Upload*",
       "organizations:*", "account:*",
     ]
     resources = ["*"]
+  }
+  # One role is ever passed: the runners', by the control plane, to EC2 - which is what naming the
+  # runners' launch template in a group it makes asks of it (the runners module's
+  # controlplane_fleet). Passing any other role is starting a machine as something else.
+  statement {
+    sid           = "OnlyTheRunnersRoleIsPassed"
+    effect        = "Deny"
+    actions       = ["iam:PassRole"]
+    not_resources = [local.runner_role_arn]
+  }
+  statement {
+    sid       = "OnlyByTheControlPlane"
+    effect    = "Deny"
+    actions   = ["iam:PassRole"]
+    resources = [local.runner_role_arn]
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.controlplane_role_arn]
+    }
   }
   # Four roles are ever assumed from another: the one the control plane mints runners'
   # credentials under, the ones it grants volumes' keys and the identity key under, and the one it
