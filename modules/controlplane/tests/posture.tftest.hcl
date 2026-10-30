@@ -839,11 +839,28 @@ run "the_logs_bucket" {
     error_message = "the logs bucket answers without TLS"
   }
   # A lifecycle deleting under the store would leave its metastore naming splits that are gone; the
-  # volumes' access log is the one prefix that expires.
+  # volumes' access log is the one prefix that expires, and what else expires is only what a
+  # rewrite or a delete left behind.
   assert {
     condition = alltrue([for r in aws_s3_bucket_lifecycle_configuration.logs.rule :
-    length(r.expiration) == 0 || (length(r.filter) == 1 && r.filter[0].prefix == "s3-access/volumes/")])
+      length(r.expiration) == 0 || (length(r.filter) == 1 && r.filter[0].prefix == "s3-access/volumes/") ||
+    (r.expiration[0].expired_object_delete_marker == true && coalesce(r.expiration[0].days, 0) == 0 && r.expiration[0].date == null)])
     error_message = "a lifecycle rule expires what the store's retention decides"
+  }
+  # A root shell's recordings are kept here, each locked until a date of its own: the bucket has
+  # Object Lock on, and no default rule, which would lock every split the store writes.
+  assert {
+    condition     = aws_s3_bucket_versioning.logs.versioning_configuration[0].status == "Enabled"
+    error_message = "the logs bucket is not versioned, and no recording in it can be locked"
+  }
+  assert {
+    condition     = aws_s3_bucket_object_lock_configuration.logs.object_lock_enabled == "Enabled" && length(aws_s3_bucket_object_lock_configuration.logs.rule) == 0
+    error_message = "the logs bucket's lock is off, or locks every split by a default rule"
+  }
+  assert {
+    condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.logs.rule :
+    length(r.noncurrent_version_expiration) == 1 && r.noncurrent_version_expiration[0].noncurrent_days == 1])
+    error_message = "what the store rewrites or deletes is kept, and paid for, for ever"
   }
   assert {
     condition     = aws_s3_bucket_logging.volumes.target_bucket == aws_s3_bucket.logs.id && aws_s3_bucket_logging.volumes.target_prefix == "s3-access/volumes/"
@@ -903,7 +920,7 @@ run "the_roles" {
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.controlplane.statement :
       s.effect == "Deny" || length([for a in s.actions : a if a == "s3:*" ||
-    (startswith(a, "s3:Put") && !contains(["s3:PutObject", "s3:PutObjectLegalHold"], a))]) == 0])
+    (startswith(a, "s3:Put") && !contains(["s3:PutObject", "s3:PutObjectLegalHold", "s3:PutObjectRetention"], a))]) == 0])
     error_message = "the control plane is granted all of S3, or a bucket configuration to write"
   }
   assert {

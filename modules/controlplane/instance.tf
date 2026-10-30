@@ -212,6 +212,8 @@ resource "aws_autoscaling_group" "controlplane" {
     # The database's archive, which the first boot starts and every later one restores from.
     aws_s3_bucket_policy.database,
     aws_s3_bucket_object_lock_configuration.database,
+    # Where a root shell's recordings are kept, locked: no shell opens on a bucket without it.
+    aws_s3_bucket_object_lock_configuration.logs,
     aws_iam_role_policy.controlplane,
     aws_iam_role_policy.runner_scope,
     aws_route.internet,
