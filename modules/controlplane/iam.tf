@@ -99,11 +99,16 @@ data "aws_iam_policy_document" "controlplane" {
     resources = [aws_s3_bucket.volumes.arn, "${aws_s3_bucket.volumes.arn}/*"]
   }
   # Its logs and traces: the store it runs reads and writes its indexes and its metastore here,
-  # and deletes the splits retention drops. Nothing else is given this bucket - a runner's
+  # and deletes the splits retention drops. And a root shell's recordings, each locked until a
+  # date it sets as it writes it; its versioning and its lock are read, never written: spin keeps
+  # no recording in a bucket without both. Nothing else is given this bucket - a runner's
   # credentials are minted for the volumes' alone.
   statement {
-    sid       = "TheLogs"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListBucket", "s3:GetBucketLocation"]
+    sid = "TheLogs"
+    actions = [
+      "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListBucket", "s3:GetBucketLocation",
+      "s3:PutObjectRetention", "s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration",
+    ]
     resources = [aws_s3_bucket.logs.arn, "${aws_s3_bucket.logs.arn}/*"]
   }
   # The database's archive: the base backups and the WAL it ships, the restore that reads them

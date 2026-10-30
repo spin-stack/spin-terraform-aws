@@ -6,11 +6,18 @@
 # owner, another retention and another reader, and nothing in it needs the volumes' Object Lock,
 # which S3 refuses to deliver an access log into anyway.
 #
-# No versioning: Quickwit rewrites its metastore in place, and the metric store's backups are
-# removed as newer ones complete; every old copy kept would be paid for and never read. No
-# expiration rule for the stores: retention is theirs, and a rule deleting under Quickwit would
-# leave its metastore naming splits that are gone. The access log is nobody's store, so its prefix
-# expires; and the lifecycle clears uploads a machine abandoned halfway.
+# And a root shell's recordings on a runner (spin's internal/hostshell, spin#712), under
+# host-shells/: each chunk is written create-only and locked until a date of its own, as long as
+# the installation keeps its own logs, so an administrator who had root on a runner cannot remove
+# what they typed. So the bucket has Object Lock on, and no default rule: Quickwit's splits and the
+# metric store's backups are locked by nothing, and are removed as their stores decide.
+#
+# Object Lock makes the bucket versioned. Quickwit rewrites its metastore in place, and the metric
+# store's backups are removed as newer ones complete: what each leaves behind expires a day later,
+# so no old copy is paid for longer than that. No expiration rule for the stores: retention is
+# theirs, and a rule deleting under Quickwit would leave its metastore naming splits that are gone.
+# The access log is nobody's store, so its prefix expires; and the lifecycle clears uploads a
+# machine abandoned halfway.
 
 locals {
   volumes_access_log_prefix = "s3-access/volumes/"
@@ -19,14 +26,28 @@ locals {
   volumes_access_log_days = 90
 }
 
-# Unversioned on purpose (above); its own access log would be a log of S3 writing this one.
-#trivy:ignore:AWS-0090
+# Its own access log would be a log of S3 writing this one.
 #trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "logs" {
   bucket = "${local.name}-logs-${local.account}-${local.region}"
   # The installation's logs and metrics are kept past a destroy unless it is being removed.
   force_destroy = var.decommission
   tags          = merge(local.tags, { "spin:role" = "logs" })
+}
+
+resource "aws_s3_bucket_versioning" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# On, with no rule: what is kept here says how long itself (above). Turned on by this resource and
+# not by the bucket's object_lock_enabled, which would make a bucket that exists a new one.
+resource "aws_s3_bucket_object_lock_configuration" "logs" {
+  bucket              = aws_s3_bucket.logs.id
+  object_lock_enabled = "Enabled"
+  depends_on          = [aws_s3_bucket_versioning.logs]
 }
 
 resource "aws_s3_bucket_public_access_block" "logs" {
@@ -77,6 +98,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
       days = local.volumes_access_log_days
     }
   }
+  # What a rewrite or a delete left behind, a day later. A recording is never written over and is
+  # never noncurrent; a delete of one is refused until its own date.
+  rule {
+    id     = "replaced-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+  depends_on = [aws_s3_bucket_versioning.logs]
 }
 
 data "aws_iam_policy_document" "logs_bucket" {
