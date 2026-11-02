@@ -15,7 +15,7 @@ tofu=${1:?the tofu binary}
 dir=${2:?the configuration}
 
 asg='module.controlplane.aws_autoscaling_group.controlplane'
-groups='module.controlplane.terraform_data.runner_groups'
+groups='module.runners.terraform_data.runner_groups'
 security_group='module.runners.aws_security_group.runner'
 template='module.runners.aws_launch_template.runner'
 
@@ -61,10 +61,10 @@ must_not() {
 }
 
 must "${asg}" "${groups}" "the control plane goes first, or it makes the groups again"
-must "${security_group}" "${groups}" "it goes after the groups and their machines"
-must "${template}" "${groups}" "the groups are made from it"
-must_not "${security_group}" "${asg}" "it would wait for the control plane, which waits for it"
-must_not "${template}" "${asg}" "it would go before the groups it makes machines for"
+must "${groups}" "${security_group}" "the groups and their machines go first, or it waits on a machine in it"
+must "${groups}" "${template}" "the groups go first, or one fails to launch from it for as long as it lasts"
+must_not "${security_group}" "${groups}" "it would go first, waiting on the machines the groups' removal has yet to take"
+must_not "${template}" "${groups}" "it would go before the groups it makes machines for"
 
 if [ "${failed}" -ne 0 ]; then
 	exit 1

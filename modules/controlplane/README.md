@@ -19,7 +19,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | Name | Version |
 | ---- | ------- |
 | aws | ~> 6.0 |
-| terraform | n/a |
 | tls | ~> 4.1 |
 
 ## Resources
@@ -139,7 +138,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_vpc_security_group_ingress_rule.proxy_http](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
-| [terraform_data.runner_groups](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [tls_private_key.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [tls_self_signed_cert.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/self_signed_cert) | resource |
 | [aws_ami.spin_os](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -206,6 +204,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | root\_volume\_gb | The control plane's disk: beside the read-only OS, /var takes the rest - the database, the logs' and metrics' stores and their caches. A new size is a new machine, replaced beside the old. | `number` | `40` | no |
 | runner\_data\_volume\_gb | An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more. A machine's boot takes an empty EBS volume where it has one, and the instance store otherwise. | `number` | `0` | no |
 | runner\_drain\_seconds | How long a host the group is taking away is held while it empties itself: the termination hook's timeout. At least the pool token's --shutdown-grace; the hook is left to expire, so this is also how long each scale-in takes. | `number` | `150` | no |
+| runner\_groups | The runners module's runner\_groups output, what takes the runners' groups away on a destroy: the control plane's group depends on it, so it goes first and makes none of them again. | `string` | `""` | no |
 | runner\_idle\_minutes | How long the fleet has no workspace running, starting or waiting before the runners' group is emptied. | `number` | `60` | no |
 | runner\_instance\_types | The types the group may start, as EC2's allowed\_instance\_types takes them: names, or patterns with * (c8id.*). The group starts any type they match that has vcpus and the disk data\_volume\_gb leaves the data on - a local NVMe while it is 0, so a d variant - and AWS adds the sizes and types it brings out without this list changing.  Keep them one CPU generation: a checkpoint records the processor and its flags as -cpu host showed them (MachineIdentity in spin's internal/runner/vmm), and resumes only onto a host that shows the same - a workspace suspended at night on one family and brought back on another cold-boots. Nested virtualization is offered on C8i, M8i, R8i (and their d variants), C7i, M7i, R7i and I7i. Not c8i* for c8i.*: that matches the flex types too.  For spot, the more pools a request can draw on the likelier a machine, and one type is one pool per zone. How the types these match score in a region, before installing:   aws ec2 get-spot-placement-scores --target-capacity 1 --region-names <region> \     --single-availability-zone --instance-requirements-with-metadata \     '{"ArchitectureTypes":["x86\_64"],"InstanceRequirements":{"VCpuCount":{"Min":32,"Max":48},"MemoryMiB":{"Min":65536},"LocalStorage":"required","AllowedInstanceTypes":[<the types>]}}' | `list(string)` | ```[ "c8i.*", "c8id.*", "m8i.*", "m8id.*", "r8i.*", "r8id.*" ]``` | no |
 | runner\_nested\_virtualization | Enable KVM inside the instance. False for .metal types, which have it by being metal and refuse the option. | `bool` | `true` | no |
@@ -245,7 +244,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
 | runner\_document\_arn | The runners' document, the one object of the documents' bucket the runners' role reads. |
-| runner\_groups | What takes the runners' groups away on a destroy (runner\_groups.tf): for what has to outlive their machines to depend on. |
 | runner\_idle\_minutes | How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot. |
 | runner\_user\_data | A runner's user data: its role and the runners' document, as the systemd credentials Spin OS's spin-boot takes. |
 | runners | What this module decides of the runners, for the runners module: the launch template's name, which the control plane makes each host class's group from, its role, which the runners module grants the groups to, what a template's machine needs of an instance type, and what the quota is sized by. |

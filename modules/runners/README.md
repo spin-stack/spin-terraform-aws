@@ -17,6 +17,7 @@ sizes. It takes `modules/controlplane`'s outputs whole. The repository's
 | Name | Version |
 | ---- | ------- |
 | aws | ~> 6.0 |
+| terraform | n/a |
 
 ## Resources
 
@@ -33,17 +34,19 @@ sizes. It takes `modules/controlplane`'s outputs whole. The repository's
 | [aws_vpc_security_group_egress_rule.runner](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.collector_from_runners](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.controlplane_from_runners](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
+| [terraform_data.runner_groups](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [aws_iam_policy_document.controlplane_fleet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ec2_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.runner](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 | [aws_servicequotas_service_quota.runners](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/servicequotas_service_quota) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| controlplane | What this module needs of the control plane module's outputs, named one by one: its name, where the runners go, their document, what a runner's machine runs at its first boot, and what taking the runners' groups away is, which the security group and the launch template outlive. | ```object({ name = string iam_name = string vpc_id = string subnet_ids = list(string) security_group_id = string runner_document_arn = string runner_user_data = string images = map(object({ id = string, root_device = string })) boot_log_policy_arn = string standard_vcpus = number boundary_arn = string runner_groups = string })``` | n/a | yes |
+| controlplane | What this module needs of the control plane module's outputs, named one by one: its name, where the runners go, their document, and what a runner's machine runs at its first boot. | ```object({ name = string iam_name = string vpc_id = string subnet_ids = list(string) security_group_id = string runner_document_arn = string runner_user_data = string images = map(object({ id = string, root_device = string })) boot_log_policy_arn = string standard_vcpus = number boundary_arn = string })``` | n/a | yes |
 | runners | The control plane module's runners output: what it decides of the runners - the launch template's name, which it makes each host class's group from, its role, what the template's machines need of an instance type, and what the quota is sized by. | ```object({ launch_template = string controlplane_role = string vcpus_max = number max_hosts = number spot = bool data_volume_gb = number nested_virtualization = bool })``` | n/a | yes |
 | request\_quota | Ask AWS for the vCPU quota max\_hosts runners need, when the account's is lower (quota.tf). A request costs nothing and lowers nothing when it is removed. | `bool` | `true` | no |
 | root\_volume\_gb | The runner's root disk: the OS and the machine's files; its data is on the instance store or data\_volume\_gb. | `number` | `30` | no |
@@ -54,5 +57,6 @@ sizes. It takes `modules/controlplane`'s outputs whole. The repository's
 | Name | Description |
 | ---- | ----------- |
 | launch\_template | The runners' launch template, which every host class's group the control plane makes starts its machines from; its default version is the release's. |
+| runner\_groups | What takes the runners' groups away on a destroy (groups.tf): for the control plane's group to depend on, which has to go first or it makes them again. |
 | security\_group\_id | The runners' security group: nothing in, everything out - a workspace's egress is filtered on the host by spin. |
 <!-- END_TF_DOCS -->

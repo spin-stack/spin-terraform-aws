@@ -392,7 +392,7 @@ and says what that account needs.
   `controlplane_fleet`, and the boundary's `iam:PassRole` statements). A release moves the
   template's default version, which each group takes - at once when `runner_rollout` is
   `rolling`. None of the groups is in this state, so `tofu destroy` takes them away itself
-  (`modules/controlplane/runner_groups.tf`), with the AWS CLI it already asks for.
+  (`modules/runners/groups.tf`), with the AWS CLI it already asks for.
 - **The installation's configuration is this module's.** `installation_config` is the
   installation's config file (spin's `configs/spin-example.yaml`); this module adds the domain,
   who joins as a host and the autoscaling settings, and writes it where the control plane reads

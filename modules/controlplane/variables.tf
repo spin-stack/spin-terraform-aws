@@ -367,6 +367,13 @@ variable "runner_drain_seconds" {
   }
 }
 
+variable "runner_groups" {
+  description = "The runners module's runner_groups output, what takes the runners' groups away on a destroy: the control plane's group depends on it, so it goes first and makes none of them again."
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
 variable "runner_data_volume_gb" {
   description = "An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more. A machine's boot takes an empty EBS volume where it has one, and the instance store otherwise."
   type        = number
