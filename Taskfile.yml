@@ -228,9 +228,14 @@ tasks:
       - bash hack/fresh-install-remove.sh
 
   fresh-install:watch:
-    desc: Remove what the fresh install left in the account, and open an issue for what it cannot.
+    desc: Remove what the fresh install left in the account, closing any issue once it is clean.
     cmds:
       - bash hack/fresh-install-watch.sh
+
+  fresh-install:watch:report:
+    desc: Open an issue saying the watch did not finish, with what is still in the account.
+    cmds:
+      - bash hack/fresh-install-watch.sh --report
 
   release:
     desc: >-

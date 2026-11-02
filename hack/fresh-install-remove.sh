@@ -94,24 +94,25 @@ remaining() {
   left=$(jq -r '.values.root_module // {} | .. | objects | select(has("address") and .mode? == "managed") | .address' <<< "${shown}") || return 1
 }
 
-# Every version's legal hold lifted, in each Object Lock bucket the state has: the README's
-# removal, step 2. A bucket already gone has nothing to lift.
+# Every version's legal hold lifted in the volumes' bucket: the README's removal, step 2. Only there:
+# nothing else is ever held, and each version is a request of its own, which in the logs' bucket of
+# an installation a day old is 100 minutes (run 41374591697). A bucket already gone has nothing to lift.
 unhold() {
-  local buckets b out key id
-  if ! buckets=$(tofu -chdir="${install}" show -json | jq -r '.. | objects | select(.mode? == "managed" and .type? == "aws_s3_bucket" and .values.object_lock_enabled? == true) | .values.bucket'); then
-    fail "the installation's locked buckets could not be read"
+  local b out key id
+  if ! b=$(tofu -chdir="${install}" show -json | jq -r 'first(.. | objects | select(.mode? == "managed" and .type? == "aws_s3_bucket" and .name? == "volumes")) | .values.bucket'); then
+    fail "the volumes' bucket could not be read from the state"
     return
   fi
-  for b in ${buckets}; do
-    if ! out=$(aws s3api list-object-versions --bucket "${b}" --expected-bucket-owner "${account}" --output json 2> "${tmp}/err"); then
-      grep -q NoSuchBucket "${tmp}/err" || fail "${b}'s versions could not be listed: $(< "${tmp}/err")"
-      continue
-    fi
-    while IFS=$'\t' read -r key id; do
-      aws s3api put-object-legal-hold --bucket "${b}" --expected-bucket-owner "${account}" --key "${key}" \
-        --version-id "${id}" --legal-hold Status=OFF || fail "${b}/${key} (${id}) is still held"
-    done < <(jq -r '(.Versions // [])[] | [.Key, .VersionId] | @tsv' <<< "${out}")
-  done
+  [ -n "${b}" ] || return
+  if ! out=$(aws s3api list-object-versions --bucket "${b}" --expected-bucket-owner "${account}" --output json 2> "${tmp}/err"); then
+    grep -q NoSuchBucket "${tmp}/err" || fail "${b}'s versions could not be listed: $(< "${tmp}/err")"
+    return
+  fi
+  echo "lifting the legal holds of $(jq '(.Versions // []) | length' <<< "${out}") versions in ${b}"
+  while IFS=$'\t' read -r key id; do
+    aws s3api put-object-legal-hold --bucket "${b}" --expected-bucket-owner "${account}" --key "${key}" \
+      --version-id "${id}" --legal-hold Status=OFF || fail "${b}/${key} (${id}) is still held"
+  done < <(jq -r '(.Versions // [])[] | [.Key, .VersionId] | @tsv' <<< "${out}")
 }
 
 # The README's removal, as an operator runs it: decommission applied to the buckets the state has,
