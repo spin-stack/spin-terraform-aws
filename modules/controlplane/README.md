@@ -245,6 +245,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
 | runner\_document\_arn | The runners' document, the one object of the documents' bucket the runners' role reads. |
+| runner\_groups | What takes the runners' groups away on a destroy (runner\_groups.tf): for what has to outlive their machines to depend on. |
 | runner\_idle\_minutes | How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot. |
 | runner\_user\_data | A runner's user data: its role and the runners' document, as the systemd credentials Spin OS's spin-boot takes. |
 | runners | What this module decides of the runners, for the runners module: the launch template's name, which the control plane makes each host class's group from, its role, which the runners module grants the groups to, what a template's machine needs of an instance type, and what the quota is sized by. |

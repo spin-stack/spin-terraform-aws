@@ -43,7 +43,23 @@ module "controlplane" {
 module "runners" {
   source = "./modules/runners"
 
-  controlplane   = module.controlplane
+  # Field by field, not the module whole: a reference to the module depends on every output of it,
+  # the control plane's group among them, and a destroy would then take this module first. Its
+  # security group cannot go while a runner is in it, and the runners go only once that group has.
+  controlplane = {
+    name                = module.controlplane.name
+    iam_name            = module.controlplane.iam_name
+    vpc_id              = module.controlplane.vpc_id
+    subnet_ids          = module.controlplane.subnet_ids
+    security_group_id   = module.controlplane.security_group_id
+    runner_document_arn = module.controlplane.runner_document_arn
+    runner_user_data    = module.controlplane.runner_user_data
+    images              = module.controlplane.images
+    boot_log_policy_arn = module.controlplane.boot_log_policy_arn
+    standard_vcpus      = module.controlplane.standard_vcpus
+    boundary_arn        = module.controlplane.boundary_arn
+    runner_groups       = module.controlplane.runner_groups
+  }
   runners        = module.controlplane.runners
   request_quota  = var.request_quota
   root_volume_gb = var.runner_root_volume_gb
