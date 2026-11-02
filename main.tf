@@ -27,6 +27,7 @@ module "controlplane" {
   quiet_hours         = var.quiet_hours
   time_zone           = var.time_zone
   decommission        = var.decommission
+  runner_groups       = module.runners.runner_groups
   monthly_budget_usd  = var.monthly_budget_usd
   budget_emails       = var.budget_emails
   tags                = var.tags
@@ -44,8 +45,8 @@ module "runners" {
   source = "./modules/runners"
 
   # Field by field, not the module whole: a reference to the module depends on every output of it,
-  # the control plane's group among them, and a destroy would then take this module first. Its
-  # security group cannot go while a runner is in it, and the runners go only once that group has.
+  # the control plane's group among them, which itself depends on this module's runner_groups. That
+  # is a cycle.
   controlplane = {
     name                = module.controlplane.name
     iam_name            = module.controlplane.iam_name
@@ -58,10 +59,15 @@ module "runners" {
     boot_log_policy_arn = module.controlplane.boot_log_policy_arn
     standard_vcpus      = module.controlplane.standard_vcpus
     boundary_arn        = module.controlplane.boundary_arn
-    runner_groups       = module.controlplane.runner_groups
   }
   runners        = module.controlplane.runners
   request_quota  = var.request_quota
   root_volume_gb = var.runner_root_volume_gb
   tags           = var.tags
+}
+
+# Not destroyed and remade: its destroy takes away every runner of an installation in use.
+moved {
+  from = module.controlplane.terraform_data.runner_groups
+  to   = module.runners.terraform_data.runner_groups
 }

@@ -33,7 +33,6 @@ variables {
     boot_log_policy_arn = "arn:aws:iam::123456789012:policy/spin-boot-log"
     standard_vcpus      = 8
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
-    runner_groups       = "the-runner-groups"
   }
   runners = {
     launch_template       = "spin-runner"

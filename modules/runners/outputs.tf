@@ -7,3 +7,8 @@ output "security_group_id" {
   description = "The runners' security group: nothing in, everything out - a workspace's egress is filtered on the host by spin."
   value       = aws_security_group.runner.id
 }
+
+output "runner_groups" {
+  description = "What takes the runners' groups away on a destroy (groups.tf): for the control plane's group to depend on, which has to go first or it makes them again."
+  value       = terraform_data.runner_groups.id
+}

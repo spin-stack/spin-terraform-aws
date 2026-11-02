@@ -197,8 +197,9 @@ resource "aws_autoscaling_group" "controlplane" {
   }
 
   depends_on = [
-    # Gone before the groups it makes are taken away (runner_groups.tf), so none is made again.
-    terraform_data.runner_groups,
+    # Gone before the groups it makes are taken away (the runners module's groups.tf), so none is
+    # made again.
+    var.runner_groups,
     # What the machine starts on, and what the document names.
     aws_s3_object.document,
     aws_ssm_parameter.installation,
