@@ -227,6 +227,11 @@ tasks:
     cmds:
       - bash hack/fresh-install-remove.sh
 
+  fresh-install:watch:
+    desc: Remove what the fresh install left in the account, and open an issue for what it cannot.
+    cmds:
+      - bash hack/fresh-install-watch.sh
+
   release:
     desc: >-
       Cut this module's next release: GITHUB_SHA, once Gate passed on it, tagged v<YYYYMMDD>.<NN>,
