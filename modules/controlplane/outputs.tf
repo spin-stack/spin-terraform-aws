@@ -113,6 +113,11 @@ output "proxy_ip" {
   value       = aws_eip.proxy.public_ip
 }
 
+output "runner_groups" {
+  description = "What takes the runners' groups away on a destroy (runner_groups.tf): for what has to outlive their machines to depend on."
+  value       = terraform_data.runner_groups.id
+}
+
 output "proxy_group" {
   description = "The proxy's group of one. Its machine, for `aws ssm start-session --target` (it has no SSH): aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <this> --query 'AutoScalingGroups[0].Instances[0].InstanceId'."
   value       = aws_autoscaling_group.proxy.name

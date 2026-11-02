@@ -23,6 +23,9 @@ resource "aws_security_group" "runner" {
   description = "spin runners: nothing in, everything out"
   vpc_id      = var.controlplane.vpc_id
   tags        = merge(local.tags, { Name = "${local.name}-runner" })
+
+  # AWS will not delete it with a runner in it: gone after the runners' groups and their machines.
+  depends_on = [var.controlplane]
 }
 
 # Everything out: a workspace's egress is the installation's policy, enforced per machine by spin's
@@ -164,6 +167,10 @@ resource "aws_launch_template" "runner" {
     tags          = merge(local.tags, { Name = "${local.name}-runner", "spin:role" = "runner" })
   }
   tags = local.tags
+
+  # What the runners' groups are made from: gone after them, or one of them fails to launch from it
+  # for as long as it lasts.
+  depends_on = [var.controlplane]
 }
 
 

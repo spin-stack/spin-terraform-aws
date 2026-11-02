@@ -188,6 +188,8 @@ tasks:
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
+      # The order a destroy has to happen in, which nothing else would see before the fresh install.
+      - bash hack/destroy-order.sh {{.TOOLS_BIN}}/tofu .
       # What validate does not know (.tflint.hcl), against one configuration for every directory:
       # an absolute path, since a relative one is looked for in each directory it walks into.
       - "{{.TOOLS_BIN}}/tflint --init --config={{.ROOT_DIR}}/.tflint.hcl >/dev/null"
