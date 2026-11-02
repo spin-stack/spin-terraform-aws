@@ -8,6 +8,12 @@
 #   3. Bootstrap, once the installation's state holds nothing - before, that state is what finds
 #      what is left. By the names bootstrap/ gives in this region: its own state is a file on the
 #      runner that applied it, gone with that runner.
+#   4. Everything looked for again, and anything found a failure: a removal that says it finished has
+#      left nothing, including what the tagging API does not answer for.
+#
+# A destroy that leaves something is tried a second time, with what runs stopped first.
+#
+# --list only asks step 4's question, removing nothing (hack/fresh-install-watch.sh).
 #
 # Nothing stops at the first failure: each is said, the rest goes on where that is safe, and the
 # exit says whether any failed. Nothing is removed by a pattern, only by the exact names and ids
@@ -202,8 +208,12 @@ real() {
 # What the destroy did not know of - made after the state was last written - or could not remove.
 # Said rather than removed, since a tag is anybody's to write; but a key of it is scheduled once the
 # installation's state is empty, being the one thing a destroy never takes.
+# Given final, there is nothing still to come that could remove it, so each is a failure.
 tagged() {
-  local arns arn state
+  local arns arn state mode=$1
+  left_behind() {
+    if [ "${mode}" = final ]; then fail "left behind: $1"; else echo "::warning::left behind: $1"; fi
+  }
   if ! arns=$(aws resourcegroupstaggingapi get-resources --tag-filters "Key=spin:installation,Values=${name}" \
     --query 'ResourceTagMappingList[].ResourceARN' --output text); then
     fail "what carries spin:installation=${name} could not be listed"
@@ -214,23 +224,87 @@ tagged() {
       None) ;;
       arn:aws:kms:"${region}":"${account}":key/*)
         if ! state=$(aws kms describe-key --key-id "${arn}" --query KeyMetadata.KeyState --output text 2>&1); then
-          [[ ${state} == *NotFound* ]] || echo "::warning::left behind, maybe: ${arn}: ${state}"
-        elif [ "${state}" = Enabled ] && [ "$1" = empty ]; then
+          [[ ${state} == *NotFound* ]] || left_behind "maybe ${arn}: ${state}"
+        elif [ "${state}" = Enabled ] && [ "${mode}" = empty ]; then
           schedule "${arn}"
         elif [ "${state}" != PendingDeletion ]; then
-          echo "::warning::left behind: ${arn} (${state})"
+          left_behind "${arn} (${state})"
         fi
         ;;
       *)
         real "${arn}"
         case $? in
-          0) echo "::warning::left behind: ${arn}" ;;
-          2) echo "::warning::left behind, maybe: ${arn}" ;;
+          0) left_behind "${arn}" ;;
+          2) left_behind "maybe ${arn}" ;;
         esac
         ;;
     esac
   done
 }
+
+# What the tagging API does not answer for, which is what costs most: an autoscaling group, which
+# goes on making machines, an IAM role, and a machine however it came to be. Asked of each service.
+unlisted() {
+  local out
+  if out=$(aws autoscaling describe-auto-scaling-groups --filters "Name=tag:spin:installation,Values=${name}" \
+    --query 'AutoScalingGroups[].AutoScalingGroupName' --output text); then
+    for out in ${out}; do fail "left behind: the autoscaling group ${out}"; done
+  else
+    fail "the installation's autoscaling groups could not be listed"
+  fi
+  if out=$(aws iam list-roles --query "Roles[?starts_with(RoleName, '${name}-${region}-')].RoleName" --output text); then
+    for out in ${out}; do fail "left behind: the IAM role ${out}"; done
+  else
+    fail "the installation's IAM roles could not be listed"
+  fi
+  if out=$(aws ec2 describe-instances --filters "Name=tag:spin:installation,Values=${name}" \
+    "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query 'Reservations[].Instances[].InstanceId' --output text); then
+    for out in ${out}; do fail "left behind: the machine ${out}"; done
+  else
+    fail "the installation's machines could not be listed"
+  fi
+}
+
+# Everything still there, each a failure: what a run that ended well has to find nothing of.
+inventory() {
+  tagged final
+  unlisted
+}
+
+# Nothing left running to make more, or to hold anything: the control plane first, which would make
+# the runners' groups again, then those groups with their machines. What is in the state stays in it
+# for the destroy to finish. By the names the installation gives, never a pattern but the one its
+# groups are made under, in this region and this installation (the check at the top).
+stop_spending() {
+  local g groups round
+  for g in "${name}-controlplane" "${name}-proxy"; do
+    aws autoscaling update-auto-scaling-group --auto-scaling-group-name "${g}" --min-size 0 --desired-capacity 0 2> "${tmp}/err" ||
+      grep -q 'not found' "${tmp}/err" || echo "::warning::${g} was not scaled to nothing: $(< "${tmp}/err")"
+  done
+  runner_groups() {
+    aws autoscaling describe-auto-scaling-groups --filters "Name=tag:spin:installation,Values=${name}" \
+      --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${name}-runners-')].AutoScalingGroupName" --output text
+  }
+  groups=$(runner_groups) || return 0
+  for g in ${groups}; do
+    echo "taking away the runners' group ${g} and its machines"
+    aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "${g}" --force-delete ||
+      echo "::warning::${g} was not deleted"
+  done
+  for round in $(seq 60); do
+    [ -z "$(runner_groups)" ] && return 0
+    echo "waiting for the runners' groups to go (${round})"
+    sleep 10
+  done
+  echo "::warning::the runners' groups were still going after ten minutes"
+}
+
+# Whether anything is there, and removing nothing: the watch's question.
+if [ "${1:-}" = --list ]; then
+  inventory
+  exit "${failed}"
+fi
 
 # Every version, a thousand at a time (delete-objects' limit), then the bucket.
 remove_bucket() {
@@ -286,6 +360,15 @@ case $? in
     elif [ "${states}" = "${name}.tfstate" ]; then
       installation
       remaining || read_state=false
+      # Whatever stopped it, with nothing left running there is less to stop it, and nothing costing
+      # by the hour if it stops again. The second try's answer is the one that counts.
+      if [ "${read_state}" = true ] && [ -n "${left}" ]; then
+        echo "::warning::the destroy left $(wc -l <<< "${left}") resources: stopping what runs, and trying once more"
+        stop_spending
+        failed=0
+        installation
+        remaining || read_state=false
+      fi
     fi
     ;;
 esac
@@ -293,6 +376,8 @@ esac
 if [ "${read_state}" = true ] && [ -z "${left}" ]; then
   tagged empty
   bootstrap
+  # Only now: until bootstrap went, its bucket and keys were still there to be found.
+  inventory
 else
   tagged kept
   if [ "${read_state}" = true ]; then
