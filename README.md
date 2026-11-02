@@ -240,7 +240,7 @@ named that the destroy already removed would be made again. Its plan is those bu
 `force_destroy` turned on and their policies removed, and nothing else; then step 2 again:
 
 ```bash
-tofu apply $(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])?$' | sed 's/^/-target=/')
+tofu apply $(tofu state list | grep -E '\.aws_s3_bucket(_policy)?\.[^.]+$' | sed 's/^/-target=/')
 # step 2's loop
 tofu destroy
 ```

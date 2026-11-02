@@ -138,7 +138,7 @@ installation() {
     return
   fi
   local targets kept keys
-  targets=$(grep -E '\.aws_s3_bucket(_policy)?\.[a-z]+(\[0\])?$' <<< "${addresses}" | sed 's/^/-target=/')
+  targets=$(grep -E '\.aws_s3_bucket(_policy)?\.[^.]+$' <<< "${addresses}" | sed 's/^/-target=/')
   if [ -n "${targets}" ]; then
     # shellcheck disable=SC2086 # one -target= per word
     tofu -chdir="${install}" apply -auto-approve -lock=false ${targets} || fail "decommission was not applied"
