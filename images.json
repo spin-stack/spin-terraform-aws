@@ -232,16 +232,16 @@
   },
   "v20261102.02": {
     "control-plane": {
-      "us-east-1": "ami-0e761b2d0a0f860ff",
-      "us-west-2": "ami-0ec5e1cef0409d429"
+      "us-east-1": "ami-08be397489cbd47ac",
+      "us-west-2": "ami-0f7220406fea63542"
     },
     "proxy": {
-      "us-east-1": "ami-068df71905852c286",
-      "us-west-2": "ami-08ebc25720e53109d"
+      "us-east-1": "ami-0adb0aa93d98acb93",
+      "us-west-2": "ami-037395a73498504cd"
     },
     "runner": {
-      "us-east-1": "ami-009ecf7fa686a2cad",
-      "us-west-2": "ami-0c06e258b81f14538"
+      "us-east-1": "ami-01103a005a652742b",
+      "us-west-2": "ami-0df7aa6bc0b2f0056"
     }
   }
 }
