@@ -271,5 +271,19 @@
       "us-east-1": "ami-0e505097ad8fbcc1d",
       "us-west-2": "ami-0e2c874c3cf5f59e2"
     }
+  },
+  "v20261104.01": {
+    "control-plane": {
+      "us-east-1": "ami-074ce1cb648b821b9",
+      "us-west-2": "ami-09b38af440fa9667b"
+    },
+    "proxy": {
+      "us-east-1": "ami-0809d331831656c0a",
+      "us-west-2": "ami-0a41ee738050a6c8c"
+    },
+    "runner": {
+      "us-east-1": "ami-08aeadaf8dcf696e7",
+      "us-west-2": "ami-035580237fd80f70e"
+    }
   }
 }
