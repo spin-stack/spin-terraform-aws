@@ -1,4 +1,5 @@
-# Someone is told when the control plane's role starts a machine itself. Auto Scaling starts the
+# Whoever security_emails names, and has confirmed, is told when the control plane's role starts a
+# machine itself; with nobody named, the call is only on record in the trail. Auto Scaling starts the
 # runners, under its own service role; spin has no call to RunInstances. The role holds that
 # permission only because Auto Scaling asks it of whoever names a launch template, and a machine it
 # started itself could boot the runners' image with other user data, which nothing measures.
@@ -178,7 +179,7 @@ resource "aws_sns_topic_subscription" "security" {
 
 # A call that failed started nothing; a dry run, as Auto Scaling may ask for, reads as a failure.
 resource "aws_cloudwatch_event_rule" "controlplane_starts_a_machine" {
-  name        = "${local.iam_name}-controlplane-starts-a-machine"
+  name        = "${local.iam_name}-cp-runs-instances"
   description = "The control plane's role called RunInstances itself, which only Auto Scaling's should."
   tags        = local.tags
   event_pattern = jsonencode({
