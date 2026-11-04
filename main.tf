@@ -30,6 +30,7 @@ module "controlplane" {
   runner_groups       = module.runners.runner_groups
   monthly_budget_usd  = var.monthly_budget_usd
   budget_emails       = var.budget_emails
+  security_emails     = var.security_emails
   tags                = var.tags
   # The default kind of runner, which the control plane holds its groups to and the dashboard
   # then changes; and what the runners module's launch template needs of an instance type.
