@@ -97,7 +97,7 @@ variable "admin_email" {
 }
 
 variable "flow_logs" {
-  description = "Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
+  description = "Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused, but no DNS to the VPC's resolver, which it does not see. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records."
   type        = bool
   default     = true
   nullable    = false

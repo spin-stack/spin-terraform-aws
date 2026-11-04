@@ -182,6 +182,24 @@ variable "budget_emails" {
   default     = null
 }
 
+variable "flow_logs" {
+  description = "Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused, but no DNS to the VPC's resolver, which it does not see. modules/controlplane's default is true."
+  type        = bool
+  default     = null
+}
+
+variable "dns_query_logs" {
+  description = "Keep the VPC resolver's query log in CloudWatch: every name looked up, a workspace's included, and the only record of them: the flow log does not see DNS. modules/controlplane's default is false."
+  type        = bool
+  default     = null
+}
+
+variable "log_retention_days" {
+  description = "How long the flow and query logs are kept. modules/controlplane's default is 30."
+  type        = number
+  default     = null
+}
+
 variable "tags" {
   description = "Tags on everything both modules create."
   type        = map(string)
