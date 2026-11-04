@@ -1890,3 +1890,70 @@ run "every_build_not_revoked_is_trusted" {
     error_message = "a host may join as a revoked build of the runner's image"
   }
 }
+
+# A version of a keyring or a roster is kept once, whoever writes: what spin's client asks for is
+# what the bucket holds every role to.
+run "a_roster_version_is_kept_once" {
+  command = plan
+
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.bucket.statement :
+      s.effect == "Deny" && s.actions == toset(["s3:PutObject"]) &&
+      s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/*"]) &&
+      anytrue([for c in s.condition : c.test == "Null" && c.variable == "s3:if-none-match" && c.values == tolist(["true"])])
+    ])
+    error_message = "a role that can write the volumes' bucket can write over a version of a roster"
+  }
+}
+
+# The control plane reads CloudTrail and writes none of it: a deny on the read would win over its
+# grant, and the identity key's audit would fail on AWS alone.
+run "the_boundary_leaves_cloudtrails_reads" {
+  command = plan
+
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect != "Deny" || alltrue([for a in s.actions :
+        !contains(["cloudtrail:*", "cloudtrail:Lookup*", "cloudtrail:LookupEvents"], a)
+    ])])
+    error_message = "the boundary denies what the control plane's policy grants of CloudTrail"
+  }
+  assert {
+    condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
+      s.effect == "Deny" && s.resources == toset(["*"]) && length(s.condition) == 0 &&
+      length(setintersection(s.actions, ["cloudtrail:Stop*", "cloudtrail:Delete*", "cloudtrail:Update*", "cloudtrail:Put*", "events:*", "sns:*"])) == 6
+    ])
+    error_message = "a role of the installation can silence what reports it"
+  }
+}
+
+# Someone is told when the control plane's role starts a machine, and only then.
+run "the_control_plane_starting_a_machine_is_told" {
+  command = plan
+
+  override_resource {
+    target = aws_iam_role.controlplane
+    values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-controlplane" }
+  }
+
+  variables {
+    security_emails = ["security@example.com"]
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudwatch_event_rule.controlplane_starts_a_machine.event_pattern).detail.eventName[0] == "RunInstances" &&
+      length(jsondecode(aws_cloudwatch_event_rule.controlplane_starts_a_machine.event_pattern).detail.errorCode) == 1 &&
+      jsondecode(aws_cloudwatch_event_rule.controlplane_starts_a_machine.event_pattern).detail.userIdentity.sessionContext.sessionIssuer.arn[0] == aws_iam_role.controlplane.arn
+    )
+    error_message = "the rule does not read a RunInstances that succeeded"
+  }
+  assert {
+    condition     = aws_cloudtrail.calls.is_multi_region_trail == false && one(aws_cloudtrail.calls.event_selector).read_write_type == "WriteOnly"
+    error_message = "the trail records more than the rule reads, and is billed for it where another trail exists"
+  }
+  assert {
+    condition     = length(aws_sns_topic_subscription.security) == 1
+    error_message = "the addresses given are not told"
+  }
+}

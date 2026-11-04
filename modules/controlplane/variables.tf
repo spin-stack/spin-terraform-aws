@@ -247,6 +247,13 @@ variable "monthly_budget_usd" {
   }
 }
 
+variable "security_emails" {
+  description = "Who AWS emails when the control plane's role starts a machine itself (alarms.tf). Each address confirms the subscription once, and an unconfirmed one is told nothing."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "budget_emails" {
   description = "Who AWS emails when the month's cost passes 80 % or 100 % of monthly_budget_usd, or is forecast to pass it."
   type        = list(string)
