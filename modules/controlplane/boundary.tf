@@ -146,7 +146,7 @@ data "aws_iam_policy_document" "boundary" {
       # installation declares it, and no role this boundary bounds writes one.
       "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning",
       "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
-      # Every CloudTrail write and none of its reads: the control plane reads what the identity key
+      # What changes CloudTrail and none of its reads: the control plane reads what the identity key
       # opened with LookupEvents (iam.tf), and a deny here would win over that grant.
       "cloudtrail:Add*", "cloudtrail:Create*", "cloudtrail:Delete*", "cloudtrail:Deregister*",
       "cloudtrail:Disable*", "cloudtrail:Enable*", "cloudtrail:Put*", "cloudtrail:Register*",

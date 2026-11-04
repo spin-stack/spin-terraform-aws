@@ -1948,6 +1948,11 @@ run "the_control_plane_starting_a_machine_is_told" {
     )
     error_message = "the rule does not read a RunInstances that succeeded"
   }
+  # EventBridge takes 64 characters, and the longest name and region make the prefix 41.
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.controlplane_starts_a_machine.name) - length(local.iam_name) <= 64 - 41
+    error_message = "the rule's name does not fit an installation of the longest name"
+  }
   assert {
     condition     = aws_cloudtrail.calls.is_multi_region_trail == false && one(aws_cloudtrail.calls.event_selector).read_write_type == "WriteOnly"
     error_message = "the trail records more than the rule reads, and is billed for it where another trail exists"

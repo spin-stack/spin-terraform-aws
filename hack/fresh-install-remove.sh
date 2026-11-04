@@ -196,6 +196,9 @@ real() {
     *:iam::*:policy/*) ask=(iam get-policy --policy-arn "${arn}" --query Policy.Arn) ;;
     *:route53resolver:*:resolver-query-log-config/*) ask=(route53resolver get-resolver-query-log-config --resolver-query-log-config-id "${id}" --query ResolverQueryLogConfig.Id) ;;
     *:budgets::*:budget/*) ask=(budgets describe-budget --account-id "${account}" --budget-name "${id}" --query Budget.BudgetName) ;;
+    *:sns:*) ask=(sns get-topic-attributes --topic-arn "${arn}" --query Attributes.TopicArn) ;;
+    *:events:*:rule/*) ask=(events describe-rule --name "${id}" --query Name) ;;
+    *:cloudtrail:*:trail/*) ask=(cloudtrail get-trail --name "${id}" --query Trail.Name) ;;
     *) return 2 ;;
   esac
   if ! out=$(aws "${ask[@]}" --output text 2>&1); then
