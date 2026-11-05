@@ -6,3 +6,7 @@ terraform.tfvars
 # bootstrap/'s own state, which is the account's and nobody else's.
 *.tfstate
 *.tfstate.backup
+# What tofu keeps when it moves a state, named by the time it did.
+*.tfstate.*.backup
+# bootstrap/'s values, the operator's as terraform.tfvars is.
+bootstrap/*.auto.tfvars
