@@ -99,6 +99,19 @@ data "aws_iam_policy_document" "plan_opens" {
     resources = [for p in ["controlplane-encryption-key", "bootstrap-password"] :
     "arn:${data.aws_partition.current.partition}:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/spin/*/${p}"]
   }
+  # Whatever else the account keeps as a SecureString - a team's secret among them, under any name -
+  # opens only through KMS, and no plan reads one back.
+  statement {
+    sid       = "NoSecureStringOpens"
+    effect    = "Deny"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "kms:ViaService"
+      values   = ["ssm.*.amazonaws.com"]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "plan_opens" {
