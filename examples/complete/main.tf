@@ -72,6 +72,12 @@ variable "domain" {
   type        = string
 }
 
+variable "runner_spot" {
+  description = "Every runner a spot instance, which is the cheapest and may not start for hours when a region has no spot machine of the runners' types."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Tags on everything the installation creates, beside spin's own: what the bill is read by."
   type        = map(string)
@@ -93,6 +99,7 @@ module "spin" {
   quiet_hours         = "20:00-07:00"
   time_zone           = "America/Argentina/Buenos_Aires"
   max_runners         = 1
+  runner_spot         = var.runner_spot
 }
 
 output "dashboard" {
