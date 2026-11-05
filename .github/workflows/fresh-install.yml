@@ -54,6 +54,11 @@ env:
   # On everything bootstrap and the installation make, so the bill says what each run cost: the
   # account is not only this workflow's.
   TF_VAR_tags: '{"spin:purpose": "fresh-install", "spin:run": "${{ github.run_id }}"}'
+  # On-demand runners: a spot one is the cheapest, and the runners' types scored 1 of 10 for spot
+  # in every us-east-1 zone on 2026-11-03, when two runs waited 20 minutes for a machine AWS
+  # refused 14 times (UnfulfillableCapacity) and failed with nothing wrong in the release. A run
+  # needs one runner for minutes; the installation's own default stays spot.
+  TF_VAR_runner_spot: "false"
 
 jobs:
   install:
