@@ -283,22 +283,11 @@ data "aws_iam_policy_document" "runner_scope" {
   }
   # The identity a host signs for its machines (spin's internal/runner/identityserver): the record
   # of each - under the host's own name, as the session policy narrows it - and the X.509 CA the
-  # first host to sign an SVID makes; and the keyrings and rosters people signed, which it holds a
-  # workspace's creation to, read and never written.
+  # first host to sign an SVID makes.
   statement {
     actions = ["s3:GetObject", "s3:PutObject"]
     resources = ["${aws_s3_bucket.volumes.arn}/identity/issued/*",
     "${aws_s3_bucket.volumes.arn}/identity/x509-ca.der"]
-  }
-  statement {
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.volumes.arn}/rosters/*"]
-  }
-  # Every version of each workspace's access, which a host reads the newest of at every login
-  # (spin's ownerword.Newest): read and never written - the control plane writes them.
-  statement {
-    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
-    resources = ["${aws_s3_bucket.volumes.arn}/access/*"]
   }
 }
 

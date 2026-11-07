@@ -650,7 +650,7 @@ run "the_components_reach_each_other_by_name" {
     error_message = "the domain's zone is not a public one of its own"
   }
   assert {
-    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "term.${var.domain}", "agents.${var.domain}", "id.${var.domain}", "*.ws.${var.domain}"])
+    condition     = toset(keys(aws_route53_record.app)) == toset(["app.${var.domain}", "tunnel.app.${var.domain}", "agents.${var.domain}", "id.${var.domain}", "*.ws.${var.domain}"])
     error_message = "the dashboard, the relay, the terminal, the agent's client, the issuer and the workspaces' names are not written into the domain's zone"
   }
   assert {
@@ -1047,8 +1047,7 @@ run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
     toset(s.actions) == toset(["cloudtrail:LookupEvents"])])
     error_message = "the control plane cannot read every opening of the identity key"
   }
-  # What a host reaches of it: its own records and the CA, written; the rosters, read; and no role
-  # deletes a roster or the key.
+  # What a host reaches of it: its own records and the CA, written; and no role deletes the key.
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
       toset(s.actions) == toset(["s3:GetObject", "s3:PutObject"]) &&
@@ -1056,16 +1055,10 @@ run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
     error_message = "a host cannot record the identities it signs"
   }
   assert {
-    condition = alltrue([for s in data.aws_iam_policy_document.runner_scope.statement :
-      !anytrue([for r in s.resources : startswith(r, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/")]) ||
-    toset(s.actions) == toset(["s3:GetObject"])])
-    error_message = "a host may write a roster"
-  }
-  assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "s3:DeleteObject") && contains(s.actions, "s3:DeleteObjectVersion") &&
-    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/*")])
-    error_message = "a role may delete a version of a roster, which puts a member back"
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json")])
+    error_message = "a role may delete the identity key every relying party trusts"
   }
   assert {
     condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.volumes.rule :
@@ -1305,8 +1298,6 @@ run "a_runners_role_grants_what_its_session_asks" {
       { r = "/writers/*", a = ["s3:GetObject", "s3:GetObjectVersion"] },
       { r = "/identity/issued/*", a = ["s3:GetObject", "s3:PutObject"] },
       { r = "/identity/x509-ca.der", a = ["s3:GetObject", "s3:PutObject"] },
-      { r = "/rosters/*", a = ["s3:GetObject"] },
-      { r = "/access/*", a = ["s3:GetObject", "s3:GetObjectVersion"] },
       ] : alltrue([for a in want.a : anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
     contains(s.actions, a) && contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2${want.r}")])])])
     error_message = "a runner's session asks an action of the volumes' bucket its role does not grant"
@@ -1888,21 +1879,6 @@ run "every_build_not_revoked_is_trusted" {
   assert {
     condition     = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.runner == [{ for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => var.image_measurements["runner"][1][k] }]
     error_message = "a host may join as a revoked build of the runner's image"
-  }
-}
-
-# A version of a keyring or a roster is kept once, whoever writes: what spin's client asks for is
-# what the bucket holds every role to.
-run "a_roster_version_is_kept_once" {
-  command = plan
-
-  assert {
-    condition = anytrue([for s in data.aws_iam_policy_document.bucket.statement :
-      s.effect == "Deny" && s.actions == toset(["s3:PutObject"]) &&
-      s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/rosters/*"]) &&
-      anytrue([for c in s.condition : c.test == "Null" && c.variable == "s3:if-none-match" && c.values == tolist(["true"])])
-    ])
-    error_message = "a role that can write the volumes' bucket can write over a version of a roster"
   }
 }
 

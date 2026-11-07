@@ -122,26 +122,6 @@ data "aws_iam_policy_document" "bucket" {
       values   = [aws_vpc_endpoint.s3.id]
     }
   }
-  # A version of a keyring or a roster is kept once: readers take the newest of each key, so one
-  # written over would be a chain nobody signed. spin's roster.Keep asks for this itself; only here
-  # does a role that can write the bucket have no choice. S3 documents the condition for a bucket's
-  # policy, which no role may change (boundary.tf). A multipart upload has no such header, and
-  # nothing kept here is one.
-  statement {
-    sid     = "ARosterVersionIsKeptOnce"
-    effect  = "Deny"
-    actions = ["s3:PutObject"]
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    resources = ["${aws_s3_bucket.volumes.arn}/rosters/*"]
-    condition {
-      test     = "Null"
-      variable = "s3:if-none-match"
-      values   = ["true"]
-    }
-  }
   statement {
     sid     = "TLSOnly"
     effect  = "Deny"
