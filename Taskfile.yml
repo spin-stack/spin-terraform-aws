@@ -185,6 +185,9 @@ tasks:
       - go run github.com/spin-stack/go-tools/cmd/taskgate@{{.GO_TOOLS_VERSION}}
       - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} check
       - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
+      # The one Go program here, which only the fresh install's smoke runs: a file, with no module.
+      - test -z "$(gofmt -l hack/enroll)" || { gofmt -l hack/enroll; echo 'gofmt -w hack/enroll'; exit 1; }
+      - go vet hack/enroll/main.go
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"

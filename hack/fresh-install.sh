@@ -175,16 +175,17 @@ sign-in() {
   rm "${RUNNER_TEMP}/login.json" "${RUNNER_TEMP}/session.json"
 }
 
-# `spin smoke` as the administrator signed in, with a key of their own.
+# `spin smoke` as the administrator signed in, with a key of their own, added with a passkey
+# (hack/enroll): `spin ssh-key add` confirms it in a browser, which a run has none of.
 smoke() {
   set -euo pipefail
+  local key="${RUNNER_TEMP}/spin-home/.ssh/id_ed25519"
+  mkdir -m 700 "${RUNNER_TEMP}/spin-home" "${RUNNER_TEMP}/spin-home/.ssh"
+  ssh-keygen -q -t ed25519 -N '' -C fresh-install -f "${key}"
+  go run hack/enroll/main.go -endpoint "${SPIN_ENDPOINT}" -token-file "${RUNNER_TEMP}/session-token" -key "${key}.pub"
   export HOME="${RUNNER_TEMP}/spin-home"
   SPIN_TOKEN=$(cat "${RUNNER_TEMP}/session-token")
   export SPIN_TOKEN
-  mkdir -m 700 "${HOME}" "${HOME}/.ssh"
-  ssh-keygen -q -t ed25519 -N '' -C fresh-install -f "${HOME}/.ssh/id_ed25519"
-  spin ssh-key add fresh-install "${HOME}/.ssh/id_ed25519.pub"
-  spin sign --yes
   local status=0 failed why
   spin -o json smoke --timeout 20m > "${RUNNER_TEMP}/smoke.json" || status=$?
   jq . "${RUNNER_TEMP}/smoke.json" || cat "${RUNNER_TEMP}/smoke.json"

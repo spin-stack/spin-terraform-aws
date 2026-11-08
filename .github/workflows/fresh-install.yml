@@ -149,10 +149,10 @@ jobs:
         timeout-minutes: 30
         run: task fresh-install -- sign-in
 
-      # The contract as a person meets it, with a key of their own: registered, their keyring signed
-      # with it, and `spin smoke` - a workspace made, run in, kept from the cloud's metadata,
-      # suspended and resumed, erased. Its egress root is pinned on first use, as anybody's is. The
-      # runner group starts at none, and its first machine is a spot one booting: hence the time.
+      # The contract as a person meets it, with a key of their own, added with a passkey made for the
+      # run (hack/enroll), and `spin smoke` - a workspace made, run in, kept from the cloud's
+      # metadata, suspended and resumed, erased. The runner group starts at none, and its first
+      # machine is booting: hence the time.
       - name: Smoke
         if: steps.cli.outputs.smoke == 'true'
         timeout-minutes: 30
