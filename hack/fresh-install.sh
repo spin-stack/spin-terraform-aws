@@ -7,23 +7,73 @@
 #
 # Each step runs as GitHub ran it: errexit, and pipefail and nounset where the step asked them.
 # TF_VAR_spin_version and TF_VAR_domain are the run's, from the steps release and domain.
+#
+# The upgrade (UPGRADE=true) installs the release before the newest with the module as it was when
+# that release was published (previous), and the steps that make and use that installation are
+# that commit's own until upgrade moves it to this commit and the newest release: what an operator
+# who updates does. FRESH_INSTALL_BEFORE is that commit's checkout while they are.
 # shellcheck disable=SC2154
 set -e
 cd "$(dirname "$0")/.."
 
-# The newest release this commit can install in the region: an image of every role and its
-# measurements. None is a failure: main installs nothing. spin-stack/ami's release publishes in
-# the regions its release.yml names, which must include this one.
+if [ -n "${FRESH_INSTALL_BEFORE:-}" ]; then
+  case "${1:-}" in
+    bootstrap | installation | delegate | wait-machines | sign-in | smoke | why)
+      exec bash "${FRESH_INSTALL_BEFORE}/hack/fresh-install.sh" "$@"
+      ;;
+  esac
+fi
+
+# Every release this commit can install in the region, oldest first: an image of every role and
+# its measurements.
+installable() {
+  jq -r --arg r "${AWS_REGION}" --slurpfile m measurements.json '[to_entries[] | .key as $v | .value as $img
+    | select(all("control-plane", "runner", "proxy"; $img[.][$r] and ($m[0][$v][.] // {} | length > 0))) | $v] | sort | .[]' images.json
+}
+
+# The newest release this commit can install in the region. None is a failure: main installs
+# nothing. spin-stack/ami's release publishes in the regions its release.yml names, which must
+# include this one.
 release() {
   set -euo pipefail
   local release
-  release=$(jq -r --arg r "${AWS_REGION}" --slurpfile m measurements.json '[to_entries[] | .key as $v | .value as $img
-    | select(all("control-plane", "runner", "proxy"; $img[.][$r] and ($m[0][$v][.] // {} | length > 0))) | $v] | sort | last // empty' images.json)
+  release=$(installable | tail -n 1)
   if [ -z "${release}" ]; then
     echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"
     exit 1
   fi
   echo "TF_VAR_spin_version=${release}" >> "${GITHUB_ENV:-/dev/stdout}"
+}
+
+# The upgrade's starting point, after release: the release before the newest, and a checkout of the
+# module as it was the day that release was published - the first commit whose images.json has it
+# here. Not the commit before the newest arrived: main may by then need a release newer than the
+# one it starts from (c085ee7 took from the hosts what v20261106.01 still read).
+previous() {
+  set -euo pipefail
+  local to=${TF_VAR_spin_version} from commit found=""
+  from=$(installable | grep -Fx -B 1 "${to}" | grep -Fvx "${to}" || true)
+  if [ -z "${from}" ]; then
+    echo "::error::images.json has no release before ${to} that installs in ${AWS_REGION}: there is nothing to upgrade from"
+    exit 1
+  fi
+  for commit in $(git log --reverse --format=%H -- images.json); do
+    if git show "${commit}:images.json" | jq -e --arg v "${from}" --arg r "${AWS_REGION}" '.[$v]["control-plane"][$r]' > /dev/null; then
+      found=${commit}
+      break
+    fi
+  done
+  if [ -z "${found}" ]; then
+    echo "::error::no commit's images.json has ${from} in ${AWS_REGION}: the checkout has no history (fetch-depth: 0)"
+    exit 1
+  fi
+  git worktree add --detach "${RUNNER_TEMP}/before" "${found}"
+  echo "upgrading from ${from} (module at ${found}) to ${to}"
+  {
+    echo "TF_VAR_spin_version=${from}"
+    echo "UPGRADE_TO=${to}"
+    echo "FRESH_INSTALL_BEFORE=${RUNNER_TEMP}/before"
+  } >> "${GITHUB_ENV:-/dev/stdout}"
 }
 
 # The CLI of the release installed, from its public package, checked as docs/releases.md in spin
@@ -182,10 +232,9 @@ smoke() {
   local key="${RUNNER_TEMP}/spin-home/.ssh/id_ed25519"
   mkdir -m 700 "${RUNNER_TEMP}/spin-home" "${RUNNER_TEMP}/spin-home/.ssh"
   ssh-keygen -q -t ed25519 -N '' -C fresh-install -f "${key}"
-  go run hack/enroll/main.go -endpoint "${SPIN_ENDPOINT}" -token-file "${RUNNER_TEMP}/session-token" -key "${key}.pub"
-  export HOME="${RUNNER_TEMP}/spin-home"
-  SPIN_TOKEN=$(cat "${RUNNER_TEMP}/session-token")
-  export SPIN_TOKEN
+  go run hack/enroll/main.go -endpoint "${SPIN_ENDPOINT}" -token-file "${RUNNER_TEMP}/session-token" -key "${key}.pub" \
+    -passkey "${RUNNER_TEMP}/passkey.json"
+  as-admin
   local status=0 failed why
   spin -o json smoke --timeout 20m > "${RUNNER_TEMP}/smoke.json" || status=$?
   jq . "${RUNNER_TEMP}/smoke.json" || cat "${RUNNER_TEMP}/smoke.json"
@@ -202,6 +251,78 @@ smoke() {
   fi
 }
 
+# The spin CLI as the administrator the smoke signed in: their session, and the key smoke made.
+as-admin() {
+  export HOME="${RUNNER_TEMP}/spin-home"
+  SPIN_TOKEN=$(cat "${RUNNER_TEMP}/session-token")
+  export SPIN_TOKEN
+}
+
+# The upgrade's workspace, made on the release it starts from once that release's smoke passed: a
+# file written in it, and suspended, as a person's is when the release changes under them. Its
+# key's home is put aside, so the next release's smoke makes a key of its own the way that release
+# adds one.
+keep() {
+  set -euo pipefail
+  as-admin
+  local marker
+  marker=$(openssl rand -hex 16)
+  spin workspace create upgrade-kept --wait
+  spin exec upgrade-kept -- sh -c "printf %s ${marker} > /root/upgrade-marker && sync"
+  spin workspace suspend upgrade-kept
+  printf '%s' "${marker}" > "${RUNNER_TEMP}/upgrade-marker"
+  mv "${RUNNER_TEMP}/spin-home" "${RUNNER_TEMP}/spin-home-before"
+}
+
+# The update as the README says it, from this commit: the module moved, spin_version the newest
+# release, an apply, then each machine's replacement waited out by what update_status asks. The
+# steps from here on are this commit's.
+upgrade() {
+  set -euo pipefail
+  export TF_VAR_spin_version=${UPGRADE_TO}
+  {
+    echo "TF_VAR_spin_version=${UPGRADE_TO}"
+    echo "FRESH_INSTALL_BEFORE="
+  } >> "${GITHUB_ENV:-/dev/stdout}"
+  # Bootstrap's state is the file the commit that applied it left, and its output is the init.
+  cp "${FRESH_INSTALL_BEFORE}/bootstrap/terraform.tfstate" bootstrap/
+  (installation)
+  cd examples/complete
+  local group status reason
+  for group in $(tofu output -json update_status | jq -r 'keys[]'); do
+    while :; do
+      read -r status reason < <(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "${group}" \
+        --max-records 1 --query 'InstanceRefreshes[0].[Status,StatusReason]' --output text)
+      case "${status}" in
+        Successful) break ;;
+        # "" is a describe that failed, asked again: the step's timeout is what ends a wait.
+        "" | None | Pending | InProgress | Baking) sleep 30 ;;
+        *)
+          echo "::error::${group}'s replacement ended ${status}: ${reason}"
+          exit 1
+          ;;
+      esac
+    done
+    echo "${group} is replaced"
+  done
+}
+
+# The upgrade's workspace, on the newest release: started, and the file written before the release
+# changed still there - its database row, its volume and its disk carried across.
+kept() {
+  set -euo pipefail
+  as-admin
+  local want got
+  want=$(cat "${RUNNER_TEMP}/upgrade-marker")
+  spin workspace start upgrade-kept --wait
+  got=$(spin exec upgrade-kept -- cat /root/upgrade-marker)
+  if [ "${got}" != "${want}" ]; then
+    echo "::error::the workspace made before the upgrade holds '${got}' in /root/upgrade-marker, not '${want}'"
+    exit 1
+  fi
+  echo "upgrade-kept came through the upgrade with its file"
+}
+
 # What each machine's boot said and each group's update did, by the commands the installation's
 # outputs give: one that fails does not hide the rest.
 why() {
@@ -211,9 +332,9 @@ why() {
 }
 
 case "${1:-}" in
-  release | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | why) "$1" ;;
+  release | previous | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | keep | upgrade | kept | why) "$1" ;;
   *)
-    echo "usage: $0 release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why" >&2
+    echo "usage: $0 release|previous|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|keep|upgrade|kept|why" >&2
     exit 2
     ;;
 esac
