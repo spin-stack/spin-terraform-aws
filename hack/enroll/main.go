@@ -8,7 +8,10 @@
 // spin is private, so this repository cannot build what spin's e2e lane runs, and the authenticator
 // needs only the standard library. A file with no module, so no toolchain or dependency is pinned:
 //
-//	go run hack/enroll/main.go -endpoint https://app.<domain> -token-file <file> -key <id_ed25519.pub>
+//	go run hack/enroll/main.go -endpoint https://app.<domain> -token-file <file> -key <id_ed25519.pub> -passkey <file>
+//
+// The passkey is kept in -passkey, so a later run on the same installation - the upgrade's, on the
+// next release - asserts with the one registered instead of finding the person already has one.
 package main
 
 import (
@@ -27,6 +30,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,16 +43,17 @@ func main() {
 	// A file, never a flag: a session token on a command line is in ps.
 	tokenFile := flag.String("token-file", "", "the file holding the person's session token")
 	keyFile := flag.String("key", "", "the SSH public key to add, as ssh-keygen writes it")
+	passkeyFile := flag.String("passkey", "", "where the passkey is kept between runs of this: made there when it is not")
 	flag.Parse()
-	if err := run(*endpoint, *tokenFile, *keyFile); err != nil {
+	if err := run(*endpoint, *tokenFile, *keyFile, *passkeyFile); err != nil {
 		fmt.Fprintln(os.Stderr, "enroll:", err)
 		os.Exit(1)
 	}
 }
 
-func run(endpoint, tokenFile, keyFile string) error {
-	if endpoint == "" || tokenFile == "" || keyFile == "" {
-		return errors.New("-endpoint, -token-file and -key are all required")
+func run(endpoint, tokenFile, keyFile, passkeyFile string) error {
+	if endpoint == "" || tokenFile == "" || keyFile == "" || passkeyFile == "" {
+		return errors.New("-endpoint, -token-file, -key and -passkey are all required")
 	}
 	token, err := os.ReadFile(tokenFile)
 	if err != nil {
@@ -69,25 +74,27 @@ func run(endpoint, tokenFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-	// Only a first passkey is registered with a session alone: one already there is somebody's
-	// this process cannot assert with.
-	if len(reg.CredentialIDs) > 0 {
-		return fmt.Errorf("the person has %d passkeys already, and this one could only be their first", len(reg.CredentialIDs))
-	}
-	a, err := newAuthenticator(reg.RPID)
+	a, err := loadAuthenticator(passkeyFile, reg.RPID)
 	if err != nil {
 		return err
 	}
-	spki, err := x509.MarshalPKIXPublicKey(&a.key.PublicKey)
-	if err != nil {
-		return err
-	}
-	if err := c.call("spin.v1.PasskeyService/RegisterPasskey", map[string]any{
-		"name": name, "challenge": reg.Challenge, "credentialId": a.id,
-		"clientDataJson": a.clientData("webauthn.create", reg.Challenge), "authenticatorData": a.authenticatorData(),
-		"publicKey": spki,
-	}, nil); err != nil {
-		return err
+	switch {
+	case a != nil && slices.ContainsFunc(reg.CredentialIDs, func(id []byte) bool { return bytes.Equal(id, a.id) }):
+		// Registered by an earlier run of this - the upgrade's, before the release changed.
+	case len(reg.CredentialIDs) > 0:
+		// Only a first passkey is registered with a session alone: one already there is somebody's
+		// this process cannot assert with.
+		return fmt.Errorf("the person has %d passkeys already, none of them the one %s keeps", len(reg.CredentialIDs), passkeyFile)
+	default:
+		if a, err = newAuthenticator(reg.RPID); err != nil {
+			return err
+		}
+		if err := register(c, a, reg.Challenge); err != nil {
+			return err
+		}
+		if err := a.save(passkeyFile); err != nil {
+			return err
+		}
 	}
 
 	add, err := c.begin("PASSKEY_PURPOSE_ADD_SSH_KEY", fingerprint)
@@ -105,6 +112,19 @@ func run(endpoint, tokenFile, keyFile string) error {
 	}
 	fmt.Printf("added %s with a passkey registered for %s\n", fingerprint, reg.RPID)
 	return nil
+}
+
+// register has a registered as the person's first passkey.
+func register(c client, a *authenticator, challenge []byte) error {
+	spki, err := x509.MarshalPKIXPublicKey(&a.key.PublicKey)
+	if err != nil {
+		return err
+	}
+	return c.call("spin.v1.PasskeyService/RegisterPasskey", map[string]any{
+		"name": name, "challenge": challenge, "credentialId": a.id,
+		"clientDataJson": a.clientData("webauthn.create", challenge), "authenticatorData": a.authenticatorData(),
+		"publicKey": spki,
+	}, nil)
 }
 
 // publicKey is an authorized_keys line's type and key, without its comment, and the key's
@@ -193,6 +213,54 @@ func newAuthenticator(rpID string) (*authenticator, error) {
 		return nil, err
 	}
 	return &authenticator{key: key, id: id, rpID: rpID}, nil
+}
+
+// kept is a passkey as a file holds it. Its counter is not kept: spin holds no counter to one
+// that only goes up (a synced passkey's stays at zero), and the run's runner is the only reader.
+type kept struct {
+	Key  []byte `json:"key"` // PKCS #8
+	ID   []byte `json:"id"`
+	RPID string `json:"rpId"`
+}
+
+// loadAuthenticator is the passkey path keeps for rpID, nil when it keeps none.
+func loadAuthenticator(path, rpID string) (*authenticator, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var k kept
+	if err := json.Unmarshal(raw, &k); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if k.RPID != rpID {
+		return nil, fmt.Errorf("%s keeps a passkey for %s, and this installation is %s", path, k.RPID, rpID)
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(k.Key)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	key, ok := parsed.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("%s keeps a %T, not an ES256 key", path, parsed)
+	}
+	return &authenticator{key: key, id: k.ID, rpID: k.RPID}, nil
+}
+
+// save keeps a at path, readable by this user alone: it logs in as the person.
+func (a *authenticator) save(path string) error {
+	der, err := x509.MarshalPKCS8PrivateKey(a.key)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(kept{Key: der, ID: a.id, RPID: a.rpID})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o600)
 }
 
 // clientData is the page's: the dashboard's origin, which is a name under the relying party.
