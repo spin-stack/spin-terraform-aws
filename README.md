@@ -71,6 +71,11 @@ module's tests against its plan.
     --single-availability-zone --instance-requirements-with-metadata \
     '{"ArchitectureTypes":["x86_64"],"InstanceRequirements":{"VCpuCount":{"Min":32,"Max":48},"MemoryMiB":{"Min":65536},"LocalStorage":"required","AllowedInstanceTypes":["c8id.*","m8id.*","r8id.*"]}}'
   ```
+- To know that you are the licensee of the third-party software your installation downloads.
+  Once an administrator accepts its terms in the setup wizard or in Admin → Extensions, the
+  installation downloads that software from its makers, into your own account and for your
+  organization's own use: the VS Code server (Microsoft) and the agent CLIs (Claude Code, Codex,
+  T3 Code). Spinbox does not distribute or sell any of it.
 
 ## Installing
 
