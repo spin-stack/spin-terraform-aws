@@ -1,0 +1,36 @@
+# What a runner proves before it is trusted, and who checks it: its role, to STS; what it booted,
+# to NitroTPM; and that both are one instance, to the control plane. KMS asks the second again, of
+# every key. modules/controlplane's config.tf, identity.tf and attested_key.tf are what the apply
+# writes of it; this is the map.
+...@_style
+direction: right
+
+# Above the cloud, with no arrow into it: what reads the PCRs says so, the control plane and KMS.
+tofu: "tofu apply writes the PCR4, PCR7 and PCR12 of each Spin OS build twice:\nfor the control plane to admit by, and into each KMS key policy" {class: brand-icon; icon: icons/opentofu.svg; near: top-center}
+
+aws: "AWS" {
+  class: aws-cloud
+  icon: icons/aws-cloud.svg
+  direction: right
+
+  runner: "a runner, booted from Spin OS" {
+    class: instance
+    icon: icons/ec2-instance.svg
+    direction: down
+    role: "its instance role\nsigns a request to STS" {class: aws-icon; icon: icons/iam-role.svg}
+    tpm: "NitroTPM\nattests what booted, that request\nand a key made for this boot" {class: process}
+  }
+
+  cp: "the control plane" {
+    class: instance
+    icon: icons/ec2-instance.svg
+    spin: "spin control plane\nadmits a runner when both proofs\nare of one instance, and gives it\ncredentials bound to its boot's key" {class: process}
+  }
+
+  sts: "AWS STS\nwhich role and\nwhich instance signed" {class: aws-icon; icon: icons/sts.svg}
+  kms: "AWS KMS\nanswers only the PCRs\nits key policies name" {class: aws-icon; icon: icons/kms.svg}
+
+  runner -> cp.spin: "1  the signed request\nand the attestation"
+  cp.spin -> sts: "2  the request,\nfor STS to answer"
+  runner -> kms: "3  each key, asked with\nan attestation"
+}
