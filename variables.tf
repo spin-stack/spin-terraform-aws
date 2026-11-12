@@ -164,6 +164,12 @@ variable "decommission" {
   default     = null
 }
 
+variable "encryption_key_versions" {
+  description = "The versions of the control plane's encryption key: append the next to rotate it, remove the old one only once `controlplane crypto rotate` reports nothing left under it (spin-stack/runbooks key-rotation). modules/controlplane's default is [1]."
+  type        = list(number)
+  default     = null
+}
+
 variable "monthly_budget_usd" {
   description = "What the installation may cost in a month, in US dollars: an AWS Budget the control plane reads and whose alerts go to budget_emails. Null is no budget."
   type        = number

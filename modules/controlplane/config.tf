@@ -67,8 +67,8 @@ locals {
       }
     }
     # Agreed with KMS at every start by a machine whose NitroTPM proves this release's image
-    # (attested_key.tf): named here, held nowhere.
-    encryption_key_attested = { key = aws_kms_key.encryption.arn }
+    # (attested_key.tf): named here, held nowhere. One key per version, all from the one KMS key.
+    encryption_key_attested = { key = aws_kms_key.encryption.arn, versions = var.encryption_key_versions }
     # The names its certificate must cover, and the CA it issues it under.
     tls = { extra_sans = [local.cp_host], ca_at = local.ssm.ca }
     # The identity key is KMS's, made unseen and granted under the identity-keys role, and opened

@@ -426,6 +426,7 @@ run "the_secrets_are_written_once_and_never_by_a_machine" {
   assert {
     condition = (
       local.controlplane_document.encryption_key_attested.key == aws_kms_key.encryption.arn &&
+      jsonencode(local.controlplane_document.encryption_key_attested.versions) == "[1]" &&
       local.controlplane_document.bootstrap_admin.password_at == "ssm:///spin/spin/bootstrap-password?region=us-east-2" &&
       local.controlplane_document.bootstrap_admin.email == "admin@example.com" &&
       !contains(keys(local.controlplane_document), "encryption_key") &&
@@ -492,6 +493,49 @@ run "the_operators_file_is_the_installations" {
     )
     error_message = "the operator's file is not what the installation declares, beside what the module knows"
   }
+}
+
+# A rotation of the control plane's key is the next version in the list: the document names both,
+# from the one KMS key - and the document is in the hash that makes a new launch template
+# (instance.tf), so the machine is replaced onto it.
+run "a_rotation_names_the_next_version_of_the_one_key" {
+  command = plan
+  variables {
+    encryption_key_versions = [1, 2]
+  }
+
+  assert {
+    condition = (
+      jsonencode(local.controlplane_document.encryption_key_attested.versions) == "[1,2]" &&
+      local.controlplane_document.encryption_key_attested.key == aws_kms_key.encryption.arn
+    )
+    error_message = "the document does not name both versions of the one key"
+  }
+}
+
+# A list that cannot name keys is refused at plan: none, a version under 1, one twice.
+run "no_versions_is_refused" {
+  command = plan
+  variables {
+    encryption_key_versions = []
+  }
+  expect_failures = [var.encryption_key_versions]
+}
+
+run "a_version_twice_is_refused" {
+  command = plan
+  variables {
+    encryption_key_versions = [1, 1]
+  }
+  expect_failures = [var.encryption_key_versions]
+}
+
+run "version_zero_is_refused" {
+  command = plan
+  variables {
+    encryption_key_versions = [0, 1]
+  }
+  expect_failures = [var.encryption_key_versions]
 }
 
 # The runners' groups are the control plane's to make (spin's hostclass), from what this seeds: the

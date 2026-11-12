@@ -275,10 +275,13 @@ and says what that account needs.
   taken cannot leave a value for the next one to start on. The documents are objects, not
   parameters: the control plane's carries what each image's release signed of it, past the 8 KB
   a parameter holds.
-- **The encryption key and the first password never reach the state.** Both are ephemeral values
-  written through write-only attributes, once (`value_wo_version`). The key is, with the
-  database, the installation: a new one is a database nothing can open, so nothing here makes one
-  again. The CA is in the state on purpose - its certificate is in the proxy's and the runners'
+- **The encryption key and the first password never reach the state.** The password is an
+  ephemeral value written through a write-only attribute, once (`value_wo_version`). The key is
+  written nowhere: the control plane agrees it with a KMS key at every start, only on a machine
+  that proves its image (`attested_key.tf`). That KMS key is, with the database, the
+  installation, so nothing here replaces it; the key is rotated by appending a version to
+  `encryption_key_versions` (each a key of its own from the same KMS key) and running spin's
+  `controlplane crypto rotate`. The CA is in the state on purpose - its certificate is in the proxy's and the runners'
   documents - so **encrypt the state** (OpenTofu's `encryption` block; a KMS key is the simplest).
 - **Runners join by who they are.** A runner signs a GetCallerIdentity with its instance role,
   bound to this installation and to its host id, and the control plane asks STS whose signature
