@@ -153,6 +153,21 @@ variable "object_lock_days" {
   nullable    = false
 }
 
+variable "encryption_key_versions" {
+  description = "The versions of the control plane's encryption key its document names, each a key of its own agreed with the one KMS key (attested_key.tf): the highest seals, every one listed opens what was sealed under it. A rotation appends the next version and applies - the control plane is replaced onto it - then runs `controlplane crypto rotate`; a version is removed only once that reports nothing left under it and the database archive keeps no base backup from before (spin-stack/runbooks key-rotation). A version removed while anything is sealed under it is that data lost."
+  type        = list(number)
+  default     = [1]
+  nullable    = false
+  validation {
+    condition = (
+      length(var.encryption_key_versions) > 0 &&
+      alltrue([for v in var.encryption_key_versions : v >= 1 && floor(v) == v]) &&
+      length(distinct(var.encryption_key_versions)) == length(var.encryption_key_versions)
+    )
+    error_message = "encryption_key_versions names at least one version, each a whole number from 1, none twice."
+  }
+}
+
 variable "database_lock_days" {
   description = "The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database_bucket.tf). Every base backup and WAL segment the archive prunes is held this long, so the archive's size is this many days of it on top of what it keeps: a week is the window to notice a wrong delete."
   type        = number

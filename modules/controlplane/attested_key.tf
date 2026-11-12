@@ -46,8 +46,10 @@ locals {
   if length(builds) > 0 && try(builds[length(builds) - 1].revoked != null && builds[length(builds) - 1].revoked != "", false) }
 }
 
-# No rotation: KMS rotates no asymmetric key, and a new key-agreement key would be a new secret and
-# a database nothing can open. A rotation of the control plane's key is a new peer label in spin.
+# No rotation of this KMS key: KMS rotates no asymmetric key, and a new key-agreement key would be a
+# new secret and a database nothing can open. The control plane's key is rotated by a new version
+# (encryption_key_versions): spin agrees each version with this one key through a peer of its own,
+# so a rotation is a list edit and an apply, and no new KMS key.
 #trivy:ignore:AWS-0065
 resource "aws_kms_key" "encryption" {
   description              = "${local.name}: agrees the control plane's encryption key with an attested machine"

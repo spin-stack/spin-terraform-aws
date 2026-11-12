@@ -43,6 +43,8 @@ module "controlplane" {
   max_runners           = var.max_runners
   runner_rollout        = var.runner_rollout
   runner_data_volume_gb = var.runner_data_volume_gb
+  # The keys the database opens with, which only an operator rotating one changes.
+  encryption_key_versions = var.encryption_key_versions
 }
 
 module "runners" {
