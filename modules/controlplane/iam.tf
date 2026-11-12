@@ -282,12 +282,13 @@ data "aws_iam_policy_document" "runner_scope" {
     resources = ["${aws_s3_bucket.volumes.arn}/writers/*"]
   }
   # The identity a host signs for its machines (spin's internal/runner/identityserver): the record
-  # of each - under the host's own name, as the session policy narrows it - and the X.509 CA the
-  # first host to sign an SVID makes.
+  # of each - under the host's own name, as the session policy narrows it - and each key's X.509 CA,
+  # which the first host to sign an SVID with that key makes; the issuer publishes one only as its
+  # key signed it.
   statement {
     actions = ["s3:GetObject", "s3:PutObject"]
     resources = ["${aws_s3_bucket.volumes.arn}/identity/issued/*",
-    "${aws_s3_bucket.volumes.arn}/identity/x509-ca.der"]
+    "${aws_s3_bucket.volumes.arn}/identity/x509-ca/*"]
   }
 }
 

@@ -26,9 +26,13 @@ variable "identity_record_days" {
 locals {
   # The context the key is made under, which every use of it is held to.
   identity_purpose = "identity-issuer"
-  # The key as the control plane keeps it and the X.509 CA the first host to sign an SVID makes
-  # beside it (spin's identity.KeyPath and identity.CAKey): what id.<domain> is written from.
-  issuer_keys = ["identity/issuer.json", "identity/x509-ca.der"]
+  # The first key as the control plane keeps it, every key a rotation makes, and each key's X.509 CA,
+  # which the first host to sign an SVID with it makes (spin's identity.KeyPath, KeysPrefix and
+  # CAPrefix): what id.<domain> is written from - of the keys, only those identity_keys lists.
+  issuer_keys = ["identity/issuer.json", "identity/keys/*", "identity/x509-ca/*"]
+  # The keys the documents list past the first, as spin reads them (bootstrap.IdentityKey): a retired
+  # one carries when, and one that is not carries nothing.
+  listed_identity_keys = [for k in var.identity_keys : k.retired == null ? { kid = k.kid } : { kid = k.kid, retired = k.retired }]
   # By its name and not the role's attribute: the boundary every role here carries names it, and
   # the role carries that boundary.
   identity_keys_role_arn = "${local.arn}:iam::${local.account}:role/${local.iam_name}-identity-keys"

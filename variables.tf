@@ -170,6 +170,15 @@ variable "encryption_key_versions" {
   default     = null
 }
 
+variable "identity_keys" {
+  description = "The identity keys past the installation's first, by the kid `controlplane identity rotate` prints, newest last; a retired one carries the time `controlplane identity retire` prints (spin-stack/runbooks identity-audit-failing). modules/controlplane's default is []."
+  type = list(object({
+    kid     = string
+    retired = optional(string)
+  }))
+  default = null
+}
+
 variable "monthly_budget_usd" {
   description = "What the installation may cost in a month, in US dollars: an AWS Budget the control plane reads and whose alerts go to budget_emails. Null is no budget."
   type        = number

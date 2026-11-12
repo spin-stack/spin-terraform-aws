@@ -195,14 +195,13 @@ data "aws_iam_policy_document" "boundary" {
     actions   = ["s3:DeleteObjectVersion"]
     resources = ["${aws_s3_bucket.volumes.arn}/volumes/*/HEAD", "${aws_s3_bucket.volumes.arn}/writers/*"]
   }
-  # Nothing deletes the identity key the control plane keeps, which every relying party trusts, nor
-  # the CA its SVIDs chain to.
+  # Nothing deletes an identity key the control plane keeps, which relying parties trust once it is
+  # listed, nor the CA a key's SVIDs chain to.
   statement {
-    sid     = "NoIdentityKeyUndone"
-    effect  = "Deny"
-    actions = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
-    resources = ["${aws_s3_bucket.volumes.arn}/identity/issuer.json",
-    "${aws_s3_bucket.volumes.arn}/identity/x509-ca.der"]
+    sid       = "NoIdentityKeyUndone"
+    effect    = "Deny"
+    actions   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+    resources = [for k in local.issuer_keys : "${aws_s3_bucket.volumes.arn}/${k}"]
   }
 }
 

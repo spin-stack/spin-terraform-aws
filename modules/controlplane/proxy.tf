@@ -49,8 +49,9 @@ data "aws_iam_policy_document" "proxy" {
     resources = [local.document_arn["proxy"]]
   }
   # Read and never written: it publishes the first version of each as id.<domain> (spin's
-  # provider.IssuerSource), which no role may delete (boundary.tf), so a control plane that writes
-  # another key publishes nothing of it.
+  # provider.IssuerSource), which no role may delete (boundary.tf) - of the keys a rotation makes,
+  # only those its document lists (identity_keys) - so a control plane that writes another key
+  # publishes nothing of it.
   statement {
     sid       = "TheIssuersVersions"
     actions   = ["s3:GetObjectVersion"]
@@ -61,7 +62,7 @@ data "aws_iam_policy_document" "proxy" {
     actions   = ["s3:ListBucketVersions"]
     resources = [aws_s3_bucket.volumes.arn]
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "s3:prefix"
       values   = local.issuer_keys
     }

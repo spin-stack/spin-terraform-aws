@@ -168,6 +168,23 @@ variable "encryption_key_versions" {
   }
 }
 
+variable "identity_keys" {
+  description = "The identity keys workspaces' tokens and certificates are signed with past the installation's first, each by the kid `controlplane identity rotate` prints, newest last: the newest not retired signs, and every one listed is published at id.<domain> and verifies what it signed until its retired time (RFC 3339), which `controlplane identity retire` prints. The first key is listed only to retire it. A key the control plane made that is not listed here is never published, accepted or signed with (spin-stack/runbooks identity-audit-failing)."
+  type = list(object({
+    kid     = string
+    retired = optional(string)
+  }))
+  default  = []
+  nullable = false
+  validation {
+    condition = (
+      alltrue([for k in var.identity_keys : k.kid != "" && (k.retired == null || can(timeadd(k.retired, "0s")))]) &&
+      length(distinct([for k in var.identity_keys : k.kid])) == length(var.identity_keys)
+    )
+    error_message = "identity_keys names each kid once, none empty, and a retired time is RFC 3339."
+  }
+}
+
 variable "database_lock_days" {
   description = "The database archive's default Object Lock retention, in GOVERNANCE mode: how long what a delete or an overwrite left there can still be restored. The lifecycle removes it a day after (database_bucket.tf). Every base backup and WAL segment the archive prunes is held this long, so the archive's size is this many days of it on top of what it keeps: a week is the window to notice a wrong delete."
   type        = number
