@@ -207,12 +207,14 @@ data "aws_iam_policy_document" "controlplane_fleet" {
   }
   # Describe has no resource-level permission. The groups' activities are how the control plane
   # says why a host it asked for did not come (spin#702), and a machine's group is its class.
+  # DescribeInstances is a joining machine's class, type, zone and whether it is spot, in one call
+  # (spin#1107): whether a host is reclaimable is its lifecycle, not its class's setting.
   statement {
     sid = "SeeTheRunners"
     actions = [
       "autoscaling:DescribeAutoScalingGroups", "autoscaling:DescribeScalingActivities",
-      "autoscaling:DescribeAutoScalingInstances", "ec2:DescribeLaunchTemplates",
-      "ec2:DescribeLaunchTemplateVersions",
+      "autoscaling:DescribeAutoScalingInstances", "ec2:DescribeInstances",
+      "ec2:DescribeLaunchTemplates", "ec2:DescribeLaunchTemplateVersions",
     ]
     resources = ["*"]
   }
