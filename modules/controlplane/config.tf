@@ -257,7 +257,7 @@ resource "aws_ssm_parameter" "installation" {
   type        = "SecureString"
   tier        = "Intelligent-Tiering"
   value       = yamlencode(local.installation)
-  tags        = local.tags
+  tags        = merge(local.tags, { "spin:role" = "controlplane" })
 }
 
 # Every machine's user data: which role it is and where that role's document is, as the two

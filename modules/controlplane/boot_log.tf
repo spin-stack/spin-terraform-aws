@@ -10,7 +10,7 @@
 resource "aws_cloudwatch_log_group" "boot" {
   name              = "/spin/${local.name}/boot"
   retention_in_days = var.log_retention_days
-  tags              = local.tags
+  tags              = merge(local.tags, { "spin:role" = "logs" })
 }
 
 data "aws_iam_policy_document" "boot_log" {

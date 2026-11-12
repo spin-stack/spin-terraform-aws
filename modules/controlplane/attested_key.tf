@@ -55,7 +55,7 @@ resource "aws_kms_key" "encryption" {
   key_usage                = "KEY_AGREEMENT"
   deletion_window_in_days  = 30
   policy                   = data.aws_iam_policy_document.encryption_key.json
-  tags                     = local.tags
+  tags                     = merge(local.tags, { "spin:role" = "controlplane" })
   lifecycle {
     prevent_destroy = true
     precondition {

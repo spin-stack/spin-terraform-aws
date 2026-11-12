@@ -13,7 +13,7 @@ resource "aws_cloudwatch_log_group" "flow" {
   count             = var.flow_logs ? 1 : 0
   name              = "/spin/${local.name}/vpc-flow"
   retention_in_days = var.log_retention_days
-  tags              = local.tags
+  tags              = merge(local.tags, { "spin:role" = "logs" })
 }
 
 data "aws_iam_policy_document" "flow_assume" {
@@ -62,7 +62,7 @@ resource "aws_flow_log" "vpc" {
   log_destination          = aws_cloudwatch_log_group.flow[0].arn
   iam_role_arn             = aws_iam_role.flow[0].arn
   max_aggregation_interval = 600
-  tags                     = local.tags
+  tags                     = merge(local.tags, { "spin:role" = "logs" })
 }
 
 #trivy:ignore:AWS-0017
@@ -70,7 +70,7 @@ resource "aws_cloudwatch_log_group" "resolver" {
   count             = var.dns_query_logs ? 1 : 0
   name              = "/spin/${local.name}/resolver-queries"
   retention_in_days = var.log_retention_days
-  tags              = local.tags
+  tags              = merge(local.tags, { "spin:role" = "logs" })
 }
 
 # The resolver writes with a resource policy on the group, held to this account's query-log
@@ -107,7 +107,7 @@ resource "aws_route53_resolver_query_log_config" "this" {
   count           = var.dns_query_logs ? 1 : 0
   name            = local.name
   destination_arn = aws_cloudwatch_log_group.resolver[0].arn
-  tags            = local.tags
+  tags            = merge(local.tags, { "spin:role" = "logs" })
   depends_on      = [aws_cloudwatch_log_resource_policy.resolver]
 }
 

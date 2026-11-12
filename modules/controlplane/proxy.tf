@@ -132,7 +132,7 @@ resource "aws_iam_instance_profile" "proxy" {
 
 resource "aws_eip" "proxy" {
   domain = "vpc"
-  tags   = merge(local.tags, { Name = "${local.name}-proxy" })
+  tags   = merge(local.tags, { Name = "${local.name}-proxy", "spin:role" = "proxy" })
 }
 
 # Caddy's certificates and ACME account, kept for the next proxy: versioned, and no Object Lock -

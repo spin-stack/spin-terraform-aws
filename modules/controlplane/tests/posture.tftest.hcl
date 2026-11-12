@@ -1741,6 +1741,50 @@ run "every_bucket_is_billed_by_its_role" {
   }
 }
 
+# Everything else this module makes that the bill charges for carries its role, so spin says what
+# the installation costs with nobody working by role: one that carries none is said as untagged,
+# and a log group, a key or an address untagged was a cost nobody could put a name to. Free
+# resources - the VPC and its parts, roles, the gateway endpoint - carry none and are not here.
+run "every_billed_resource_is_billed_by_its_role" {
+  command = plan
+
+  variables {
+    dns_query_logs = true
+  }
+
+  assert {
+    condition = alltrue([for billed in [
+      [aws_cloudwatch_log_group.boot.tags, "logs"],
+      [aws_cloudwatch_log_group.flow[0].tags, "logs"],
+      [aws_flow_log.vpc[0].tags, "logs"],
+      [aws_cloudwatch_log_group.resolver[0].tags, "logs"],
+      [aws_route53_resolver_query_log_config.this[0].tags, "logs"],
+      [aws_eip.proxy.tags, "proxy"],
+      [aws_route53_zone.internal.tags, "dns"],
+      [aws_route53_zone.public.tags, "dns"],
+      [aws_cloudtrail.calls.tags, "calls"],
+      [aws_sns_topic.security.tags, "calls"],
+      [aws_s3_bucket.calls.tags, "calls"],
+      [aws_kms_key.encryption.tags, "controlplane"],
+      [aws_ssm_parameter.installation.tags, "controlplane"],
+      [aws_kms_key.identity.tags, "identity"],
+      [aws_kms_key.volumes.tags, "volumes"],
+      [aws_s3_bucket.documents.tags, "documents"],
+      [aws_s3_bucket.database_handover.tags, "database-handover"],
+    ] : lookup(billed[0], "spin:role", "") == billed[1]])
+    error_message = "a billed resource is not tagged with its role, and its cost is said as untagged"
+  }
+
+  # A machine's and its disk's cost is the instance's and the volume's, which carry the role from
+  # launch; the template's own tags are not billed.
+  assert {
+    condition = flatten([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] : [
+      for s in t.tag_specifications : lookup(s.tags, "spin:role", "") if contains(["instance", "volume"], s.resource_type)
+    ]]) == ["controlplane", "controlplane", "proxy", "proxy"]
+    error_message = "the control plane's or the proxy's machine or disk is not tagged with its role"
+  }
+}
+
 run "the_control_plane_is_told_its_scope_and_its_budget" {
   command = plan
   variables {
