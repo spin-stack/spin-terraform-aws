@@ -45,6 +45,8 @@ module "controlplane" {
   runner_data_volume_gb = var.runner_data_volume_gb
   # The keys the database opens with, which only an operator rotating one changes.
   encryption_key_versions = var.encryption_key_versions
+  # The identity keys relying parties trust past the first, which only a rotation changes.
+  identity_keys = var.identity_keys
 }
 
 module "runners" {

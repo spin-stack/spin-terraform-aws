@@ -513,6 +513,39 @@ run "a_rotation_names_the_next_version_of_the_one_key" {
   }
 }
 
+# An identity key rotation is the list both documents carry: the control plane signs with and
+# verifies against the keys the proxy publishes, so the two read one list, a retired key with when.
+run "both_documents_list_the_same_identity_keys" {
+  command = plan
+  variables {
+    identity_keys = [{ kid = "old", retired = "2026-11-20T00:00:00Z" }, { kid = "new" }]
+  }
+
+  assert {
+    condition = (
+      jsonencode(local.controlplane_document.identity.keys) == jsonencode([{ kid = "old", retired = "2026-11-20T00:00:00Z" }, { kid = "new" }]) &&
+      jsonencode(local.proxy_document.identity_keys) == jsonencode(local.controlplane_document.identity.keys)
+    )
+    error_message = "the control plane's and the proxy's documents list other identity keys"
+  }
+}
+
+run "an_identity_key_listed_twice_is_refused" {
+  command = plan
+  variables {
+    identity_keys = [{ kid = "k" }, { kid = "k" }]
+  }
+  expect_failures = [var.identity_keys]
+}
+
+run "a_retired_time_that_is_no_time_is_refused" {
+  command = plan
+  variables {
+    identity_keys = [{ kid = "k", retired = "next week" }]
+  }
+  expect_failures = [var.identity_keys]
+}
+
 # A list that cannot name keys is refused at plan: none, a version under 1, one twice.
 run "no_versions_is_refused" {
   command = plan
@@ -1006,9 +1039,9 @@ run "the_roles" {
     condition = !anytrue([for s in data.aws_iam_policy_document.proxy.statement :
       anytrue([for a in s.actions : startswith(a, "s3:") && !contains(s.resources, "arn:aws:s3:::spin-proxy-123456789012-us-east-2") &&
         s.resources != toset(["arn:aws:s3:::spin-docs-123456789012-us-east-2/proxy.yaml"]) &&
-        !(toset(s.actions) == toset(["s3:GetObjectVersion"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json", "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/x509-ca.der"])) &&
+        !(toset(s.actions) == toset(["s3:GetObjectVersion"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json", "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/keys/*", "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/x509-ca/*"])) &&
         !(toset(s.actions) == toset(["s3:ListBucketVersions"]) && s.resources == toset(["arn:aws:s3:::spin-volumes-123456789012-us-east-2"]) &&
-    anytrue([for c in s.condition : c.variable == "s3:prefix" && toset(c.values) == toset(["identity/issuer.json", "identity/x509-ca.der"])]))])])
+    anytrue([for c in s.condition : c.variable == "s3:prefix" && toset(c.values) == toset(["identity/issuer.json", "identity/keys/*", "identity/x509-ca/*"])]))])])
     error_message = "the proxy's role reaches a bucket other than its certificates', its own document and the versions of the identity key and its CA"
   }
 }
@@ -1077,7 +1110,7 @@ run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
     error_message = "the proxy may use a KMS key"
   }
   assert {
-    condition     = local.controlplane_document.identity == { key = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001", role = "arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys" }
+    condition     = local.controlplane_document.identity.key == "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001" && local.controlplane_document.identity.role == "arn:aws:iam::123456789012:role/spin-us-east-2-identity-keys" && length(local.controlplane_document.identity.keys) == 0
     error_message = "the control plane is not told the identity key and the role it grants it under"
   }
   assert {
@@ -1101,8 +1134,9 @@ run "a_workspaces_identity_key_is_opened_only_by_an_attested_runner" {
   assert {
     condition = anytrue([for s in data.aws_iam_policy_document.boundary.statement :
       s.effect == "Deny" && contains(s.actions, "s3:DeleteObject") && contains(s.actions, "s3:DeleteObjectVersion") &&
-    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json")])
-    error_message = "a role may delete the identity key every relying party trusts"
+      contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/issuer.json") &&
+    contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2/identity/keys/*")])
+    error_message = "a role may delete an identity key relying parties trust"
   }
   assert {
     condition = anytrue([for r in aws_s3_bucket_lifecycle_configuration.volumes.rule :
@@ -1341,7 +1375,7 @@ run "a_runners_role_grants_what_its_session_asks" {
       { r = "/volumes/*", a = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"] },
       { r = "/writers/*", a = ["s3:GetObject", "s3:GetObjectVersion"] },
       { r = "/identity/issued/*", a = ["s3:GetObject", "s3:PutObject"] },
-      { r = "/identity/x509-ca.der", a = ["s3:GetObject", "s3:PutObject"] },
+      { r = "/identity/x509-ca/*", a = ["s3:GetObject", "s3:PutObject"] },
       ] : alltrue([for a in want.a : anytrue([for s in data.aws_iam_policy_document.runner_scope.statement :
     contains(s.actions, a) && contains(s.resources, "arn:aws:s3:::spin-volumes-123456789012-us-east-2${want.r}")])])])
     error_message = "a runner's session asks an action of the volumes' bucket its role does not grant"
