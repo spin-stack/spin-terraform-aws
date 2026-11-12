@@ -6,7 +6,10 @@
 #
 # spin:installation is what an installation's budget (modules/controlplane/budget.tf) and the
 # control plane's reading of the bill filter by; spin:role splits it into the control plane, the
-# proxy and the runners.
+# proxy, the database, the runners and the rest, which is how spin says what the installation costs
+# with nobody working. spin:host-class is the class a runner's group is made for, which the control
+# plane tags each group with and its machines and disks carry from launch: it splits the runners'
+# cost by class.
 
 variable "cost_allocation_tags" {
   description = "Activate spin's tags as cost allocation tags in this account: true once an installation has run a day here, in one bootstrap per account."
@@ -15,7 +18,7 @@ variable "cost_allocation_tags" {
 }
 
 resource "aws_ce_cost_allocation_tag" "spin" {
-  for_each = var.cost_allocation_tags ? toset(["spin:installation", "spin:role"]) : toset([])
+  for_each = var.cost_allocation_tags ? toset(["spin:installation", "spin:role", "spin:host-class"]) : toset([])
   tag_key  = each.value
   status   = "Active"
 }

@@ -16,7 +16,7 @@ resource "aws_route53_zone" "internal" {
   vpc {
     vpc_id = aws_vpc.this.id
   }
-  tags = local.tags
+  tags = merge(local.tags, { "spin:role" = "dns" })
 }
 
 locals {
@@ -32,7 +32,7 @@ resource "aws_route53_zone" "public" {
   name          = var.domain
   comment       = "${local.name}: the installation, to the internet"
   force_destroy = true
-  tags          = local.tags
+  tags          = merge(local.tags, { "spin:role" = "dns" })
 }
 
 # app.<domain> is the dashboard, tunnel.app.<domain> the relay runners dial, agents.<domain> the

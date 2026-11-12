@@ -131,7 +131,7 @@ resource "aws_cloudtrail" "calls" {
   include_global_service_events = false
   is_multi_region_trail         = false
   enable_log_file_validation    = true
-  tags                          = local.tags
+  tags                          = merge(local.tags, { "spin:role" = "calls" })
 
   event_selector {
     read_write_type           = "WriteOnly"
@@ -145,7 +145,7 @@ resource "aws_cloudtrail" "calls" {
 #trivy:ignore:AWS-0095
 resource "aws_sns_topic" "security" {
   name = "${local.iam_name}-security"
-  tags = local.tags
+  tags = merge(local.tags, { "spin:role" = "calls" })
 }
 
 data "aws_iam_policy_document" "security_topic" {
