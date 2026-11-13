@@ -29,6 +29,9 @@ vars:
   DOCUMENTED: modules/controlplane modules/runners
   # spin-stack/go-tools' gates, by commit: this repository has no go.mod to pin them as tools.
   GO_TOOLS_VERSION: dfcf2c10f30b2b2c65cea37558cbf12881f8fde9
+  # testidentity's own: the commit that has it. taskgate at that commit also reads the scripts a
+  # task runs, which six of hack/'s fail - work of its own before GO_TOOLS_VERSION moves there.
+  TESTIDENTITY_VERSION: 1c6d5ec38bf52276bef65e89d94dc1865f73924c
   # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
   # size. Its release's own build rather than its image: the image came from Docker Hub, which
   # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
@@ -184,6 +187,9 @@ tasks:
       # installed but by pnpm through Socket's firewall.
       - go run github.com/spin-stack/go-tools/cmd/taskgate@{{.GO_TOOLS_VERSION}}
       - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} check
+      # A test that writes git's author into the checkout makes every commit after it the test's;
+      # this refuses those commits before they reach main.
+      - go run github.com/spin-stack/go-tools/cmd/testidentity@{{.TESTIDENTITY_VERSION}} -base origin/main
       - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
       # The one Go program here, which only the fresh install's smoke runs: a file, with no module.
       - test -z "$(gofmt -l hack/enroll)" || { gofmt -l hack/enroll; echo 'gofmt -w hack/enroll'; exit 1; }
