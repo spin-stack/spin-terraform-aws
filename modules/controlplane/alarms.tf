@@ -163,6 +163,21 @@ data "aws_iam_policy_document" "security_topic" {
       values   = [aws_cloudwatch_event_rule.controlplane_starts_a_machine.arn]
     }
   }
+  # This policy replaces the topic's default, which let the account's own alarms publish.
+  statement {
+    sid       = "TheMachinesAlarmPublishes"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.security.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudwatch_metric_alarm.controlplane_machine.arn]
+    }
+  }
 }
 
 resource "aws_sns_topic_policy" "security" {
