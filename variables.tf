@@ -186,7 +186,7 @@ variable "monthly_budget_usd" {
 }
 
 variable "security_emails" {
-  description = "Who is emailed when the control plane's role starts a machine itself. Each address confirms the subscription once; an unconfirmed one is told nothing."
+  description = "Who is emailed when the control plane's role starts a machine itself, and when the control plane is down and again when it is back. Each address confirms two subscriptions once; an unconfirmed one is told nothing."
   type        = list(string)
   default     = null
 }

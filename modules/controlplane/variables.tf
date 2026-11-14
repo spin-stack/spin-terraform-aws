@@ -280,7 +280,7 @@ variable "monthly_budget_usd" {
 }
 
 variable "security_emails" {
-  description = "Who AWS emails when the control plane's role starts a machine itself (alarms.tf). Each address confirms the subscription once, and an unconfirmed one is told nothing."
+  description = "Who AWS emails when the control plane's role starts a machine itself (alarms.tf), and when the control plane is down and again when it is back (uptime.tf). Each address confirms each of the two topics once, and an unconfirmed one is told nothing."
   type        = list(string)
   default     = []
   nullable    = false

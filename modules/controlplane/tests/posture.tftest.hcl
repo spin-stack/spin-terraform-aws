@@ -42,6 +42,12 @@ override_data {
   values = { names = ["us-east-2a", "us-east-2b", "us-east-2c"] }
 }
 
+# Route 53's checkers' published networks, which a proxy closed to everyone else lets in.
+override_data {
+  target = data.aws_ip_ranges.health_checks
+  values = { cidr_blocks = ["15.177.0.0/18", "54.243.31.192/26"] }
+}
+
 # Known at plan, so what carries them can be asserted on: the roles' boundary, and the user
 # data, which names the runner scope and the data volume.
 override_resource {
@@ -1842,6 +1848,10 @@ run "every_billed_resource_is_billed_by_its_role" {
       [aws_route53_zone.public.tags, "dns"],
       [aws_cloudtrail.calls.tags, "calls"],
       [aws_sns_topic.security.tags, "calls"],
+      [aws_route53_health_check.controlplane.tags, "alerts"],
+      [aws_sns_topic.controlplane_down.tags, "alerts"],
+      [aws_cloudwatch_metric_alarm.controlplane_unreachable.tags, "alerts"],
+      [aws_cloudwatch_metric_alarm.controlplane_machine.tags, "alerts"],
       [aws_s3_bucket.calls.tags, "calls"],
       [aws_kms_key.encryption.tags, "controlplane"],
       [aws_ssm_parameter.installation.tags, "controlplane"],
@@ -2058,5 +2068,81 @@ run "the_control_plane_starting_a_machine_is_told" {
   assert {
     condition     = length(aws_sns_topic_subscription.security) == 1
     error_message = "the addresses given are not told"
+  }
+}
+
+# Something outside the control plane says it is down: whoever security_emails names is mailed
+# when no control plane answers through the proxy, and when its machine fails, and again when
+# either is back.
+run "a_control_plane_that_is_down_is_told" {
+  command = plan
+
+  override_resource {
+    target = aws_sns_topic.security
+    values = { arn = "arn:aws:sns:us-east-2:123456789012:spin-us-east-2-security" }
+  }
+  override_resource {
+    target = aws_sns_topic.controlplane_down
+    values = { arn = "arn:aws:sns:us-east-1:123456789012:spin-us-east-2-controlplane-down" }
+  }
+
+  variables {
+    security_emails = ["security@example.com"]
+  }
+
+  assert {
+    condition = (
+      aws_route53_health_check.controlplane.fqdn == "app.example.com" &&
+      aws_route53_health_check.controlplane.type == "HTTPS" &&
+      aws_route53_health_check.controlplane.resource_path == "/ready"
+    )
+    error_message = "the health check does not ask the control plane's readiness through the proxy"
+  }
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.proxy_https_health_checks) == 0
+    error_message = "a proxy open to everyone is given a rule of the checkers' own"
+  }
+  # The health check's metric is in us-east-1 alone, and the alarm's topic has to be in its region.
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.controlplane_unreachable.region == "us-east-1" &&
+      aws_cloudwatch_metric_alarm.controlplane_unreachable.metric_name == "HealthCheckStatus" &&
+      aws_cloudwatch_metric_alarm.controlplane_unreachable.alarm_actions == toset([aws_sns_topic.controlplane_down.arn]) &&
+      aws_cloudwatch_metric_alarm.controlplane_unreachable.ok_actions == toset([aws_sns_topic.controlplane_down.arn]) &&
+      aws_sns_topic.controlplane_down.region == "us-east-1"
+    )
+    error_message = "the health check's alarm is not in us-east-1, or does not mail a topic there when it fails and recovers"
+  }
+  assert {
+    condition     = [for s in aws_sns_topic_subscription.controlplane_down : s.endpoint] == ["security@example.com"]
+    error_message = "the addresses given are not told that the control plane is down"
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.controlplane_machine.metric_name == "StatusCheckFailed" &&
+      aws_cloudwatch_metric_alarm.controlplane_machine.dimensions == tomap({ AutoScalingGroupName = aws_autoscaling_group.controlplane.name }) &&
+      aws_cloudwatch_metric_alarm.controlplane_machine.alarm_actions == toset([aws_sns_topic.security.arn]) &&
+      aws_cloudwatch_metric_alarm.controlplane_machine.ok_actions == toset([aws_sns_topic.security.arn])
+    )
+    error_message = "the control plane's machine failing its status checks does not mail the security topic when it fails and recovers"
+  }
+}
+
+# A proxy closed to all but a list of networks still answers Route 53's checkers, or the health
+# check fails for an installation that serves.
+run "a_proxy_closed_to_others_is_still_checked" {
+  command = plan
+
+  variables {
+    proxy_allowed_cidrs = ["203.0.113.0/24"]
+  }
+
+  assert {
+    condition     = toset([for r in aws_vpc_security_group_ingress_rule.proxy_https_health_checks : r.cidr_ipv4]) == toset(["15.177.0.0/18", "54.243.31.192/26"])
+    error_message = "the proxy does not let Route 53's checkers in"
+  }
+  assert {
+    condition     = alltrue([for r in aws_vpc_security_group_ingress_rule.proxy_https_health_checks : r.from_port == 443 && r.to_port == 443])
+    error_message = "the checkers' rule on the proxy opens more than 443"
   }
 }

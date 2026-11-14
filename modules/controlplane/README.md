@@ -35,6 +35,8 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_cloudwatch_log_group.flow](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_group.resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_log_resource_policy.resolver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_resource_policy) | resource |
+| [aws_cloudwatch_metric_alarm.controlplane_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
+| [aws_cloudwatch_metric_alarm.controlplane_unreachable](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
 | [aws_eip.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
 | [aws_flow_log.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/flow_log) | resource |
 | [aws_iam_instance_profile.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
@@ -68,6 +70,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_launch_template.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_launch_template.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template) | resource |
 | [aws_route.internet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
+| [aws_route53_health_check.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_health_check) | resource |
 | [aws_route53_record.app](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_record) | resource |
 | [aws_route53_resolver_query_log_config.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_resolver_query_log_config) | resource |
 | [aws_route53_resolver_query_log_config_association.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_resolver_query_log_config_association) | resource |
@@ -130,8 +133,10 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_s3_object.document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_security_group.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
 | [aws_security_group.proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
+| [aws_sns_topic.controlplane_down](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
 | [aws_sns_topic.security](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
 | [aws_sns_topic_policy.security](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_policy) | resource |
+| [aws_sns_topic_subscription.controlplane_down](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_sns_topic_subscription.security](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_ssm_parameter.admin_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.ca](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
@@ -149,6 +154,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_vpc_security_group_ingress_rule.controlplane_from_proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_http](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
+| [aws_vpc_security_group_ingress_rule.proxy_https_health_checks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.proxy_https_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [tls_private_key.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [tls_self_signed_cert.ca](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/self_signed_cert) | resource |
@@ -183,6 +189,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_policy_document.team_secrets_trust](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.volume_keys](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.volume_keys_trust](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_ip_ranges.health_checks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ip_ranges) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 
@@ -228,7 +235,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | runner\_rollout | How a new release reaches the runners. idle: when the fleet next empties - no workspace running, starting or being saved - the next host boots it, and no workspace is moved for it; a host keeps the old release until then, which its control plane allows for 90 days. rolling: the hosts are replaced at once, one at a time, each old one's workspaces suspended to the bucket and resumed on the new one - for a fleet that never empties. | `string` | `"idle"` | no |
 | runner\_spot | Every host a spot instance. The policy a runner joins under (the control plane module's runner\_policy) is what tells each one a stop is a reclaim. | `bool` | `true` | no |
 | runner\_vcpus | How many vCPUs a runner may have, at least and at most: each type instance\_types matches within it is a pool the group may draw on. max is also what the quota is sized by (quota.tf). | `object({ min = number, max = number })` | ```{ "max": 48, "min": 32 }``` | no |
-| security\_emails | Who AWS emails when the control plane's role starts a machine itself (alarms.tf). Each address confirms the subscription once, and an unconfirmed one is told nothing. | `list(string)` | `[]` | no |
+| security\_emails | Who AWS emails when the control plane's role starts a machine itself (alarms.tf), and when the control plane is down and again when it is back (uptime.tf). Each address confirms each of the two topics once, and an unconfirmed one is told nothing. | `list(string)` | `[]` | no |
 | tags | Tags on everything this module creates. | `map(string)` | `{}` | no |
 | time\_zone | The IANA zone quiet\_hours are in. | `string` | `"UTC"` | no |
 | vpc\_cidr | The VPC's range, a /16. One /20 public subnet per availability zone is carved from its first half, and one /24 for the proxy per zone from x.x.136.0 on. | `string` | `"10.42.0.0/16"` | no |
