@@ -220,6 +220,14 @@ jobs:
         timeout-minutes: 10
         run: task fresh-install -- posture
 
+      # A runner from inside, through an incident's root shell, while a workspace runs on it: what
+      # keeps each machine's QEMU, and the egress namespace, from the host's role (hack/host-check.sh).
+      # Last of the checks, since the shell retires the runner it opened on.
+      - name: Host check
+        if: steps.cli.outputs.smoke == 'true'
+        timeout-minutes: 20
+        run: task fresh-install -- host-check
+
       - name: Why
         if: failure() && steps.install.outcome != 'skipped'
         run: task fresh-install -- why
