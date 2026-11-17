@@ -103,6 +103,13 @@ locals {
   arn        = "arn:${data.aws_partition.current.partition}"
   snapshots  = [for r in coalescelist(var.publish_regions, [var.region]) : "${local.arn}:ec2:${r}::snapshot/*"]
   images     = [for r in coalescelist(var.publish_regions, [var.region]) : "${local.arn}:ec2:${r}::image/*"]
+  # What a release's check of its images starts in each region (spin-stack/ami#148).
+  launched = flatten([for r in coalescelist(var.publish_regions, [var.region]) : [
+    for kind in ["instance", "volume", "network-interface"] : "${local.arn}:ec2:${r}:${data.aws_caller_identity.current.account_id}:${kind}/*"
+  ]])
+  launched_into = flatten([for r in coalescelist(var.publish_regions, [var.region]) : [
+    for kind in ["subnet", "security-group"] : "${local.arn}:ec2:${r}:${data.aws_caller_identity.current.account_id}:${kind}/*"
+  ]])
 }
 
 # The provider is made here too when no repository applies an installation from GitHub Actions.
@@ -208,6 +215,70 @@ data "aws_iam_policy_document" "publish" {
       values   = ["false"]
     }
   }
+}
+
+data "aws_iam_policy_document" "launch_check" {
+  # A release boots each role's image once on EC2 before its images.json pull request is opened
+  # (spin-stack/ami#148): UEFI, NitroTPM and IMDSv2 are only what EC2 says they are. An instance of
+  # this account's own images, with no instance profile, tagged spin-os:check as it starts - and
+  # read and ended by that tag, so nothing this role did not start is looked at or terminated.
+  statement {
+    sid       = "LaunchACheck"
+    actions   = ["ec2:RunInstances"]
+    resources = local.launched
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/spin-os:check"
+      values   = ["true"]
+    }
+  }
+  statement {
+    sid       = "LaunchItFromItsOwnImage"
+    actions   = ["ec2:RunInstances"]
+    resources = local.images
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Owner"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+  statement {
+    sid       = "LaunchItIntoTheDefaultNetwork"
+    actions   = ["ec2:RunInstances"]
+    resources = local.launched_into
+  }
+  statement {
+    sid       = "TagTheCheckAsItStarts"
+    actions   = ["ec2:CreateTags"]
+    resources = local.launched
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["RunInstances"]
+    }
+  }
+  statement {
+    sid       = "SeeTheCheck"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ReadAndEndTheCheck"
+    actions   = ["ec2:GetConsoleOutput", "ec2:TerminateInstances"]
+    resources = [for a in local.launched : a if strcontains(a, ":instance/")]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/spin-os:check"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "launch_check" {
+  for_each = aws_iam_role.publish
+  name     = "launch-check"
+  role     = each.value.name
+  policy   = data.aws_iam_policy_document.launch_check.json
 }
 
 resource "aws_iam_role_policy" "publish" {
