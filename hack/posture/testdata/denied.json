@@ -1,0 +1,4 @@
+{"EvaluationResults": [
+  {"EvalActionName": "iam:CreateRole", "EvalResourceName": "*", "EvalDecision": "implicitDeny"},
+  {"EvalActionName": "kms:Decrypt", "EvalResourceName": "*", "EvalDecision": "explicitDeny"}
+]}

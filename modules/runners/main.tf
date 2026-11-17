@@ -118,6 +118,10 @@ resource "aws_launch_template" "runner" {
     # One hop: the runner is on the host, and a guest must never reach the metadata service
     # (netaddr.NodeNetworks drops 169.254.0.0/16 on top of this).
     http_put_response_hop_limit = 1
+    # Said rather than left to AWS's default: spin's rules name the metadata service's IPv4
+    # address only, and the guests have no IPv6.
+    http_protocol_ipv6     = "disabled"
+    instance_metadata_tags = "disabled"
   }
 
   dynamic "cpu_options" {

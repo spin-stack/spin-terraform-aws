@@ -1,0 +1,4 @@
+{"Volumes": [
+  {"VolumeId": "vol-0aaaaaaaaaaaaaaa1", "Encrypted": true, "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa1"}]},
+  {"VolumeId": "vol-0aaaaaaaaaaaaaaa2", "Encrypted": true, "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa2"}]}
+]}

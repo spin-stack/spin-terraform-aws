@@ -1,0 +1,5 @@
+{"Events": [
+  {"EventName": "CreateLogStream", "CloudTrailEvent": "{\"eventSource\":\"logs.amazonaws.com\",\"eventName\":\"CreateLogStream\",\"sourceIPAddress\":\"198.51.100.10\"}"},
+  {"EventName": "GetCallerIdentity", "CloudTrailEvent": "{\"eventSource\":\"sts.amazonaws.com\",\"eventName\":\"GetCallerIdentity\",\"sourceIPAddress\":\"10.0.1.11\"}"},
+  {"EventName": "AssumeRole", "CloudTrailEvent": "{\"eventSource\":\"sts.amazonaws.com\",\"eventName\":\"AssumeRole\",\"sourceIPAddress\":\"ec2.amazonaws.com\"}"}
+]}

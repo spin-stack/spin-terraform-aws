@@ -1,0 +1,22 @@
+# What a runner's role must not be able to do, whatever resource it is asked of: the role is what a
+# tenant who escaped a machine is nearest to. One action a line, then why; the posture step asks the
+# policy simulator of each, with the permissions boundary.
+iam:CreateRole                       # a role of its own, outside the boundary
+iam:AttachRolePolicy                 # more for a role it holds
+iam:PassRole                         # an instance launched as someone else
+sts:AssumeRole                       # the control plane's or the proxy's role
+ec2:RunInstances                     # machines of its own
+ec2:TerminateInstances               # another host, or the control plane
+ec2:CreateTags                       # a tag another policy decides by
+autoscaling:UpdateAutoScalingGroup   # the fleet's size
+autoscaling:CompleteLifecycleAction  # a machine put in service without its boot saying it is up
+kms:Decrypt                          # the installation's key: volumes and identities open with credentials the control plane mints
+kms:GenerateDataKey                  # as above
+kms:CreateGrant                      # as above, for later
+s3:PutObject                         # what another machine starts on, or a volume's layers
+s3:DeleteObject                      # a volume, an archive
+s3:ListBucket                        # what the buckets hold
+ssm:GetParameter                     # the first sign-in's password, the installation's parameters
+secretsmanager:GetSecretValue        # anything kept there
+logs:GetLogEvents                    # what another machine's boot said
+logs:DeleteLogStream                 # what this one's said

@@ -70,8 +70,11 @@ run "a_runner_is_reached_by_nothing" {
     error_message = "the collector's port is not opened to the runners alone"
   }
   assert {
-    condition     = aws_launch_template.runner.metadata_options[0].http_tokens == "required" && aws_launch_template.runner.metadata_options[0].http_put_response_hop_limit == 1
-    error_message = "a runner answers IMDSv1, or its guests' side of the host can reach the role"
+    condition = (
+      aws_launch_template.runner.metadata_options[0].http_tokens == "required" && aws_launch_template.runner.metadata_options[0].http_put_response_hop_limit == 1 &&
+      aws_launch_template.runner.metadata_options[0].http_protocol_ipv6 == "disabled" && aws_launch_template.runner.metadata_options[0].instance_metadata_tags == "disabled"
+    )
+    error_message = "a runner answers IMDSv1 or over IPv6, says its tags there, or its guests' side of the host can reach the role"
   }
   assert {
     condition     = aws_launch_template.runner.cpu_options[0].nested_virtualization == "enabled"

@@ -250,6 +250,10 @@ resource "aws_launch_template" "proxy" {
     http_tokens = "required"
     # One hop: nothing but the machine itself asks for the instance's role.
     http_put_response_hop_limit = 1
+    # Said rather than left to AWS's default: a second address of the metadata service is a second
+    # one every rule that keeps it away has to name.
+    http_protocol_ipv6     = "disabled"
+    instance_metadata_tags = "disabled"
   }
 
   block_device_mappings {
