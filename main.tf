@@ -64,7 +64,7 @@ module "runners" {
     runner_document_arn = module.controlplane.runner_document_arn
     runner_user_data    = module.controlplane.runner_user_data
     images              = module.controlplane.images
-    boot_log_policy_arn = module.controlplane.boot_log_policy_arn
+    boot_log_policy_arn = module.controlplane.runner_boot_log_policy_arn
     standard_vcpus      = module.controlplane.standard_vcpus
     boundary_arn        = module.controlplane.boundary_arn
   }

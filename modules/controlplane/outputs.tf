@@ -58,9 +58,9 @@ output "boot_log_group" {
   value       = aws_cloudwatch_log_group.boot.name
 }
 
-output "boot_log_policy_arn" {
-  description = "Writing a machine's boot to that group, and nothing else: the runners module attaches it to the runners' role."
-  value       = aws_iam_policy.boot_log.arn
+output "runner_boot_log_policy_arn" {
+  description = "Writing a runner's boot to that group, under runner/ and nothing else: the runners module attaches it to the runners' role."
+  value       = aws_iam_policy.boot_log["runner"].arn
 }
 
 output "standard_vcpus" {
