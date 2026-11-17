@@ -28,11 +28,11 @@ data "aws_iam_policy_document" "boot_log" {
 }
 
 resource "aws_iam_policy" "boot_log" {
-  for_each = data.aws_iam_policy_document.boot_log
+  for_each = toset(keys(data.aws_iam_policy_document.boot_log))
 
   name        = "${local.iam_name}-${each.key}-boot-log"
   description = "Write a ${each.key} machine's boot to ${aws_cloudwatch_log_group.boot.name}, under ${each.key}/, and nothing else"
-  policy      = each.value.json
+  policy      = data.aws_iam_policy_document.boot_log[each.key].json
   tags        = local.tags
 }
 
