@@ -24,14 +24,29 @@ if [ -n "${FRESH_INSTALL_BEFORE:-}" ]; then
   esac
 fi
 
-# Every release this commit can install in the region, oldest first: an image of every role and
-# its measurements.
+# Every release the image catalog can install in the region, oldest first: every role's newest build
+# registered here. The catalog is its branch, as the module's provider reads it; whether a release
+# is what its workflow signed is the provider's to say when it is installed, not this choice's.
 installable() {
+  local f
+  # The release, when each role's newest build - the highest r<N> - has an image in the region.
+  # shellcheck disable=SC2016 # jq's variables, not the shell's
+  local newest_here='select([("control-plane", "runner", "proxy") as $n
+    | try (.roles[$n].builds | to_entries | max_by(.key | ltrimstr("r") | tonumber) | .value.images[$r]) catch null]
+    | all(. != null)) | .release'
+  git fetch -q origin catalog
+  for f in $(git ls-tree --name-only FETCH_HEAD releases/); do
+    git show "FETCH_HEAD:${f}" | jq -r --arg r "${AWS_REGION}" "${newest_here}"
+  done | sort
+}
+
+# What a module from before the catalog could install: its images.json and measurements.json.
+installable_before_catalog() {
   jq -r --arg r "${AWS_REGION}" --slurpfile m measurements.json '[to_entries[] | .key as $v | .value as $img
     | select(all("control-plane", "runner", "proxy"; $img[.][$r] and ($m[0][$v][.] // {} | length > 0))) | $v] | sort | .[]' images.json
 }
 
-# The newest release this commit can install in the region. None is a failure: main installs
+# The newest release the catalog can install in the region. None is a failure: main installs
 # nothing. spin-stack/ami's release publishes in the regions its release.yml names, which must
 # include this one.
 release() {
@@ -39,36 +54,36 @@ release() {
   local release
   release=$(installable | tail -n 1)
   if [ -z "${release}" ]; then
-    echo "::error::images.json and measurements.json have no release with every role's image and measurements in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"
+    echo "::error::the image catalog has no release with every role's image in ${AWS_REGION}: a release must be published in ${AWS_REGION} by spin-stack/ami (release.yml)"
     exit 1
   fi
   echo "TF_VAR_spin_version=${release}" >> "${GITHUB_ENV:-/dev/stdout}"
 }
 
-# The upgrade's starting point, after release: the release before the newest, and a checkout of the
-# module as it was the day that release was published - the first commit whose images.json has it
-# here. Not the commit before the newest arrived: main may by then need a release newer than the
-# one it starts from (c085ee7 took from the hosts what v20261106.01 still read).
+# The upgrade's starting point, after release: what an installation that follows this module's
+# releases runs now - its newest tag - and the newest release that module installs here, before
+# the newest. Not the commit before main's: main may by then need a release newer than the one it
+# starts from (c085ee7 took from the hosts what v20261106.01 still read). A tag from before the
+# catalog reads its own images.json, and installs only what that names.
 previous() {
   set -euo pipefail
-  local to=${TF_VAR_spin_version} from commit found=""
-  from=$(installable | grep -Fx -B 1 "${to}" | grep -Fvx "${to}" || true)
+  local to=${TF_VAR_spin_version} from tag
+  tag=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
+  if [ -z "${tag}" ]; then
+    echo "::error::this module has no release to upgrade from: the checkout has no tags (fetch-depth: 0)"
+    exit 1
+  fi
+  git worktree add --detach "${RUNNER_TEMP}/before" "${tag}"
+  if [ -f "${RUNNER_TEMP}/before/images.json" ]; then
+    from=$(cd "${RUNNER_TEMP}/before" && installable_before_catalog | grep -Fxv "${to}" | tail -n 1)
+  else
+    from=$(installable | grep -Fx -B 1 "${to}" | grep -Fvx "${to}" || true)
+  fi
   if [ -z "${from}" ]; then
-    echo "::error::images.json has no release before ${to} that installs in ${AWS_REGION}: there is nothing to upgrade from"
+    echo "::error::the module at ${tag} has no release before ${to} that installs in ${AWS_REGION}: there is nothing to upgrade from"
     exit 1
   fi
-  for commit in $(git log --reverse --format=%H -- images.json); do
-    if git show "${commit}:images.json" | jq -e --arg v "${from}" --arg r "${AWS_REGION}" '.[$v]["control-plane"][$r]' > /dev/null; then
-      found=${commit}
-      break
-    fi
-  done
-  if [ -z "${found}" ]; then
-    echo "::error::no commit's images.json has ${from} in ${AWS_REGION}: the checkout has no history (fetch-depth: 0)"
-    exit 1
-  fi
-  git worktree add --detach "${RUNNER_TEMP}/before" "${found}"
-  echo "upgrading from ${from} (module at ${found}) to ${to}"
+  echo "upgrading from ${from} (module at ${tag}) to ${to}"
   {
     echo "TF_VAR_spin_version=${from}"
     echo "UPGRADE_TO=${to}"
@@ -98,7 +113,7 @@ cli() {
   mkdir -p "${RUNNER_TEMP}/bin"
   install -m 755 "${dir}/spin-linux-amd64" "${RUNNER_TEMP}/bin/spin"
   echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH:-/dev/stdout}"
-  # Only while the newest release images.json names predates `spin smoke` (v20261015.01 did,
+  # Only while the newest release installed predates `spin smoke` (v20261015.01 did,
   # when this was written): an older CLI's `smoke --help` is its root's help, exit 0. Once one
   # that has it is merged, a CLI without it is a failure and this goes.
   usage=$("${RUNNER_TEMP}/bin/spin" smoke --help)

@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The upgrade looks back through images.json for the commit that first had its release.
+          # The upgrade starts from the module's newest tag, and reads the catalog's branch.
           fetch-depth: 0
 
       - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0

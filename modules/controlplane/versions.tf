@@ -16,5 +16,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.1"
     }
+    # The image catalog: spin_version to the images and builds its release signed.
+    spin = {
+      source  = "spin-stack/spin"
+      version = "~> 0.1"
+    }
   }
 }

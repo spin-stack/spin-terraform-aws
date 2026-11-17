@@ -14,16 +14,21 @@ module "spin" {
 
 `<release>` is one of this module's releases, `v<YYYYMMDD>.<NN>` tags: the newest is the first
 on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases)
-(`gh release list -R spin-stack/spin-terraform-aws`). `spin_version` is a spin release.
+(`gh release list -R spin-stack/spin-terraform-aws`). `spin_version` is a spin release,
+`v<YYYYMMDD>.<N>`, or a channel: `edge`, every release once its images are published and checked on
+EC2, or `stable`, a release a person promoted.
 
 Every machine boots **Spin OS** of that release, one image per role - the control plane's, the
 runners' and the proxy's, each laid with that role's part of the release and signed by that role's
 Secure Boot key: the images [spin-stack/ami](https://github.com/spin-stack/ami) builds and
-publishes. Where each is, role by role and region by region, is [`images.json`](images.json) - `{
-"<release>": { "<role>": { "<region>": "<ami-id>" } } }` - which the ami repository's publish
-updates here by a pull request. A module ref is then a set of releases with their images: a
-release with none in the installation's region is refused at plan, naming the regions it has one
-in, and `image_ids` names images of your own build instead, one per role.
+publishes. Where each is, role by role and region by region, is the image catalog on this
+repository's [`catalog` branch](https://github.com/spin-stack/spin-terraform-aws/tree/catalog),
+which the ami repository's release, revoke and promote workflows write. The module reads it through
+the `spin` provider ([spin-stack/terraform-provider-spin](https://github.com/spin-stack/terraform-provider-spin)),
+which believes a release's images and the PCRs its machines prove only as the release's workflow
+signed them, whoever wrote the branch: a release, or a channel, with none in the installation's
+region, or none it signed, is refused at plan. `image_ids` names images of your own build instead,
+one per role.
 
 The root composes two modules, and each can be used on its own
 (`github.com/spin-stack/spin-terraform-aws//modules/controlplane?ref=<release>`) where the root does
@@ -105,9 +110,9 @@ ten minutes the first time) and where to look if it is not, and the first sign-i
 
 <!-- BEGIN website:aws/update - spin-stack/website's refgen includes what is between these
 markers, verbatim, as its page on updating: this section is that page's one source. -->
-Move the module's ref to a release of spin-terraform-aws - or a commit - whose `images.json` has
-the new spin release in the installation's region, change `spin_version` in `terraform.tfvars` to
-it, then:
+An installation on a channel (`spin_version = "edge"` or `"stable"`) is updated by its next plan:
+the channel names the newer release, and the plan shows its images and the key policies its builds
+change. One on a release changes `spin_version` in `terraform.tfvars` to the new one. Either way:
 
 ```bash
 tofu plan     # the image, the launch templates and the documents change, and nothing else
@@ -116,18 +121,19 @@ tofu apply
 
 spin-terraform-aws has releases of its own, `v<YYYYMMDD>.<NN>` tags a person cuts from main
 (`gh workflow run release.yml --ref main`, which names the next one today):
-an installation that pins one (`?ref=v<YYYYMMDD>.<NN>`) gets an update when somebody decides this
-module - its shapes and the images its `images.json` has - is ready for it, not when main moves.
+an installation that pins one (`?ref=v<YYYYMMDD>.<NN>`) gets the module's changes when somebody
+decides it is ready for them, not when main moves; the spin release it runs is `spin_version`'s, and
+moves without the module's ref.
 The newest is the first on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases).
 main is what spin-stack's own installation, spinbox.dev, runs first.
 
 For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
 of it is a workflow run, with its log: spin-stack/shipset, which coordinates them, dispatches
-spin-stack/ami's release workflow for each spin release, which builds and publishes its image and
-opens the pull request that adds it to spin-terraform-aws's `images.json`; shipset merges that
-once its checks pass, and dispatches spin-terraform-aws's `.github/workflows/propose.yml` for each
-deployment its `shipset.yaml` names - on main for one that follows main, on the newest release's
-tag for one that follows the releases - which opens, or rewrites, the pull request there that moves both. A person merges that, and
+spin-stack/ami's release workflow for each spin release, which builds and publishes its image,
+checks it on EC2, puts it in the catalog and moves `edge` to it; and it dispatches
+spin-terraform-aws's `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names -
+on main for one that follows main, on the newest release's tag for one that follows the releases -
+which opens, or rewrites, the pull request there that moves the module's ref. A person merges that, and
 applies.
 
 The control plane and the proxy are each replaced beside themselves. The old proxy serves until the
@@ -334,9 +340,9 @@ and says what that account needs.
   Caddy, and once Caddy answers points `proxy.` at itself and takes the elastic IP; its watch
   saves what Caddy issues every five minutes, following no link out of Caddy's directory. What
   is lost is seconds of API and open connections, never a workspace. Each image is its role's
-  Spin OS of the release, the id `images.json` names, so it moves only with `spin_version`, the
-  module's ref, or `image_ids`: an image published again for a release reaches an installation by
-  a reviewed change to that file and by nothing else. A change to a
+  Spin OS of the release, the id the catalog names and the publishing account owns, so it moves
+  with `spin_version` - the release it names, or the one its channel names - or `image_ids`: an
+  image published again for a release reaches an installation at its next plan, which shows it. A change to a
   document alone reaches a machine when it next starts: `aws autoscaling
   start-instance-refresh` on its group.
 - **The proxy has subnets of its own**, and the control plane takes a browser's address only

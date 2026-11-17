@@ -6,23 +6,29 @@
 # Spin OS of this installation's release (spin-stack/ami), one image per role: the image is the
 # release and the role - a machine of it runs that release's part for that role and no other, from
 # a root it cannot write, under a Secure Boot key of that role's - so the release names the images.
-# Where each is, role by role and region by region, is images.json at this repository's root, which
-# spin-stack/ami's publish updates by a pull request: ids this module's commit names, so an image
-# published again for a release reaches an installation by the module's ref moving, never by
-# whatever apply happens to follow it. image_ids names them outright - builds of your own.
+# Where each is, role by role and region by region, is the image catalog, read through the spin
+# provider: spin_version names a release or a channel, and the provider answers the release and
+# its images only as the release's workflow signed them (spin-terraform-aws#130). image_ids names
+# them outright - builds of your own - and then nothing is read from the catalog.
+data "spin_release" "this" {
+  count   = length(var.image_ids) > 0 ? 0 : 1
+  version = var.spin_version
+}
+
 locals {
   roles           = ["control-plane", "runner", "proxy"]
-  images          = jsondecode(file("${path.module}/../../images.json"))
-  released_images = { for role in local.roles : role => try(local.images[var.spin_version][role][local.region], "") }
+  release         = length(var.image_ids) > 0 ? var.spin_version : data.spin_release.this[0].release
+  released_images = length(var.image_ids) > 0 ? {} : { for role in local.roles : role => try(data.spin_release.this[0].images[role][local.region], "") }
   images_wanted   = length(var.image_ids) > 0 ? var.image_ids : local.released_images
 }
 
-# No owners: the image is named by its id, which a reviewed images.json or the operator gives -
-# there is no search whose result an owner would narrow.
-#trivy:ignore:AWS-0344
+# The catalog's image ids are not what its release signs - its PCRs are - so a released image is
+# one the publishing account owns: an id the catalog names that is anybody else's is no image of
+# the release. One of your own (image_ids) is the operator's to name, and has no owner asked of it.
 data "aws_ami" "spin_os" {
   for_each           = toset(local.roles)
   include_deprecated = true
+  owners             = length(var.image_ids) > 0 ? null : [var.image_publisher]
   filter {
     name   = "image-id"
     values = [local.images_wanted[each.key]]
@@ -38,19 +44,19 @@ data "aws_ami" "spin_os" {
   lifecycle {
     precondition {
       condition     = local.images_wanted[each.key] != ""
-      error_message = "${var.spin_version} has no Spin OS image for the ${each.key} in ${local.region}: images.json has it in [${join(", ", keys(try(local.images[var.spin_version][each.key], {})))}]. Publish it there (spin-stack/ami) and move this module's ref, or name the images with image_ids."
+      error_message = "${local.release} has no Spin OS image for the ${each.key} in ${local.region}: the catalog has it in [${join(", ", keys(try(data.spin_release.this[0].images[each.key], {})))}]. Publish it there (spin-stack/ami), or name the images with image_ids."
     }
     # A runner's or a proxy's image no machine of could prove it booted is one no host of joins and
     # no proxy of is given its token (host_attestation in config.tf).
     precondition {
       condition     = !contains(["runner", "proxy"], each.key) || length(local.pcrs_of[each.key]) > 0
-      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's, the proxy is given its token only as the proxy's." : "${var.spin_version} has no measurements of its ${each.key}'s image in measurements.json: no machine of it could prove what it booted. Publish it (spin-stack/ami) and move this module's ref, or give its manifests' PCRs as image_measurements."
+      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and a host joins only as the runner's, the proxy is given its token only as the proxy's." : "${local.release} has no build of its ${each.key}'s image the catalog trusts: no machine of it could prove what it booted. Publish one (spin-stack/ami), or give its manifests' PCRs as image_measurements."
     }
     # A writer's image - the runner's, the control plane's - whose release signed nothing of it is
     # one whose machines' writes no verifier believes (spin F6b).
     precondition {
       condition     = !contains(["runner", "control-plane"], each.key) || alltrue([for b in local.signed_of[each.key] : b.statement != null && b.bundle != null])
-      error_message = "the ${each.key}'s image has no statement of its PCRs its release signed, with its bundle: measurements.json's of a release published before spin-os images sign was, or image_measurements without statement and bundle (spin-os images sign writes both)."
+      error_message = "the ${each.key}'s image has no statement of its PCRs its release signed, with its bundle: image_measurements without statement and bundle (spin-os images sign writes both)."
     }
   }
 }

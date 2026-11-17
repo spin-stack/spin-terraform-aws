@@ -1,10 +1,10 @@
 # Copy this to terraform.tfvars and fill it in. Keeping the values here rather than on the command
-# line is what makes an update one edit: move the module's ref to one whose images.json has the new
-# release, change spin_version to it, run `tofu apply`, and nothing else changes by accident.
+# line is what makes an update one edit, and nothing else changes by accident.
 
-# The release: https://github.com/spin-stack/spin/releases, one images.json has an image of in the
-# region.
-spin_version = "v20260928.02"
+# The release: a channel - stable, a release a person promoted, or edge, every release once its
+# images are checked - which the next plan follows, or a release of
+# https://github.com/spin-stack/spin/releases, v<YYYYMMDD>.<N>, which only an edit here moves.
+spin_version = "stable"
 
 # The domain the installation answers on: the dashboard is app.<domain>. Its zone is made here;
 # point the domain's registrar at the name servers `tofu output name_servers` prints.

@@ -82,7 +82,7 @@ locals {
     bootstrap_admin = { email = local.admin_email, password_at = local.ssm.admin_password }
     # The builds of the runner's image a host may join as, and of the proxy's the proxy is given
     # its token as - with the proxy's role - by what each NitroTPM measures: this release's not
-    # revoked, as measurements.json has them (attested_key.tf). A machine of any other is given
+    # revoked, as the catalog has them (attested_key.tf). A machine of any other is given
     # nothing. The runner's and the control plane's carry what their release signed of them, which
     # each records its key as a writer of volumes with.
     host_attestation = {
@@ -93,7 +93,7 @@ locals {
 
     # What the machine's first boot does, and what the control plane never reads.
     install = {
-      release = var.spin_version
+      release = local.release
       log     = local.boot_log
       store = {
         bucket    = aws_s3_bucket.volumes.bucket
@@ -128,7 +128,7 @@ locals {
     # set the issuer serves and the one the control plane verifies against are one.
     identity_keys = local.listed_identity_keys
     install = {
-      release = var.spin_version
+      release = local.release
       log     = local.boot_log
       launch = {
         aws = {

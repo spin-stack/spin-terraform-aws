@@ -1,7 +1,7 @@
 # The module as it is at the ref this runs on - main, or a release's tag - proposed to one
 # installation made from it: a pull request in its deployment repository that moves the module's
-# ref to it (the commit, or the tag) and spin_version to the newest release images.json has an
-# image of there in the installation's region - one pull request per deployment, on a branch each
+# ref to it (the commit, or the tag) - the release it runs is its own spin_version's, a release or
+# a channel - one pull request per deployment, on a branch each
 # run rewrites, so what waits there is always the newest. A person reads its plan, merges it and
 # applies; nothing here reaches an installation.
 #
@@ -23,7 +23,7 @@ on:
         description: 'The deployment repository in spin-stack, e.g. spinbox.dev-deploy.'
         required: true
       region:
-        description: 'Its installation region, e.g. us-west-2.'
+        description: 'Its installation region, e.g. us-west-2, as shipset names it: the module''s ref is all this moves.'
         required: true
 
 concurrency:
@@ -63,5 +63,4 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           REPOSITORY: spin-stack/${{ inputs.repository }}
-          REGION: ${{ inputs.region }}
         run: task propose

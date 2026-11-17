@@ -218,7 +218,7 @@ data "aws_iam_policy_document" "publish" {
 }
 
 data "aws_iam_policy_document" "launch_check" {
-  # A release boots each role's image once on EC2 before its images.json pull request is opened
+  # A release boots each role's image once on EC2 before it is put in the image catalog
   # (spin-stack/ami#148): UEFI, NitroTPM and IMDSv2 are only what EC2 says they are. An instance of
   # this account's own images, with no instance profile, tagged spin-os:check as it starts - and
   # read and ended by that tag, so nothing this role did not start is looked at or terminated.
