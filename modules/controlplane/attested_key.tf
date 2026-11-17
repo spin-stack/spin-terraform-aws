@@ -9,22 +9,19 @@
 # destroyed by a plan.
 
 locals {
-  # Each release's builds, role by role and revision by revision, as spin-stack/ami's publish
-  # proposes them beside its images (images.json): { release: { role: { "r<N>": build } } }.
-  measurements = jsondecode(file("${path.module}/../../measurements.json"))
   # Each role's builds of this release, oldest first: a release is built again when what is under
-  # spin moves - a kernel, a package - and each build is a revision, r1, r2 and on. Images of your
-  # own name their own (image_measurements), as may a release published before its PCRs were. Each
-  # role's image measures its own PCRs - it is signed by its own key - so the control plane's key is
-  # answered to the control plane's builds alone, a host joins only as the runner's, and the proxy
-  # is given its token only as the proxy's.
+  # spin moves - a kernel, a package - and each build is a revision, r1, r2 and on. The catalog's
+  # are those its release signed and has not revoked (data.spin_release, instance.tf); images of
+  # your own name their own (image_measurements). Each role's image measures its own PCRs - it is
+  # signed by its own key - so the control plane's key is answered to the control plane's builds
+  # alone, a host joins only as the runner's, and the proxy is given its token only as the proxy's.
   builds_of = { for role in local.roles : role => (
-    var.image_measurements != null ? var.image_measurements[role] :
-    length(var.image_ids) > 0 ? [] : [
-      # Zero-padded, so r10 sorts after r9.
-      for n in sort([for r in keys(try(local.measurements[var.spin_version][role], {})) : format("%06d", tonumber(trimprefix(r, "r")))]) :
-      local.measurements[var.spin_version][role]["r${tonumber(n)}"]
-    ]
+    var.image_measurements != null ? [for b in var.image_measurements[role] : {
+      pcr4 = b.pcr4, pcr7 = b.pcr7, pcr12 = b.pcr12, statement = b.statement, bundle = b.bundle, revoked = b.revoked
+    }] :
+    length(var.image_ids) > 0 ? [] : [for b in data.spin_release.this[0].builds[role] : {
+      pcr4 = b.pcr4, pcr7 = b.pcr7, pcr12 = b.pcr12, statement = b.statement, bundle = b.bundle, revoked = null
+    }]
   ) }
   # The builds a machine of each role may prove it booted: every one not revoked, so a machine of an
   # earlier build still running when a later one is published goes on until it is replaced.
@@ -38,12 +35,13 @@ locals {
   signed_of = { for role in ["control-plane", "runner"] : role => [
     for b in local.trusted_of[role] : { for k in ["pcr4", "pcr7", "pcr12", "statement", "bundle"] : k => try(b[k], null) }
   ] }
-  # The newest build of each role is the image this installation boots - images.json's, as the last
-  # publish proposed it, or image_ids' - and one spin-stack/ami marked revoked in measurements.json,
-  # with why (task images:revoke), is a release not installed: an installation on it is told on its
-  # next plan. An entry with no revocation has it null - an optional attribute - or not at all.
-  revoked = { for role, builds in local.builds_of : role => builds[length(builds) - 1].revoked
-  if length(builds) > 0 && try(builds[length(builds) - 1].revoked != null && builds[length(builds) - 1].revoked != "", false) }
+  # The newest build of each role is the image this installation boots, and one revoked - the
+  # catalog's revocation, signed (spin-stack/ami's revoke.yml), or image_measurements' own - is a
+  # release not installed: an installation on it is told on its next plan.
+  revoked = var.image_measurements != null ? {
+    for role, builds in local.builds_of : role => builds[length(builds) - 1].revoked
+    if length(builds) > 0 && try(builds[length(builds) - 1].revoked != null && builds[length(builds) - 1].revoked != "", false)
+  } : length(var.image_ids) > 0 ? {} : data.spin_release.this[0].revoked
 }
 
 # No rotation of this KMS key: KMS rotates no asymmetric key, and a new key-agreement key would be a
@@ -62,11 +60,11 @@ resource "aws_kms_key" "encryption" {
     prevent_destroy = true
     precondition {
       condition     = length(local.revoked) == 0
-      error_message = "${var.spin_version} is revoked, and is not installed: ${join("; ", [for role, why in local.revoked : "the newest build of its ${role} image: ${why}"])}. Move this module's spin_version to a release that is not, or publish a build of it that replaces the revoked one."
+      error_message = "${local.release} is revoked, and is not installed: ${join("; ", [for role, why in local.revoked : "the newest build of its ${role} image: ${why}"])}. Move this module's spin_version to a release that is not, or publish a build of it that replaces the revoked one."
     }
     precondition {
       condition     = length(local.pcrs_of["control-plane"]) > 0
-      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and the control plane's are what its key is answered to." : "${var.spin_version} has no measurements of its control plane's image in measurements.json: a machine of it could not attest, and the control plane would have no key. Publish it (spin-stack/ami) and move this module's ref, or give its manifest's PCRs as image_measurements."
+      error_message = length(var.image_ids) > 0 ? "image_ids names images of your own: image_measurements are their PCRs, and the control plane's are what its key is answered to." : "${local.release} has no build of its control plane's image the catalog trusts: a machine of it could not attest, and the control plane would have no key. Publish one (spin-stack/ami), or give its manifest's PCRs as image_measurements."
     }
   }
 }

@@ -1,5 +1,5 @@
 variable "spin_version" {
-  description = "The release the installation runs, as v<YYYYMMDD>.<N>: every machine boots the Spin OS image of it (spin-stack/ami), published into this account and tagged spin:version."
+  description = "The release the installation runs: a release, v<YYYYMMDD>.<N>, or a channel - edge, every release once its images are published and checked on EC2, or stable, one a person promoted. Every machine boots the Spin OS image of the release, as the image catalog has it and its release signed it (the spin provider). A channel is read at every plan, so the release it names moves an installation when its next plan is applied."
   type        = string
 }
 
@@ -68,13 +68,13 @@ variable "controlplane_volume_gb" {
 }
 
 variable "image_ids" {
-  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin_version in this region."
+  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those the catalog names for spin_version in this region."
   type        = map(string)
   default     = null
 }
 
 variable "image_measurements" {
-  description = "The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements), instead of measurements.json's: the control plane's key is answered to the control plane's builds, a host joins only as the runner's, and the proxy is given its token only as the proxy's. The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them. The last of a role's is the image image_ids names. Required with image_ids, and for a release published before its PCRs were."
+  description = "The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements), instead of the catalog's: the control plane's key is answered to the control plane's builds, a host joins only as the runner's, and the proxy is given its token only as the proxy's. The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them. The last of a role's is the image image_ids names. Required with image_ids."
   type = map(list(object({
     pcr4      = string
     pcr7      = string

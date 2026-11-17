@@ -30,7 +30,6 @@ version=$(printf 'v%s.%02d' "${day}" "$((10#${last:-0} + 1))")
 previous=$(git ls-remote --tags --refs origin 'refs/tags/v*' | sed -E 's|.*refs/tags/||' |
   { grep -E '^v[0-9]{8}\.[0-9]+$' || true; } | awk -F. '{ printf "%s %08d %s\n", $1, $2, $0 }' | sort | tail -1 | cut -d' ' -f3)
 
-spin=$(jq -r 'keys | sort | last' images.json)
 notes=$(mktemp)
 trap 'rm -f "${notes}"' EXIT
 {
@@ -39,11 +38,11 @@ trap 'rm -f "${notes}"' EXIT
   echo '```hcl'
   echo 'module "spin" {'
   echo "  source       = \"github.com/spin-stack/spin-terraform-aws?ref=${version}\""
-  echo "  spin_version = \"${spin}\""
+  echo "  spin_version = \"stable\" # or \"edge\", or a release: v<YYYYMMDD>.<N>"
   echo '}'
   echo '```'
   echo
-  echo "Its \`images.json\` has spin releases up to ${spin}; an installation's \`spin_version\` is one with an image in its region. How an installation takes it is the README's \"Updating\"."
+  echo "\`spin_version\` names a spin release or a channel, which the module resolves through the image catalog (the \`spin\` provider), whatever release of the module this is. How an installation takes it is the README's \"Updating\"."
   if [ -n "${previous}" ]; then
     echo
     echo "What changed since ${previous}: ${GITHUB_SERVER_URL}/${repo}/compare/${previous}...${version}"

@@ -157,8 +157,8 @@ override_resource {
 variables {
   spin_version = "v20260921.02"
   domain       = "example.com"
-  # A release images.json does not have, in a region it has none in: the images are named, and the
-  # control plane's PCRs with them. The runs of the machines' images ask images.json.
+  # Images of your own, with the control plane's PCRs: nothing is read from the catalog. The runs of
+  # the machines' images ask the catalog, through override_data.
   image_ids = {
     "control-plane" = "ami-0123456789abcdef0"
     runner          = "ami-0aaaaaaaaaaaaaaaa"
@@ -1407,26 +1407,47 @@ run "a_runners_role_grants_what_its_session_asks" {
 # Every machine boots its role's image of the release: Spin OS, into which spin-boot laid that
 # role's part of what the release's workflow signed, checked against its signature, whose root the
 # kernel checks every block of, and which its role's Secure Boot key signed. Which image that is,
-# role by role and region by region, is images.json: ids this commit names, so an image published
-# again reaches an installation by its module's ref moving and by nothing else.
+# role by role and region by region, is what the catalog says and the release signed (the spin
+# provider), owned by the account that publishes them: an id anybody else owns is no image of it.
 run "the_machines_boot_their_roles_image_of_the_release" {
   command = plan
   variables {
-    spin_version = "v20260928.02"
-    image_ids    = {}
+    spin_version       = "edge"
+    image_ids          = {}
+    image_measurements = null
   }
   override_data {
     target = data.aws_region.current
     values = { region = "us-west-2", name = "us-west-2" }
   }
+  override_data {
+    target = data.spin_release.this
+    values = {
+      release = "v20261117.01"
+      images = {
+        "control-plane" = { "us-west-2" = "ami-0c0c0c0c0c0c0c0c0" }
+        runner          = { "us-west-2" = "ami-0d0d0d0d0d0d0d0d0" }
+        proxy           = { "us-west-2" = "ami-0e0e0e0e0e0e0e0e0" }
+      }
+      revisions = { "control-plane" = "r1", runner = "r1", proxy = "r1" }
+      builds = {
+        "control-plane" = [{ revision = "r1", pcr4 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr7 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr12 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        runner          = [{ revision = "r1", pcr4 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr7 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr12 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        proxy           = [{ revision = "r1", pcr4 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr7 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr12 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+      }
+      revoked = {}
+    }
+  }
 
   assert {
-    # Whatever ids images.json holds for it - a pull request that publishes the release again
-    # changes those, and nothing here should have to follow.
-    condition = alltrue([for role in ["control-plane", "runner", "proxy"] :
-      anytrue([for f in data.aws_ami.spin_os[role].filter : f.name == "image-id" && f.values == toset([jsondecode(file("${path.module}/../../images.json"))["v20260928.02"][role]["us-west-2"]])])
+    condition = alltrue([for role, ami in { "control-plane" = "ami-0c0c0c0c0c0c0c0c0", runner = "ami-0d0d0d0d0d0d0d0d0", proxy = "ami-0e0e0e0e0e0e0e0e0" } :
+      anytrue([for f in data.aws_ami.spin_os[role].filter : f.name == "image-id" && f.values == toset([ami])])
     ])
-    error_message = "an image is not the one images.json names for its role of the release in its region"
+    error_message = "an image is not the one the catalog names for its role of the release in its region"
+  }
+  assert {
+    condition     = alltrue([for role in ["control-plane", "runner", "proxy"] : data.aws_ami.spin_os[role].owners == tolist(["277203350136"])])
+    error_message = "an image the catalog names is not asked of the account that publishes Spin OS"
   }
   assert {
     condition     = aws_launch_template.controlplane.image_id == local.image["control-plane"] && aws_launch_template.proxy.image_id == local.image["proxy"]
@@ -1436,17 +1457,56 @@ run "the_machines_boot_their_roles_image_of_the_release" {
     condition     = output.images["runner"].id == local.image["runner"] && output.images["runner"].root_device == "/dev/xvda"
     error_message = "the runners are not handed the runner's image of the release and its root device"
   }
+  # A channel installs the release it names, and every machine is told that release.
+  assert {
+    condition = alltrue([for role in ["control-plane", "proxy"] :
+    yamldecode(aws_s3_object.document[role].content).install.release == "v20261117.01"])
+    error_message = "a machine is not told the release the channel names"
+  }
+  assert {
+    condition     = yamldecode(aws_s3_object.document["control-plane"].content).host_attestation.runner == [{ pcr4 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr7 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr12 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+    error_message = "a host does not join as the runner's build the catalog trusts"
+  }
 }
 
 # A release with no image in the region is refused at plan, naming where it has one.
 run "a_release_with_no_image_here_is_refused" {
   command = plan
   variables {
-    # images.json has it in us-west-2; the tests' region is us-east-2.
-    spin_version = "v20260928.02"
-    image_ids    = {}
+    # The catalog has it in us-west-2; the tests' region is us-east-2.
+    spin_version       = "v20261117.01"
+    image_ids          = {}
+    image_measurements = null
+  }
+  override_data {
+    target = data.spin_release.this
+    values = {
+      release = "v20261117.01"
+      images = {
+        "control-plane" = { "us-west-2" = "ami-0c0c0c0c0c0c0c0c0" }
+        runner          = { "us-west-2" = "ami-0d0d0d0d0d0d0d0d0" }
+        proxy           = { "us-west-2" = "ami-0e0e0e0e0e0e0e0e0" }
+      }
+      revisions = { "control-plane" = "r1", runner = "r1", proxy = "r1" }
+      builds = {
+        "control-plane" = [{ revision = "r1", pcr4 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr7 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr12 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        runner          = [{ revision = "r1", pcr4 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr7 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr12 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        proxy           = [{ revision = "r1", pcr4 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr7 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr12 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+      }
+      revoked = {}
+    }
   }
   expect_failures = [data.aws_ami.spin_os]
+}
+
+# Images of your own name their release outright: a channel moves, and a document naming one would
+# name no release a machine could check itself against.
+run "images_of_your_own_name_a_release" {
+  command = plan
+  variables {
+    spin_version = "edge"
+  }
+  expect_failures = [var.spin_version]
 }
 
 # Images of your own are three, one per role, or none: one image for every machine would boot a
@@ -1675,12 +1735,12 @@ run "a_release_with_no_runner_measurements_is_refused" {
   expect_failures = [data.aws_ami.spin_os, aws_kms_key.encryption]
 }
 
-# A release published before its PCRs were, with none given, is refused at plan: a machine of it
-# could not attest, and its control plane would come up with no key.
-run "a_release_with_no_measurements_is_refused" {
+# A release with no build the catalog trusts is refused at plan: a machine of it could not attest,
+# and its control plane would come up with no key.
+run "a_release_with_no_trusted_build_is_refused" {
   command = plan
   variables {
-    spin_version       = "v20260928.02"
+    spin_version       = "v20261117.01"
     image_ids          = {}
     image_measurements = null
   }
@@ -1688,40 +1748,59 @@ run "a_release_with_no_measurements_is_refused" {
     target = data.aws_region.current
     values = { region = "us-west-2", name = "us-west-2" }
   }
+  override_data {
+    target = data.spin_release.this
+    values = {
+      release = "v20261117.01"
+      images = {
+        "control-plane" = { "us-west-2" = "ami-0c0c0c0c0c0c0c0c0" }
+        runner          = { "us-west-2" = "ami-0d0d0d0d0d0d0d0d0" }
+        proxy           = { "us-west-2" = "ami-0e0e0e0e0e0e0e0e0" }
+      }
+      revisions = { "control-plane" = "r1", runner = "r1", proxy = "r1" }
+      builds = {
+        "control-plane" = []
+        runner          = []
+        proxy           = [{ revision = "r1", pcr4 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr7 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr12 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+      }
+      revoked = {}
+    }
+  }
   expect_failures = [aws_kms_key.encryption, data.aws_ami.spin_os]
 }
 
-# What the ami repository's pull request writes beside the images is what the key policies read: a
-# dated release, a role, and each build of it by its revision, three SHA384 digests and what its
-# release signed of them.
-run "measurements_json_is_releases_roles_and_their_builds" {
+# A release whose newest build of an image the catalog has revoked, signed, is not installed: the
+# plan stops, saying which image and why, before anything of it is made.
+run "a_release_the_catalog_revoked_is_not_installed" {
   command = plan
-
-  assert {
-    condition = alltrue([for release, roles in local.measurements :
-      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && length(roles) > 0 && alltrue([for role, builds in roles :
-        contains(local.roles, role) && length(builds) > 0 && alltrue([for revision, b in builds :
-          can(regex("^r[1-9][0-9]*$", revision)) && alltrue([for pcr in [b.pcr4, b.pcr7, b.pcr12] : can(regex("^[0-9a-f]{96}$", pcr))]) &&
-          can(base64decode(b.statement)) && can(base64decode(b.bundle))
-        ])
-      ])
-    ])
-    error_message = "measurements.json is not { release: { role: { r<N>: { pcr4, pcr7, pcr12, statement, bundle } } } }"
+  variables {
+    spin_version       = "v20261117.01"
+    image_ids          = {}
+    image_measurements = null
   }
-}
-
-# What the ami repository's pull request writes is what this module reads: a dated release, each of
-# the three roles, a region, an AMI id.
-run "images_json_is_releases_roles_regions_and_amis" {
-  command = plan
-
-  assert {
-    condition = length(local.images) > 0 && alltrue([for release, roles in local.images :
-      can(regex("^v[0-9]{8}\\.[0-9]+$", release)) && toset(keys(roles)) == toset(local.roles) &&
-      alltrue([for role, regions in roles : length(regions) > 0 && alltrue([for region, ami in regions :
-    can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", region)) && can(regex("^ami-[0-9a-f]{17}$", ami))])])])
-    error_message = "images.json is not { <release>: { <role>: { <region>: <ami-id> } } } with every role"
+  override_data {
+    target = data.aws_region.current
+    values = { region = "us-west-2", name = "us-west-2" }
   }
+  override_data {
+    target = data.spin_release.this
+    values = {
+      release = "v20261117.01"
+      images = {
+        "control-plane" = { "us-west-2" = "ami-0c0c0c0c0c0c0c0c0" }
+        runner          = { "us-west-2" = "ami-0d0d0d0d0d0d0d0d0" }
+        proxy           = { "us-west-2" = "ami-0e0e0e0e0e0e0e0e0" }
+      }
+      revisions = { "control-plane" = "r1", runner = "r1", proxy = "r1" }
+      builds = {
+        "control-plane" = [{ revision = "r1", pcr4 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr7 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pcr12 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        runner          = [{ revision = "r1", pcr4 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr7 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", pcr12 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+        proxy           = [{ revision = "r1", pcr4 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr7 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", pcr12 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", statement = "c3RhdGVtZW50", bundle = "eyJzaWduZWQiOjF9" }]
+      }
+      revoked = { runner = "CVE-2026-0001 in sshd" }
+    }
+  }
+  expect_failures = [aws_kms_key.encryption]
 }
 
 # Every ARN is of the provider's partition, so the module runs in GovCloud and China as it does
@@ -1915,8 +1994,7 @@ run "no_budget_unless_one_is_named" {
   }
 }
 
-# A release whose newest build of an image spin-stack/ami marked revoked in measurements.json is not
-# installed: the plan stops, saying which image and why, before anything of it is made - and with no
+# A release whose newest build of an image of your own is marked revoked is not installed: the plan stops, saying which image and why, before anything of it is made - and with no
 # other build of the runner's, no host of it could join either.
 run "a_revoked_release_is_not_installed" {
   command = plan

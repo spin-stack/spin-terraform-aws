@@ -12,6 +12,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | terraform | >= 1.11 |
 | aws | ~> 6.0 |
 | random | ~> 3.7 |
+| spin | ~> 0.1 |
 | tls | ~> 4.1 |
 
 ## Providers
@@ -19,6 +20,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | Name | Version |
 | ---- | ------- |
 | aws | ~> 6.0 |
+| spin | ~> 0.1 |
 | tls | ~> 4.1 |
 
 ## Resources
@@ -192,13 +194,14 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_ip_ranges.health_checks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ip_ranges) | data source |
 | [aws_partition.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/partition) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
+| [spin_release.this](https://registry.terraform.io/providers/spin-stack/spin/latest/docs/data-sources/release) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | domain | The base domain: the dashboard is app.<domain>, workspaces are *.ws.<domain>. | `string` | n/a | yes |
-| spin\_version | The release the installation runs, as v<YYYYMMDD>.<N>: every machine boots the Spin OS image of it (spin-stack/ami), published into this account and tagged spin:version. | `string` | n/a | yes |
+| spin\_version | The release the installation runs: a release, v<YYYYMMDD>.<N>, or a channel - edge, every release once its images are published and checked on EC2, or stable, one a person promoted. Every machine boots the Spin OS image of the release, as the image catalog has it and its release signed it (the spin provider). A channel is read at every plan, so the release it names moves an installation when its next plan is applied. | `string` | n/a | yes |
 | acme\_email | The address Let's Encrypt writes to; empty is admin@<domain>. | `string` | `""` | no |
 | admin\_email | Who the first administrator signs in as; empty is admin@<domain>. The one-time password is in the admin\_password\_parameter output's parameter. | `string` | `""` | no |
 | availability\_zones | How many zones to make subnets in, at most: a region with fewer gets one in each. The control plane, the proxy and the runners may each be started in any of them, which is what gives a group somewhere to go when a zone runs out - and a zone left out is spot pools a runner is never drawn from. A subnet is its zone's by index, so raising this adds subnets and moves none. | `number` | `8` | no |
@@ -211,8 +214,9 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | flow\_logs | Keep the VPC's flow log in CloudWatch: every connection a security group accepted or refused, but no DNS to the VPC's resolver, which it does not see. At a few hosts it is cents a month; a fleet whose workspaces move a lot of data pays about $0.50 a GB of flow records. | `bool` | `true` | no |
 | identity\_keys | The identity keys workspaces' tokens and certificates are signed with past the installation's first, each by the kid `controlplane identity rotate` prints, newest last: the newest not retired signs, and every one listed is published at id.<domain> and verifies what it signed until its retired time (RFC 3339), which `controlplane identity retire` prints. The first key is listed only to retire it. A key the control plane made that is not listed here is never published, accepted or signed with (spin-stack/runbooks identity-audit-failing). | ```list(object({ kid = string retired = optional(string) }))``` | `[]` | no |
 | identity\_record\_days | How many days the record of each identity a host signs is kept (identity/issued/ in the volumes bucket): longer than the bucket's lock, and long enough to answer who took an identity when. | `number` | `400` | no |
-| image\_ids | Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin\_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role. | `map(string)` | `{}` | no |
-| image\_measurements | The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements, SHA384 in lowercase hex), instead of measurements.json's: the control plane's key is answered to the control plane's builds (attested\_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host\_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. The last of a role's is the image image\_ids names. Required with image\_ids, and for a release published before its PCRs were. | ```map(list(object({ pcr4 = string pcr7 = string pcr12 = string statement = optional(string) bundle = optional(string) # Why the build is not to be run, as measurements.json says of a revoked one: no machine of it # is trusted, and a release whose newest build is revoked is not installed (attested_key.tf). revoked = optional(string) })))``` | `null` | no |
+| image\_ids | Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those the catalog names for spin\_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role. | `map(string)` | `{}` | no |
+| image\_measurements | The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements, SHA384 in lowercase hex), instead of the catalog's: the control plane's key is answered to the control plane's builds (attested\_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host\_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. The last of a role's is the image image\_ids names. Required with image\_ids. | ```map(list(object({ pcr4 = string pcr7 = string pcr12 = string statement = optional(string) bundle = optional(string) # Why the build is not to be run: no machine of it # is trusted, and a release whose newest build is revoked is not installed (attested_key.tf). revoked = optional(string) })))``` | `null` | no |
+| image\_publisher | The AWS account that publishes Spin OS's images (spin-stack/ami): an image the catalog names is one it owns, or it is not booted. | `string` | `"277203350136"` | no |
 | installation\_config | The installation's config file (spin's configs/spin-example.yaml), as YAML. This module adds what it knows - the domain, who joins as a host, the autoscaling settings below - and writes it where the control plane reads it at every start, which seeds the database from it before it serves. What the file later says differently is shown in the dashboard to apply or dismiss, and nothing is written over what an administrator decided. | `string` | `""` | no |
 | instance\_type | The control plane's machine: the control plane, its database (PostgreSQL), the collector, and the stores of logs, traces and metrics it runs. | `string` | `"t8i.medium"` | no |
 | internal\_zone | The private zone the components reach each other by: cp.<this> and proxy.<this>, resolved only inside the VPC. | `string` | `"spin.internal"` | no |

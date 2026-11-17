@@ -4,8 +4,7 @@
 #
 #   (once per account: cd ../../bootstrap && tofu init && tofu apply)
 #   $(tofu -chdir=../../bootstrap output -raw init)
-#   (a release images.json has an image of in the region)
-#   tofu apply -var spin_version=v20261019.02 -var domain=spin.example.com
+#   tofu apply -var spin_version=stable -var domain=spin.example.com
 #
 # From elsewhere, the source is this repository at one of its releases (README.md says where they
 # are listed):
@@ -57,13 +56,13 @@ variable "name" {
 }
 
 variable "region" {
-  description = "The region: the one bootstrap/ was applied in, and one images.json has the release's image in."
+  description = "The region: the one bootstrap/ was applied in, and one the release's images are published in."
   type        = string
   default     = "us-west-2"
 }
 
 variable "spin_version" {
-  description = "The release, v<YYYYMMDD>.<N>: one images.json has an image of in this region."
+  description = "The release, v<YYYYMMDD>.<N>, or a channel: edge or stable."
   type        = string
 }
 

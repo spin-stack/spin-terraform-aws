@@ -16,11 +16,17 @@ variable "name" {
 }
 
 variable "spin_version" {
-  description = "The release the installation runs, as v<YYYYMMDD>.<N>: every machine boots the Spin OS image of it (spin-stack/ami), published into this account and tagged spin:version."
+  description = "The release the installation runs: a release, v<YYYYMMDD>.<N>, or a channel - edge, every release once its images are published and checked on EC2, or stable, one a person promoted. Every machine boots the Spin OS image of the release, as the image catalog has it and its release signed it (the spin provider). A channel is read at every plan, so the release it names moves an installation when its next plan is applied."
   type        = string
   validation {
-    condition     = can(regex("^v[0-9]{8}\\.[0-9]+$", var.spin_version))
-    error_message = "spin_version is a dated release, v<YYYYMMDD>.<N>."
+    condition     = can(regex("^(v[0-9]{8}\\.[0-9]+|[a-z][a-z0-9-]*)$", var.spin_version))
+    error_message = "spin_version is a dated release, v<YYYYMMDD>.<N>, or a channel: edge, stable."
+  }
+  # Images of your own carry one release, which the documents name: a channel moves, and would name
+  # a release none of them carries.
+  validation {
+    condition     = length(var.image_ids) == 0 || can(regex("^v[0-9]{8}\\.[0-9]+$", var.spin_version))
+    error_message = "With image_ids, spin_version is the release they carry, v<YYYYMMDD>.<N>, not a channel."
   }
 }
 
@@ -255,8 +261,19 @@ variable "tags" {
   nullable    = false
 }
 
+variable "image_publisher" {
+  description = "The AWS account that publishes Spin OS's images (spin-stack/ami): an image the catalog names is one it owns, or it is not booted."
+  type        = string
+  default     = "277203350136"
+  nullable    = false
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.image_publisher))
+    error_message = "image_publisher is an AWS account id, twelve digits."
+  }
+}
+
 variable "image_ids" {
-  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those images.json names for spin_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role."
+  description = "Spin OS AMIs of your own, one per role - control-plane, runner and proxy - instead of those the catalog names for spin_version in this region. Each must carry that release, laid for that role: a machine refuses a document of another release, and an image laid for another role."
   type        = map(string)
   default     = {}
   nullable    = false
@@ -294,14 +311,14 @@ variable "budget_emails" {
 }
 
 variable "image_measurements" {
-  description = "The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements, SHA384 in lowercase hex), instead of measurements.json's: the control plane's key is answered to the control plane's builds (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. The last of a role's is the image image_ids names. Required with image_ids, and for a release published before its PCRs were."
+  description = "The builds of each role's image - control-plane, runner and proxy - oldest first, each the PCRs an instance of it measures (its manifest's measurements, SHA384 in lowercase hex), instead of the catalog's: the control plane's key is answered to the control plane's builds (attested_key.tf), a host joins only as the runner's, and the proxy is given its token only as the proxy's (host_attestation). The control plane's and the runner's also carry statement and bundle, base64, as spin-os images sign writes them: what their images' publisher signed of those PCRs. The last of a role's is the image image_ids names. Required with image_ids."
   type = map(list(object({
     pcr4      = string
     pcr7      = string
     pcr12     = string
     statement = optional(string)
     bundle    = optional(string)
-    # Why the build is not to be run, as measurements.json says of a revoked one: no machine of it
+    # Why the build is not to be run: no machine of it
     # is trusted, and a release whose newest build is revoked is not installed (attested_key.tf).
     revoked = optional(string)
   })))

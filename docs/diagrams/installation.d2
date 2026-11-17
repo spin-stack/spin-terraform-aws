@@ -106,10 +106,10 @@ operator: "" {
   style: {fill: transparent; stroke: transparent}
   direction: down
   ami: "spin-stack/ami\ntask release" {class: brand-icon; icon: icons/github.svg}
-  images: "images.json\nrelease → region → AMI" {class: external}
+  images: "image catalog\nrelease → role → region → AMI, signed" {class: external}
   tofu: "operator\ntofu apply, or\nGitHub Actions" {class: brand-icon; icon: icons/opentofu.svg}
-  ami -> images: "pull request"
-  images -> tofu
+  ami -> images: "release, revoke, promote"
+  images -> tofu: "spin provider"
 }
 
 outside.users -> aws.region.vpc.igw: "443"
