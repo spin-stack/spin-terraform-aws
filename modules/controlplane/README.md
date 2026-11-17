@@ -247,7 +247,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | admin\_email | Who the first administrator signs in as. |
 | admin\_password\_parameter | The SSM SecureString holding the first administrator's one-time password: aws ssm get-parameter --with-decryption --name <this>. The first sign-in asks for a new one. |
 | boot\_log\_group | The CloudWatch log group every machine's boot writes to, a stream per <role>/<step>/<instance-id>: a role's machines are one stream prefix. |
-| boot\_log\_policy\_arn | Writing a machine's boot to that group, and nothing else: the runners module attaches it to the runners' role. |
 | boundary\_arn | The permissions boundary every role of the installation carries; the runners module puts it on the runners' role. |
 | bucket | The volumes' bucket: every workspace's disk, versioned under Object Lock, reached only through the VPC's endpoint. |
 | ca\_cert | The installation's CA certificate, which every component trusts the control plane by. |
@@ -267,6 +266,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | public\_zone\_id | The domain's public zone, where the installation's names are. |
 | region | The region everything here is in, read from the provider rather than asked for. |
 | relay\_dial | Where a runner dials the relay, host:port: the proxy inside the VPC, by the name the proxy of the moment points at itself. |
+| runner\_boot\_log\_policy\_arn | Writing a runner's boot to that group, under runner/ and nothing else: the runners module attaches it to the runners' role. |
 | runner\_document\_arn | The runners' document, the one object of the documents' bucket the runners' role reads. |
 | runner\_idle\_minutes | How long the fleet is idle before the runners' group is emptied, which is why a first workspace waits for a machine's boot. |
 | runner\_user\_data | A runner's user data: its role and the runners' document, as the systemd credentials Spin OS's spin-boot takes. |

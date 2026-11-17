@@ -13,29 +13,37 @@ resource "aws_cloudwatch_log_group" "boot" {
   tags              = merge(local.tags, { "spin:role" = "logs" })
 }
 
+# A policy per role, each its own prefix: a runner's credential, the one a tenant who escaped a
+# machine is nearest to, writes no line into what the control plane's or the proxy's boot says.
+# Not narrower than the role: no policy variable is the instance id alone, and the ones that carry
+# it (aws:userid, ec2:SourceInstanceARN) hold a colon, which a stream's name may not.
 data "aws_iam_policy_document" "boot_log" {
+  for_each = toset(["control-plane", "proxy", "runner"])
+
   statement {
-    sid       = "ItsBootsLog"
+    sid       = "ItsRolesBoots"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = ["${aws_cloudwatch_log_group.boot.arn}:log-stream:*"]
+    resources = ["${aws_cloudwatch_log_group.boot.arn}:log-stream:${each.key}/*"]
   }
 }
 
 resource "aws_iam_policy" "boot_log" {
-  name        = "${local.iam_name}-boot-log"
-  description = "Write a machine's boot to ${aws_cloudwatch_log_group.boot.name}, and nothing else"
-  policy      = data.aws_iam_policy_document.boot_log.json
+  for_each = data.aws_iam_policy_document.boot_log
+
+  name        = "${local.iam_name}-${each.key}-boot-log"
+  description = "Write a ${each.key} machine's boot to ${aws_cloudwatch_log_group.boot.name}, under ${each.key}/, and nothing else"
+  policy      = each.value.json
   tags        = local.tags
 }
 
 resource "aws_iam_role_policy_attachment" "controlplane_boot_log" {
   role       = aws_iam_role.controlplane.name
-  policy_arn = aws_iam_policy.boot_log.arn
+  policy_arn = aws_iam_policy.boot_log["control-plane"].arn
 }
 
 resource "aws_iam_role_policy_attachment" "proxy_boot_log" {
   role       = aws_iam_role.proxy.name
-  policy_arn = aws_iam_policy.boot_log.arn
+  policy_arn = aws_iam_policy.boot_log["proxy"].arn
 }
 
 locals {

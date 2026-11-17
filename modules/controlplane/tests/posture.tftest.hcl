@@ -108,6 +108,12 @@ override_resource {
   values = { arn = "arn:aws:s3:::spin-volumes-123456789012-us-east-2" }
 }
 
+# The boot log group's, so each role's policy names its streams at plan.
+override_resource {
+  target = aws_cloudwatch_log_group.boot
+  values = { arn = "arn:aws:logs:us-east-2:123456789012:log-group:/spin/spin/boot" }
+}
+
 override_resource {
   target = aws_s3_bucket.logs
   values = { arn = "arn:aws:s3:::spin-logs-123456789012-us-east-2" }
@@ -847,7 +853,7 @@ run "an_account_holds_several_installations" {
       aws_iam_role.flow[0].name == "spin-us-east-2-vpc-flow" &&
       aws_iam_policy.boundary.name == "spin-us-east-2-boundary" &&
       aws_iam_policy.session_manager.name == "spin-us-east-2-session-manager" &&
-      aws_iam_policy.boot_log.name == "spin-us-east-2-boot-log"
+      alltrue([for r, p in aws_iam_policy.boot_log : p.name == "spin-us-east-2-${r}-boot-log"])
     )
     error_message = "an IAM name does not carry the region, so an installation of this name in another region of the account takes it"
   }
@@ -2144,5 +2150,18 @@ run "a_proxy_closed_to_others_is_still_checked" {
   assert {
     condition     = alltrue([for r in aws_vpc_security_group_ingress_rule.proxy_https_health_checks : r.from_port == 443 && r.to_port == 443])
     error_message = "the checkers' rule on the proxy opens more than 443"
+  }
+}
+
+# A role writes only its own role's boots: a runner's credential, taken off a machine a tenant
+# escaped, says nothing in the control plane's or the proxy's.
+run "a_role_writes_only_its_own_boots" {
+  command = plan
+
+  assert {
+    condition = alltrue([for r, d in data.aws_iam_policy_document.boot_log :
+      d.statement[0].resources == toset(["arn:aws:logs:us-east-2:123456789012:log-group:/spin/spin/boot:log-stream:${r}/*"])
+    ])
+    error_message = "a role's boot log policy reaches streams other than its own role's"
   }
 }
