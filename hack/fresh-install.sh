@@ -382,6 +382,42 @@ posture() {
   echo "the instances, their volumes and the runner's role are what the modules promise"
 }
 
+# A runner looked at from inside, as root, while a workspace runs on it: hack/host-check.sh, through
+# an incident's host shell (`spin admin shell open --incident`), which the control plane records and
+# which retires the runner once it ends - the run removes everything next. The script goes over
+# the shell's terminal as base64, in lines short enough for a terminal's line discipline, and what
+# comes back is judged by its CHECK lines and its last.
+host-check() {
+  set -euo pipefail
+  as-admin
+  local runner b64 out="${RUNNER_TEMP}/host-check.out" failed
+  spin workspace create host-check --wait
+  runner=$(spin -o json admin runner list | jq -r '[.[] | select(.connected and (.workspaceCount // 0) > 0) | .id][0] // empty')
+  if [ -z "${runner}" ]; then
+    echo "::error::no connected runner holds a workspace: there is no machine to look at"
+    exit 1
+  fi
+  b64=$(base64 -w 0 hack/host-check.sh)
+  {
+    for ((i = 0; i < ${#b64}; i += 1000)); do
+      printf 'printf %%s %s >> /run/host-check.b64\n' "${b64:i:1000}"
+    done
+    printf 'base64 -d /run/host-check.b64 | bash; rm -f /run/host-check.b64; exit\n'
+  } | spin admin shell open "${runner}" --incident --minutes 10 \
+    --reason "fresh install ${GITHUB_RUN_ID:-}: what keeps a machine from the host's role, looked at on EC2" | tr -d '\r' > "${out}" || true
+  grep -E '^(CHECK|INFO) ' "${out}" || true
+  if ! grep -qx 'HOST-CHECK-END' "${out}"; then
+    echo "::error::the host check did not finish on runner ${runner}: its session's output is above and in ${out}"
+    exit 1
+  fi
+  failed=$(grep -E '^CHECK [^ ]+ FAIL ' "${out}" || true)
+  if [ -n "${failed}" ]; then
+    while read -r line; do echo "::error::${line#CHECK }"; done <<< "${failed}"
+    exit 1
+  fi
+  echo "runner ${runner}: every check held"
+}
+
 # What each machine's boot said and each group's update did, by the commands the installation's
 # outputs give: one that fails does not hide the rest.
 why() {
@@ -391,9 +427,9 @@ why() {
 }
 
 case "${1:-}" in
-  release | previous | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | posture | keep | upgrade | kept | why) "$1" ;;
+  release | previous | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | posture | host-check | keep | upgrade | kept | why) "$1" ;;
   *)
-    echo "usage: $0 release|previous|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|keep|upgrade|kept|why" >&2
+    echo "usage: $0 release|previous|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|host-check|keep|upgrade|kept|why" >&2
     exit 2
     ;;
 esac
