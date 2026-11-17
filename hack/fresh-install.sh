@@ -323,6 +323,65 @@ kept() {
   echo "upgrade-kept came through the upgrade with its file"
 }
 
+# What AWS says of what the run made, which no plan can: each instance's metadata options and boot
+# mode, its volumes, what the runner's role may do (the policy simulator, the permissions boundary
+# included) and what it did (CloudTrail). The judging is hack/posture/*.jq, which
+# hack/posture-test.sh holds to recorded answers; every broken promise is said before the step fails.
+posture() {
+  set -euo pipefail
+  local dir="${RUNNER_TEMP}/posture" broken="" ids runners runner name role partition account group ips id
+  mkdir -p "${dir}"
+  aws ec2 describe-instances --filters "Name=tag:spin:run,Values=${GITHUB_RUN_ID}" > "${dir}/instances.json"
+  ids=$(jq -r '[.Reservations[].Instances[].InstanceId] | join(",")' "${dir}/instances.json")
+  runners=$(jq -r '[.Reservations[].Instances[] | select(any(.Tags[]?; .Key == "spin:role" and .Value == "runner")) | .InstanceId] | join(" ")' "${dir}/instances.json")
+  if [ -z "${ids}" ] || [ -z "${runners}" ]; then
+    echo "::error::no instance, or no runner, carries spin:run=${GITHUB_RUN_ID}: the posture has nothing to judge"
+    exit 1
+  fi
+  broken+=$(jq -r -f hack/posture/instances.jq "${dir}/instances.json")$'\n'
+  aws ec2 describe-volumes --filters "Name=attachment.instance-id,Values=${ids}" > "${dir}/volumes.json"
+  broken+=$(jq -r -f hack/posture/volumes.jq "${dir}/volumes.json")$'\n'
+
+  runner=${runners%% *}
+  name=$(jq -r --arg id "${runner}" '.Reservations[].Instances[] | select(.InstanceId == $id) | .IamInstanceProfile.Arn | split("/") | last' "${dir}/instances.json")
+  role=$(aws iam get-instance-profile --instance-profile-name "${name}" --query 'InstanceProfile.Roles[0].Arn' --output text)
+  partition=$(cut -d: -f2 <<< "${role}")
+  account=$(cut -d: -f5 <<< "${role}")
+  group="arn:${partition}:logs:${AWS_REGION}:${account}:log-group:/spin/${TF_VAR_name}/boot"
+  aws iam simulate-principal-policy --policy-source-arn "${role}" --action-names logs:CreateLogStream logs:PutLogEvents \
+    --resource-arns "${group}:log-stream:runner/boot/${runner}" > "${dir}/allowed.json"
+  broken+=$(jq -r -f hack/posture/reach.jq --arg want allowed "${dir}/allowed.json")$'\n'
+  # shellcheck disable=SC2046 # one action a word
+  aws iam simulate-principal-policy --policy-source-arn "${role}" --resource-arns '*' \
+    --action-names $(sed -e 's/#.*//' hack/posture/runner-denied.txt) > "${dir}/denied.json"
+  broken+=$(jq -r -f hack/posture/reach.jq --arg want denied "${dir}/denied.json")$'\n'
+  aws iam simulate-principal-policy --policy-source-arn "${role}" --action-names logs:CreateLogStream logs:PutLogEvents \
+    --resource-arns "${group}:log-stream:control-plane/boot/i-0" "${group}:log-stream:proxy/boot/i-0" > "${dir}/others-boots.json"
+  broken+=$(jq -r -f hack/posture/reach.jq --arg want denied "${dir}/others-boots.json")$'\n'
+
+  # A runner's role is a session named for its instance. CloudTrail's management events reach it
+  # minutes late: by now the runner has booted, joined and run the smoke's workspace.
+  ips=$(jq -c '[.Reservations[].Instances[] | .PrivateIpAddress, .PublicIpAddress | select(.)]' "${dir}/instances.json")
+  for id in ${runners}; do
+    aws cloudtrail lookup-events --lookup-attributes "AttributeKey=Username,AttributeValue=${id}" \
+      --start-time "$(date -u -d '-4 hours' +%FT%TZ)" > "${dir}/trail-${id}.json"
+    broken+=$(jq -r -f hack/posture/trail.jq --argjson ips "${ips}" "${dir}/trail-${id}.json")$'\n'
+    {
+      echo "### What runner ${id}'s role did"
+      echo
+      jq -r '[.Events[].CloudTrailEvent | fromjson | "\(.eventSource) \(.eventName)"] | group_by(.) | .[] | "- \(.[0]) ×\(length)"' "${dir}/trail-${id}.json"
+      echo
+    } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+  done
+
+  broken=$(grep -v '^$' <<< "${broken}" || true)
+  if [ -n "${broken}" ]; then
+    while read -r line; do echo "::error::${line}"; done <<< "${broken}"
+    exit 1
+  fi
+  echo "the instances, their volumes and the runner's role are what the modules promise"
+}
+
 # What each machine's boot said and each group's update did, by the commands the installation's
 # outputs give: one that fails does not hide the rest.
 why() {
@@ -332,9 +391,9 @@ why() {
 }
 
 case "${1:-}" in
-  release | previous | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | keep | upgrade | kept | why) "$1" ;;
+  release | previous | cli | cost | domain | bootstrap | installation | delegate | undelegate | wait-machines | sign-in | smoke | posture | keep | upgrade | kept | why) "$1" ;;
   *)
-    echo "usage: $0 release|previous|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|keep|upgrade|kept|why" >&2
+    echo "usage: $0 release|previous|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|keep|upgrade|kept|why" >&2
     exit 2
     ;;
 esac

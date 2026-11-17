@@ -255,8 +255,9 @@ run "the_machines" {
 
   assert {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
-    t.metadata_options[0].http_tokens == "required" && t.metadata_options[0].http_put_response_hop_limit == 1])
-    error_message = "a machine answers IMDSv1, or its role is reachable from further than the machine itself"
+      t.metadata_options[0].http_tokens == "required" && t.metadata_options[0].http_put_response_hop_limit == 1 &&
+    t.metadata_options[0].http_protocol_ipv6 == "disabled" && t.metadata_options[0].instance_metadata_tags == "disabled"])
+    error_message = "a machine answers IMDSv1 or over IPv6, says its tags there, or its role is reachable from further than the machine itself"
   }
   assert {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :

@@ -195,6 +195,8 @@ tasks:
       - test -z "$(gofmt -l hack/enroll)" || { gofmt -l hack/enroll; echo 'gofmt -w hack/enroll'; exit 1; }
       - go vet hack/enroll/main.go
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
+      # The fresh install's posture filters, which only that run feeds a real account's answers.
+      - bash hack/posture-test.sh
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
       # The order a destroy has to happen in, which nothing else would see before the fresh install.
@@ -227,7 +229,7 @@ tasks:
 
   fresh-install:
     desc: >-
-      Run one step of the fresh install: task fresh-install -- release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|why.
+      Run one step of the fresh install: task fresh-install -- release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|why.
     cmds:
       - bash hack/fresh-install.sh {{.CLI_ARGS}}
 

@@ -180,6 +180,14 @@ jobs:
         timeout-minutes: 30
         run: task fresh-install -- smoke
 
+      # What AWS says of what the run made, which no plan can: each instance's metadata options and
+      # boot mode, its volumes, what the runner's role may do and what CloudTrail saw it do. On an
+      # upgrade, once, on what the upgrade left.
+      - name: Posture
+        if: steps.cli.outputs.smoke == 'true' && env.UPGRADE != 'true'
+        timeout-minutes: 10
+        run: task fresh-install -- posture
+
       - name: Keep a workspace
         if: env.UPGRADE == 'true'
         timeout-minutes: 30
@@ -206,6 +214,11 @@ jobs:
         if: env.UPGRADE == 'true'
         timeout-minutes: 30
         run: task fresh-install -- kept
+
+      - name: Posture after the upgrade
+        if: env.UPGRADE == 'true'
+        timeout-minutes: 10
+        run: task fresh-install -- posture
 
       - name: Why
         if: failure() && steps.install.outcome != 'skipped'

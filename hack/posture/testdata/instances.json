@@ -1,0 +1,6 @@
+{"Reservations": [{"Instances": [
+  {"InstanceId": "i-0aaaaaaaaaaaaaaa1", "CurrentInstanceBootMode": "uefi", "PrivateIpAddress": "10.0.1.10", "PublicIpAddress": "198.51.100.10",
+   "MetadataOptions": {"State": "applied", "HttpTokens": "required", "HttpPutResponseHopLimit": 1, "HttpEndpoint": "enabled", "HttpProtocolIpv6": "disabled", "InstanceMetadataTags": "disabled"}},
+  {"InstanceId": "i-0aaaaaaaaaaaaaaa2", "CurrentInstanceBootMode": "uefi", "PrivateIpAddress": "10.0.1.11", "PublicIpAddress": "198.51.100.11",
+   "MetadataOptions": {"State": "applied", "HttpTokens": "required", "HttpPutResponseHopLimit": 1, "HttpEndpoint": "enabled", "HttpProtocolIpv6": "disabled", "InstanceMetadataTags": "disabled"}}
+]}]}
