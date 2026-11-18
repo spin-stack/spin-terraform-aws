@@ -111,3 +111,27 @@ provider "registry.opentofu.org/hashicorp/tls" {
     "zh:e7e769c0fb629e6f84b146212178350dbd277b472fdbc0808d70e16ae92302e6",
   ]
 }
+
+provider "registry.opentofu.org/spin-stack/spin" {
+  version     = "0.1.0"
+  constraints = "~> 0.1"
+  hashes = [
+    "h1:+3/TfUdBSz5BELKlvmjeI3NeopAYgBgrCQTE0lqGmNs=",
+    "h1:CgCT3rNLeSV65MW6ATfo0+blregHHDPH2r74seQoaYs=",
+    "h1:KEknSrUcb731oOyqOBX28j9QmBjkf83KL/I4xIHFxjk=",
+    "h1:ME4mTlK4oHUeRWQzKQdsCgX0zrw6MoNjheQ7/OG4YK0=",
+    "h1:TPsq9msGdGXi1OXRkVOpuaRDU1Cka0PmT6XwFWPTQaI=",
+    "h1:TrpN04awkJSZ3+SxfTGq4EGQcIx1N3iH6xi0RXrbNjE=",
+    "h1:puT+QkeK/OsJbAtdnthpVrOGCfYjgF6QPYwez4/yOLw=",
+    "h1:ri2YUYTUFyXUxccuOGP2ZjVW/E5sRe0C7BD76xCTLOU=",
+    "zh:06e2c2adbbb1149a7da4eaa3b449b6e5ec14b5a8346a63bf5405a9828ca189f5",
+    "zh:0a9afcdf1c8ce2bb4178fe9a43945df71cc4fb446688b0f3b6d5d43a415276cd",
+    "zh:2b7aaf00fe65ae46a7b10e38d3d07f47f45dbc91351e45b9a34bada7c80d88cb",
+    "zh:397d1df1d5a4dd2e60b2a775bfdc2c58df2ba1269adfccd7ccc9f5a5e8a3d408",
+    "zh:652cb60a76cdb1188d3fa48ad546b7df24e772acf02b9a2783cc2e4d8572a7e2",
+    "zh:789306debf929bbc8f001082ca6d796bd64c23f5b536874aeff6681edd7ceb85",
+    "zh:9c99e8877325969163df7f24bf0ec8d4bc228ab785d62d0ddb0328950a068465",
+    "zh:f604c35f80c79e2e6a20984e2deaa08ad16208f3d72a9f50f5ddb6dbec6355f0",
+    "zh:f809ab383cca0a5f83072981c64208cbd7fa67e986a86ee02dd2c82333221e32",
+  ]
+}
