@@ -260,5 +260,8 @@ tasks:
     desc: >-
       Propose this commit to a deployment: a pull request in REPOSITORY moving it to this ref and
       the newest release in REGION, as the app GH_TOKEN and APP_SLUG name.
+    deps: [tools:tofu]
+    env:
+      TOFU: "{{.TOOLS_BIN}}/tofu"
     cmds:
       - bash hack/propose.sh
