@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # This commit proposed to one deployment (.github/workflows/propose.yml, which says why and how):
 # REPOSITORY (spin-stack/<deployment>), as the app GH_TOKEN and APP_SLUG are, at the ref
-# GitHub's GITHUB_* variables name. A file shellcheck reads, as the workflow's step was.
+# GitHub's GITHUB_* variables name, with the pinned OpenTofu at TOFU. A file shellcheck reads, as
+# the workflow's step was.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,6 +17,10 @@ git config --global user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
 gh repo clone "${REPOSITORY}" deployment -- --quiet --depth 1
 cd deployment
 sed -i -E "s|(github.com/spin-stack/spin-terraform-aws\?ref=)[^\"]+|\1${ref}|" main.tf
+# A provider the module at ref requires and the deployment's lock has not - spin's, when the
+# catalog came - refuses its plan's init, which is -lockfile=readonly: the lock moves with the
+# ref. A provider the lock has stays at its version.
+"${TOFU}" init -backend=false -input=false -no-color >/dev/null
 if git diff --quiet; then
   echo "${REPOSITORY} is at ${ref} already"
   exit 0
