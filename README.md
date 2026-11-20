@@ -128,10 +128,10 @@ The newest is the first on [its releases](https://github.com/spin-stack/spin-ter
 main is what spin-stack's own installation, spinbox.dev, runs first.
 
 For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
-of it is a workflow run, with its log: spin-stack/shipset, which coordinates them, dispatches
+of it is a workflow run, with its log: spin-stack/ship-it, which coordinates them, dispatches
 spin-stack/ami's release workflow for each spin release, which builds and publishes its image,
 checks it on EC2, puts it in the catalog and moves `edge` to it; and it dispatches
-spin-terraform-aws's `.github/workflows/propose.yml` for each deployment its `shipset.yaml` names -
+spin-terraform-aws's `.github/workflows/propose.yml` for each deployment its `ship-it.yaml` names -
 on main for one that follows main, on the newest release's tag for one that follows the releases -
 which opens, or rewrites, the pull request there that moves the module's ref. A person merges that, and
 applies.
