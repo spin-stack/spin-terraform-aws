@@ -256,6 +256,24 @@ tasks:
     cmds:
       - bash hack/release.sh
 
+  # spin-stack/ship-it reads this module's releases and proposes the newest to a deployment.
+  # GitHub's schedule does not wake it (its */5 ran 3 of 576 in 48 h), so the run that cut the
+  # release does. A hint: ship-it reads the state itself, and its hourly cron catches a wake that
+  # was lost.
+  ship-it:wake:
+    desc: Wake spin-stack/ship-it with this run and its CONCLUSION, as GH_TOKEN (the release app's on ship-it; release.yml).
+    requires:
+      vars: [CONCLUSION]
+    cmds:
+      - |
+        set -euo pipefail
+        workflow=${GITHUB_WORKFLOW_REF%@*}
+        gh api repos/spin-stack/ship-it/dispatches -f event_type=wake \
+          -f "client_payload[repository]=${GITHUB_REPOSITORY}" \
+          -f "client_payload[workflow]=${workflow##*/}" \
+          -f "client_payload[run]=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+          -f "client_payload[conclusion]=${CONCLUSION}"
+
   propose:
     desc: >-
       Propose this commit to a deployment: a pull request in REPOSITORY moving it to this ref and
