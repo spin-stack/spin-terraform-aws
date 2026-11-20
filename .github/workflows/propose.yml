@@ -5,15 +5,15 @@
 # run rewrites, so what waits there is always the newest. A person reads its plan, merges it and
 # applies; nothing here reaches an installation.
 #
-# spin-stack/shipset, which coordinates a release's steps, dispatches this for each deployment its
-# shipset.yaml names: on main for one that follows main (spinbox.dev, which dogfoods), on the
+# spin-stack/ship-it, which coordinates a release's steps, dispatches this for each deployment its
+# ship-it.yaml names: on main for one that follows main (spinbox.dev, which dogfoods), on the
 # newest release's tag for one that follows the releases a person cuts here. It finds the run
 # again by its name.
 #
 # As the release app (spin-stack-release), so the deployment's plan runs on the pull request: one
 # opened with this run's own token would start none, and could not reach another repository.
 name: Propose
-# What shipset looks the run up by: one deployment and one module - a release's tag, or a commit.
+# What ship-it looks the run up by: one deployment and one module - a release's tag, or a commit.
 run-name: propose ${{ inputs.repository }} ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
 
 on:
@@ -23,7 +23,7 @@ on:
         description: 'The deployment repository in spin-stack, e.g. spinbox.dev-deploy.'
         required: true
       region:
-        description: 'Its installation region, e.g. us-west-2, as shipset names it: the module''s ref is all this moves.'
+        description: 'Its installation region, e.g. us-west-2, as ship-it names it: the module''s ref is all this moves.'
         required: true
 
 concurrency:
