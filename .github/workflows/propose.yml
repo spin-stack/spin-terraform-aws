@@ -8,7 +8,7 @@
 # spin-stack/ship-it, which coordinates a release's steps, dispatches this for each deployment its
 # ship-it.yaml names: on main for one that follows main (spinbox.dev, which dogfoods), on the
 # newest release's tag for one that follows the releases a person cuts here. It finds the run
-# again by its name.
+# again by its name, and this run wakes it once the pull request is open.
 #
 # As the release app (spin-stack-release), so the deployment's plan runs on the pull request: one
 # opened with this run's own token would start none, and could not reach another repository.
@@ -64,3 +64,24 @@ jobs:
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           REPOSITORY: spin-stack/${{ inputs.repository }}
         run: task propose
+
+      # ship-it's deploy step reads the pull request this opened. Whatever the steps above did: a
+      # wake that fails is a hint lost, not a proposal lost, so it never fails the run.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: always()
+        id: wake
+        continue-on-error: true
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: ship-it
+          permission-contents: write
+
+      - name: Wake ship-it
+        if: always() && steps.wake.outputs.token != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.wake.outputs.token }}
+          CONCLUSION: ${{ job.status }}
+        run: task ship-it:wake
