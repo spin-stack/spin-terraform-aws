@@ -25,7 +25,7 @@ last=$(git ls-remote --tags --refs origin "refs/tags/v${day}.*" | sed -E 's|.*re
   { grep -E "^v${day}\.(0[1-9]|[1-9][0-9]+)$" || true; } | sed -E "s/^v${day}\.//" | sort -n | tail -1)
 version=$(printf 'v%s.%02d' "${day}" "$((10#${last:-0} + 1))")
 
-# The one before, by the same order, for what changed since: shipset's (edit.Newer) - the day,
+# The one before, by the same order, for what changed since: ship-it's (edit.Newer) - the day,
 # then the number, a longer number the later.
 previous=$(git ls-remote --tags --refs origin 'refs/tags/v*' | sed -E 's|.*refs/tags/||' |
   { grep -E '^v[0-9]{8}\.[0-9]+$' || true; } | awk -F. '{ printf "%s %08d %s\n", $1, $2, $0 }' | sort | tail -1 | cut -d' ' -f3)
