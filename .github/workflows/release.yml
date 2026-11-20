@@ -1,8 +1,8 @@
 # This module's release, made from main and nothing else: dispatched there by a person, it names the
 # next v<YYYYMMDD>.<NN> today - as spin names its own - and makes it a tag on the commit with its
 # GitHub release, once Gate has passed on that commit. A release is what `?ref=` pins and what a
-# deployment on the release track (spin-stack/shipset's shipset.yaml) is proposed next: shipset
-# reads the newest release and dispatches propose.yml on its tag, so nothing here starts that. A
+# deployment on the release track (spin-stack/ship-it's ship-it.yaml) is proposed next: ship-it
+# reads the newest release and dispatches propose.yml on its tag, and this run only wakes it. A
 # person decides when, and nothing else cuts one:
 #
 #   gh workflow run release.yml --ref main
@@ -45,3 +45,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: task release
+
+      # Whatever the steps above did. A wake that fails is a hint lost, not a release lost: it
+      # never fails the run.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: always()
+        id: wake
+        continue-on-error: true
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: ship-it
+          permission-contents: write
+
+      - name: Wake ship-it
+        if: always() && steps.wake.outputs.token != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.wake.outputs.token }}
+          CONCLUSION: ${{ job.status }}
+        run: task ship-it:wake
