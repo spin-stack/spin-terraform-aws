@@ -24,13 +24,12 @@ variable "controlplane" {
 variable "runners" {
   description = "The control plane module's runners output: what it decides of the runners - the launch template's name, which it makes each host class's group from, its role, what the template's machines need of an instance type, and what the quota is sized by."
   type = object({
-    launch_template       = string
-    controlplane_role     = string
-    vcpus_max             = number
-    max_hosts             = number
-    spot                  = bool
-    data_volume_gb        = number
-    nested_virtualization = bool
+    launch_template   = string
+    controlplane_role = string
+    vcpus_max         = number
+    max_hosts         = number
+    spot              = bool
+    data_volume_gb    = number
   })
 }
 

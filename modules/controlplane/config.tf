@@ -192,10 +192,10 @@ locals {
         launch_template = local.runner_template
         subnets         = aws_subnet.public[*].id
         drain_seconds   = var.runner_drain_seconds
-        # The data goes on the instance store unless the template gives it a volume of its own,
-        # and a .metal type has KVM by being metal and refuses nested virtualization.
+        # The data goes on the instance store unless the template gives it a volume of its own.
+        # Never metal: it has no NitroTPM, so no attestation (the runners module's template).
         local_storage = var.runner_data_volume_gb > 0 ? "included" : "required"
-        bare_metal    = var.runner_nested_virtualization ? "excluded" : "required"
+        bare_metal    = "excluded"
         rolling       = var.runner_rollout == "rolling"
         tags          = local.tags
       })
