@@ -91,7 +91,7 @@ aws: "AWS" {
       grid-columns: 4
       grid-gap: 32
       buckets: "S3 - only through the endpoint\nvolumes (Object Lock), the database's\nsealed archive, logs, certificates;\na document per role, by the apply" {class: aws-icon; icon: icons/s3-bucket.svg}
-      ssm: "Parameter Store - written by the apply\nthe key, the CA, the first password:\nthe control plane's alone" {class: aws-icon; icon: icons/parameter-store.svg}
+      ssm: "Parameter Store - written by the apply\nthe CA's key, the first password:\nthe control plane's alone" {class: aws-icon; icon: icons/parameter-store.svg}
       zones: "Route 53\n<domain>, which its registrar points at,\nand spin.internal, whose records\nthe machines write" {class: aws-icon; icon: icons/hosted-zone.svg}
       iam: "IAM\na role per machine,\none permissions boundary" {class: aws-icon; icon: icons/iam-role.svg}
       ami: "Spin OS AMI\nthe release, read-only root" {class: aws-icon; icon: icons/ami.svg}
