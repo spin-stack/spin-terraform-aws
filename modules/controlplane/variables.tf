@@ -402,7 +402,7 @@ variable "max_runners" {
 }
 
 variable "runner_rollout" {
-  description = "How a new release reaches the runners. idle: when the fleet next empties - no workspace running, starting or being saved - the next host boots it, and no workspace is moved for it; a host keeps the old release until then, which its control plane allows for 90 days. rolling: the hosts are replaced at once, one at a time, each old one's workspaces suspended to the bucket and resumed on the new one - for a fleet that never empties."
+  description = "How a new release reaches the runners. idle: when the fleet next empties - no workspace running, starting or being saved - the next host boots it, and no workspace is moved for it; until then a host keeps the old release, which a replaced control plane refuses when it registers again. rolling: the hosts are replaced at once, one at a time, each old one's workspaces suspended to the bucket and resumed on the new one - for a fleet that never empties."
   type        = string
   default     = "idle"
   nullable    = false
