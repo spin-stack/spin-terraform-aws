@@ -119,22 +119,10 @@ tofu plan     # the image, the launch templates and the documents change, and no
 tofu apply
 ```
 
-spin-terraform-aws has releases of its own, `v<YYYYMMDD>.<NN>` tags a person cuts from main
-(`gh workflow run release.yml --ref main`, which names the next one today):
-an installation that pins one (`?ref=v<YYYYMMDD>.<NN>`) gets the module's changes when somebody
-decides it is ready for them, not when main moves; the spin release it runs is `spin_version`'s, and
-moves without the module's ref.
-The newest is the first on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases).
-main is what spin-stack's own installation, spinbox.dev, runs first.
-
-For the installations spin-stack runs, that edit is a pull request nobody writes, and every step
-of it is a workflow run, with its log: spin-stack/ship-it, which coordinates them, dispatches
-spin-stack/ami's release workflow for each spin release, which builds and publishes its image,
-checks it on EC2, puts it in the catalog and moves `edge` to it; and it dispatches
-spin-terraform-aws's `.github/workflows/propose.yml` for each deployment its `ship-it.yaml` names -
-on main for one that follows main, on the newest release's tag for one that follows the releases -
-which opens, or rewrites, the pull request there that moves the module's ref. A person merges that, and
-applies.
+The module has releases of its own, `v<YYYYMMDD>.<NN>` tags: an installation that pins one
+(`?ref=v<YYYYMMDD>.<NN>`) gets the module's changes when you move the ref, not when main moves. The
+spin release it runs is `spin_version`'s, and moves without the module's ref. The newest is the first
+on [its releases](https://github.com/spin-stack/spin-terraform-aws/releases).
 
 The control plane and the proxy are each replaced beside themselves. The old proxy serves until the
 new one does. The control plane's database has one writer, so the old control plane serves until
@@ -159,15 +147,30 @@ aws autoscaling start-instance-refresh --auto-scaling-group-name <group>
 A runner cannot take a release in place either - its root is read-only and verified - and how it
 gets one is `runner_rollout`. `idle`, the default, moves no workspace for it: the control plane
 empties the group once nothing runs, starts or is still being saved to the bucket, and the next
-host it starts boots the new release; until then a host keeps the old one, which its control plane
-serves for 90 days (spin's `compat.Window`). `rolling` is for a fleet that never empties: the hosts
-are replaced at once, one at a time with the new one first, each old one leaving by its drain - its
-workspaces suspended to the bucket and resumed on another host.
+host it starts boots the new release. A control plane serves hosts of its own release and no other:
+once the update has replaced it, a host still on the old release is refused when it registers again.
+What becomes of the workspaces still running on such a host is open (spin-stack/spin#1332).
+`rolling` is for a fleet that never empties: the hosts are replaced at once, one at a time with
+the new one first, each old one leaving by its drain - its workspaces suspended to the bucket and resumed on another host.
 
 A release older than the one that last started the database refuses to start on it: going back
 past a change to the schema is a restore of the database from its archive to a point before it,
 not an update.
 <!-- END website:aws/update -->
+
+### How spin-stack releases the module and rolls it out
+
+A person cuts the module's releases from main (`gh workflow run release.yml --ref main`, which names
+the next one today). main is what spin-stack's own installation, spinbox.dev, runs first.
+
+For the installations spin-stack runs, the edit to `spin_version` or the module's ref is a pull
+request nobody writes, and every step of it is a workflow run, with its log: spin-stack/ship-it,
+which coordinates them, dispatches spin-stack/ami's release workflow for each spin release, which
+builds and publishes its image, checks it on EC2, puts it in the catalog and moves `edge` to it; and
+it dispatches spin-terraform-aws's `.github/workflows/propose.yml` for each deployment its
+`ship-it.yaml` names - on main for one that follows main, on the newest release's tag for one that
+follows the releases - which opens, or rewrites, the pull request there that moves the module's ref.
+A person merges that, and applies.
 
 ## Operating it
 
@@ -258,10 +261,11 @@ tofu destroy
 
 What is left are the keys, scheduled for deletion in seven days. The state bucket and its key
 (`bootstrap/`) are every installation's in the account and region, and are removed apart, after
-the last of them. `.github/workflows/fresh-install.yml` in spin-terraform-aws runs all of it every
-week - bootstrap, an installation, its first sign-in and this removal - in an account of its own,
-and says what that account needs.
+the last of them.
 <!-- END website:aws/remove -->
+
+`.github/workflows/fresh-install.yml` runs all of it every week - bootstrap, an installation, its
+first sign-in and this removal - in an account of its own, and says what that account needs.
 
 ## What it decides, and why
 
@@ -298,9 +302,9 @@ and says what that account needs.
 - **A runner runs its image's release**, and nothing else: its machine fetches nothing and hands
   over to no other `spin-boot`. Whether the control plane serves a runner of that release is the
   control plane's to say when the runner registers (spin's `internal/controlplane/compat`: a
-  host no older than the compatibility window, and none newer than itself), so while an update
-  replaces the control plane - or after one is abandoned - the old one may go on serving the
-  runners it can. A runner of another release is a runner of another image.
+  host of its own release, and no other), so while an update replaces the control plane - or
+  after one is abandoned - the old one goes on serving the runners of its release, and the new one
+  refuses them. A runner of another release is a runner of another image.
 - **No NAT gateway, no interface endpoints.** Every machine has a public address in a public
   subnet, and the bucket is reached through the S3 gateway endpoint, which is free. A NAT is
   $32 a month and a charge per GB before a workspace runs; an interface endpoint is $7 a
@@ -394,9 +398,11 @@ and says what that account needs.
   workspace is waiting for a host, and that the last one stopped an hour ago. The first create
   or start of the day waits in *Waiting for a host* for the few minutes a runner takes to boot
   and install; the control plane has asked the group for one, and places the workspace on it
-  when it registers. It only ever goes from none to one, adds one while a workspace has waited
-  longer than a host takes to come, and goes back to none: it never picks one host of several
-  to take away, since the group would choose which.
+  when it registers. It goes from none to one, adds one while a workspace has waited longer than a
+  host takes to come, and gives a host back when it is spare: one holding nothing that only it
+  has, idle for `runner_idle_minutes` (at once during the quiet hours), is cordoned and that instance
+  removed, so the control plane and not the group chooses which. With every host spare, that is
+  back to none.
 - **The control plane makes the groups, one per kind of runner.** A host class (Admin ->
   Runners) is what its group's machines are - instance types, vCPUs, spot or on-demand, how many
   at most - and the control plane makes the group `<name>-runners-<class>` from the runners
@@ -434,7 +440,10 @@ and says what that account needs.
   was a version kept, and reached by the control plane's role alone.
 - **Small machines.** The proxy is `t8i.micro` and the control plane `t8i.medium` by default:
   the control plane's machine holds the control plane, its database, Alloy and the stores of logs,
-  traces and metrics it runs. Two of them are the whole standing cost when no runner is up.
+  traces and metrics it runs. With no runner up, the installation still pays for those two
+  machines and their disks, their public IPv4 addresses, the KMS keys, the Route 53 zone and
+  health check, the buckets and the CloudWatch logs: $2.34 for the one day an installation was
+  measured left up (spin-stack/ci's `budget.tf`), some $70 a month.
 
 Hosts outside the group are still added the ordinary way - a one-time token from Admin → Hosts
 and `spin-install runner` - and are policed by the same control plane.
