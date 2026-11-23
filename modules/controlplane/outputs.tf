@@ -108,6 +108,11 @@ output "boundary_arn" {
   value       = aws_iam_policy.boundary.arn
 }
 
+output "disk_key_arn" {
+  description = "The KMS key the machines' EBS disks are encrypted under (disks.tf); the runners module names it on the runners' launch template."
+  value       = aws_kms_key.disks.arn
+}
+
 output "proxy_ip" {
   description = "The proxy's elastic IP, where every name of the installation's domain points: the one address of the installation the internet reaches."
   value       = aws_eip.proxy.public_ip

@@ -1,4 +1,4 @@
 {"Volumes": [
-  {"VolumeId": "vol-0aaaaaaaaaaaaaaa1", "Encrypted": true, "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa1"}]},
-  {"VolumeId": "vol-0aaaaaaaaaaaaaaa2", "Encrypted": true, "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa2"}]}
+  {"VolumeId": "vol-0aaaaaaaaaaaaaaa1", "Encrypted": true, "KmsKeyId": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000d15c5", "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa1"}]},
+  {"VolumeId": "vol-0aaaaaaaaaaaaaaa2", "Encrypted": true, "KmsKeyId": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000d15c5", "Attachments": [{"InstanceId": "i-0aaaaaaaaaaaaaaa2"}]}
 ]}

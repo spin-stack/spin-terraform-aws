@@ -34,8 +34,10 @@ check "IPv6" instances.json "${i}.MetadataOptions.HttpProtocolIpv6 = \"enabled\"
 check "tags" instances.json "${i}.MetadataOptions.InstanceMetadataTags = \"enabled\"" "says the instance's tags" instances.jq
 check "legacy BIOS" instances.json "${i}.CurrentInstanceBootMode = \"legacy-bios\"" "boot mode legacy-bios" instances.jq
 
-check "volumes encrypted" volumes.json . "" volumes.jq
-check "a volume in the clear" volumes.json '.Volumes[1].Encrypted = false' "vol-0aaaaaaaaaaaaaaa2 on i-0aaaaaaaaaaaaaaa2: not encrypted" volumes.jq
+key=arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000d15c5
+check "volumes encrypted" volumes.json . "" volumes.jq --arg key "${key}"
+check "a volume in the clear" volumes.json '.Volumes[1].Encrypted = false' "vol-0aaaaaaaaaaaaaaa2 on i-0aaaaaaaaaaaaaaa2: not encrypted" volumes.jq --arg key "${key}"
+check "a volume under aws/ebs" volumes.json '.Volumes[1].KmsKeyId = "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000ae0b5"' "vol-0aaaaaaaaaaaaaaa2 on i-0aaaaaaaaaaaaaaa2: encrypted under arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000ae0b5, not the installation's key" volumes.jq --arg key "${key}"
 
 check "nothing denied is allowed" denied.json . "" reach.jq --arg want denied
 check "a denied action allowed" denied.json '.EvaluationResults[0].EvalDecision = "allowed"' "iam:CreateRole on *: allowed, want denied" reach.jq --arg want denied

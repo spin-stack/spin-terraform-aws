@@ -85,7 +85,8 @@ module's tests against its plan.
 ## Installing
 
 Once per account and region, a bucket and a KMS key for OpenTofu's state (the state holds the
-installation's CA key, so it is encrypted and never a file on your machine):
+installation's CA key, so it is encrypted and never a file on your machine), and EBS encryption
+by default in the region, so no disk made there is in the clear (`bootstrap/disks.tf`):
 
 ```bash
 cd bootstrap

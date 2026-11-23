@@ -63,9 +63,11 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_role_policy_attachment.proxy_boot_log](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.proxy_ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_internet_gateway.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway) | resource |
+| [aws_kms_alias.disks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_alias.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_alias.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_alias.volumes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
+| [aws_kms_key.disks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_kms_key.encryption](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_kms_key.identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
 | [aws_kms_key.volumes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
@@ -173,6 +175,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | [aws_iam_policy_document.controlplane](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.database_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.database_handover_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.disks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.documents_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ec2_assume](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.encryption_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -257,6 +260,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | controlplane\_group | The control plane's group of one. `aws autoscaling start-instance-refresh --auto-scaling-group-name <this>` replaces its machine beside itself; its machine is reached with `aws ssm start-session`, as the proxy's is. |
 | database\_bucket | The database's archive: the base backups and WAL the control plane ships as it writes, and restores from when its machine is replaced. Its role alone reaches it. |
 | database\_handover\_bucket | The database's handover records: which control plane machine holds it, and the requests for it. Unversioned, its role alone reaches it. |
+| disk\_key\_arn | The KMS key the machines' EBS disks are encrypted under (disks.tf); the runners module names it on the runners' launch template. |
 | domain | The base domain; the runners' relay is tunnel.app.<domain>, dialled at relay\_dial. |
 | iam\_name | What the installation's IAM names begin with: its name and its region, since IAM is the account's and two regions may each have an installation of one name. The runners' role and instance profile are named for it. |
 | identity\_key\_arn | The KMS key the installation's identity key is sealed under, which only an attested runner opens. |

@@ -67,6 +67,7 @@ module "runners" {
     boot_log_policy_arn = module.controlplane.runner_boot_log_policy_arn
     standard_vcpus      = module.controlplane.standard_vcpus
     boundary_arn        = module.controlplane.boundary_arn
+    disk_key_arn        = module.controlplane.disk_key_arn
   }
   runners        = module.controlplane.runners
   request_quota  = var.request_quota
