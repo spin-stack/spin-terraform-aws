@@ -37,7 +37,9 @@ vars:
   # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
   # release renders the committed SVGs byte for byte as that image did.
   # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
-  # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests.
+  # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests, then
+  # rewritten by svgo (docs/diagrams/svgo.config.mjs).
+  SVGO_VERSION: 4.1.0
   D2_VERSION: 0.9.0
   D2_SHA256: 5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9
   D2_FLAGS: >-
@@ -154,21 +156,26 @@ tasks:
     desc: Render docs/diagrams/*.d2 into the SVGs beside them, the icons inside each.
     deps: [tools:d2]
     cmds:
+      # D2 embeds each icon whole, base64 and once per use: as AWS and simple-icons ship them,
+      # they made installation.svg 145 kB. An icon svgo has already rewritten comes out the same.
+      - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} pnpm dlx svgo@{{.SVGO_VERSION}} -q --config docs/diagrams/svgo.config.mjs -f docs/diagrams/icons
       - >-
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
         {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
 
   # A picture nothing in a build reads is the one that drifts unnoticed: each SVG is rendered again
   # and has to be the one committed, byte for byte (D2 lays out the same source the same way).
+  # Under 100 kB, the size past which a crawl of docs.spinbox.dev flags an image.
   diagrams:check:
-    desc: Fail when a committed SVG is not what its .d2 renders to.
+    desc: Fail when a committed SVG is not what its .d2 renders to, or is 100 kB or more.
     deps: [tools:d2]
     cmds:
       - >-
         tmp=$(mktemp -d); trap 'rm -rf $tmp' EXIT;
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
         {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "$tmp/$(basename ${d%.d2}).svg" >/dev/null || exit 1;
-        cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: task diagrams"; exit 1; }; done
+        cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: task diagrams"; exit 1; };
+        [ "$(wc -c <"${d%.d2}.svg")" -lt 100000 ] || { echo "${d%.d2}.svg is 100 kB or more"; exit 1; }; done
 
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
