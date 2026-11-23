@@ -151,7 +151,8 @@ host it starts boots the new release. A control plane serves hosts of its own re
 once the update has replaced it, a host still on the old release is refused when it registers again.
 What becomes of the workspaces still running on such a host is open (spin-stack/spin#1332).
 `rolling` is for a fleet that never empties: the hosts are replaced at once, one at a time with
-the new one first, each old one leaving by its drain - its workspaces suspended to the bucket and resumed on another host.
+the new one first, each old one leaving by its drain - its workspaces suspended to the bucket and
+resumed on another host.
 
 A release older than the one that last started the database refuses to start on it: going back
 past a change to the schema is a restore of the database from its archive to a point before it,
