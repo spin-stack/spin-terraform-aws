@@ -114,7 +114,7 @@ run "a_runners_disks_are_under_the_installations_key" {
   command = plan
 
   variables {
-    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = true, data_volume_gb = 100, nested_virtualization = true }
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = true, data_volume_gb = 100 }
   }
 
   assert {
