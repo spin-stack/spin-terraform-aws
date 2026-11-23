@@ -82,6 +82,12 @@ override_resource {
   values = { arn = "arn:aws:kms:us-east-2:123456789012:key/volumes" }
 }
 
+# The machines' disks' key, which their launch templates name.
+override_resource {
+  target = aws_kms_key.disks
+  values = { arn = "arn:aws:kms:us-east-2:123456789012:key/disks" }
+}
+
 override_resource {
   target = aws_iam_role.volume_keys
   values = { arn = "arn:aws:iam::123456789012:role/spin-us-east-2-volume-keys" }
@@ -261,8 +267,21 @@ run "the_machines" {
   }
   assert {
     condition = alltrue([for t in [aws_launch_template.controlplane, aws_launch_template.proxy] :
-    t.block_device_mappings[0].ebs[0].encrypted == "true"])
-    error_message = "a disk is not encrypted"
+    t.block_device_mappings[0].ebs[0].encrypted == "true" && t.block_device_mappings[0].ebs[0].kms_key_id == "arn:aws:kms:us-east-2:123456789012:key/disks"])
+    error_message = "a disk is not encrypted under the installation's key"
+  }
+  assert {
+    condition     = output.disk_key_arn == "arn:aws:kms:us-east-2:123456789012:key/disks"
+    error_message = "the runners module is not given the key the machines' disks are under"
+  }
+  # Only Auto Scaling, which starts every one of the machines, uses the disks' key; the account
+  # keeps it and nothing else may use it.
+  assert {
+    condition = alltrue([for s in jsondecode(data.aws_iam_policy_document.disks.json).Statement :
+      s.Sid == "TheAccountKeepsTheKey" ? !anytrue([for a in s.Action : contains(["kms:Decrypt", "kms:Encrypt", "kms:CreateGrant"], a) || startswith(a, "kms:GenerateDataKey") || startswith(a, "kms:ReEncrypt")]) :
+      s.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::123456789012:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    ])
+    error_message = "the disks' key is used by a principal other than Auto Scaling's service-linked role"
   }
   # The database and the stores are on the control plane's own disk, which is the operator's to
   # size; the proxy holds Caddy and nothing else.

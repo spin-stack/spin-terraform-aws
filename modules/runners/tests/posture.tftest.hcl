@@ -33,6 +33,7 @@ variables {
     boot_log_policy_arn = "arn:aws:iam::123456789012:policy/spin-boot-log"
     standard_vcpus      = 8
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
+    disk_key_arn        = "arn:aws:kms:us-east-2:123456789012:key/disks"
   }
   runners = {
     launch_template   = "spin-runner"
@@ -104,6 +105,22 @@ run "a_runner_is_reached_by_nothing" {
       aws_launch_template.runner.name == "spin-runner" && aws_launch_template.runner.update_default_version
     )
     error_message = "a runner boots another image than the installation's runner's, or the groups would not start a new one"
+  }
+}
+
+# Each of a runner's disks, the root and a data volume alike, under the installation's own key and
+# not the account's aws/ebs.
+run "a_runners_disks_are_under_the_installations_key" {
+  command = plan
+
+  variables {
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = true, data_volume_gb = 100, nested_virtualization = true }
+  }
+
+  assert {
+    condition = length(aws_launch_template.runner.block_device_mappings) == 2 && alltrue([for b in aws_launch_template.runner.block_device_mappings :
+    b.ebs[0].encrypted == "true" && b.ebs[0].kms_key_id == "arn:aws:kms:us-east-2:123456789012:key/disks"])
+    error_message = "a runner's disk is not encrypted under the installation's key"
   }
 }
 

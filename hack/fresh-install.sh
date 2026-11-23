@@ -344,7 +344,7 @@ kept() {
 # hack/posture-test.sh holds to recorded answers; every broken promise is said before the step fails.
 posture() {
   set -euo pipefail
-  local dir="${RUNNER_TEMP}/posture" broken="" ids runners runner name role partition account group ips id
+  local dir="${RUNNER_TEMP}/posture" broken="" ids runners runner name role partition account group ips id key
   mkdir -p "${dir}"
   aws ec2 describe-instances --filters "Name=tag:spin:run,Values=${GITHUB_RUN_ID}" > "${dir}/instances.json"
   ids=$(jq -r '[.Reservations[].Instances[].InstanceId] | join(",")' "${dir}/instances.json")
@@ -355,7 +355,8 @@ posture() {
   fi
   broken+=$(jq -r -f hack/posture/instances.jq "${dir}/instances.json")$'\n'
   aws ec2 describe-volumes --filters "Name=attachment.instance-id,Values=${ids}" > "${dir}/volumes.json"
-  broken+=$(jq -r -f hack/posture/volumes.jq "${dir}/volumes.json")$'\n'
+  key=$(aws kms describe-key --key-id "alias/spin-${TF_VAR_name}-disks" --query KeyMetadata.Arn --output text)
+  broken+=$(jq -r -f hack/posture/volumes.jq --arg key "${key}" "${dir}/volumes.json")$'\n'
 
   runner=${runners%% *}
   name=$(jq -r --arg id "${runner}" '.Reservations[].Instances[] | select(.InstanceId == $id) | .IamInstanceProfile.Arn | split("/") | last' "${dir}/instances.json")

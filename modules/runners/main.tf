@@ -136,6 +136,7 @@ resource "aws_launch_template" "runner" {
       volume_type           = "gp3"
       volume_size           = var.root_volume_gb
       encrypted             = true
+      kms_key_id            = var.controlplane.disk_key_arn
       delete_on_termination = true
     }
   }
@@ -148,6 +149,7 @@ resource "aws_launch_template" "runner" {
         volume_type           = "gp3"
         volume_size           = var.runners.data_volume_gb
         encrypted             = true
+        kms_key_id            = var.controlplane.disk_key_arn
         delete_on_termination = true
       }
     }

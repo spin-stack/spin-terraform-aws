@@ -219,9 +219,9 @@ tasks:
         cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml --output-check {{.ITEM}} >/dev/null || { echo '{{.ITEM}}/README.md is not what its variables and outputs say: task docs'; exit 1; }"
       - task: diagrams:check
       # What each module promises about who reaches what - the proxy the only machine the
-      # internet reaches, no role able to write IAM or read another's secrets - asserted
-      # against its plan, with no account.
-      - for: [modules/controlplane, modules/runners]
+      # internet reaches, no role able to write IAM or read another's secrets, every disk
+      # encrypted - asserted against its plan, with no account.
+      - for: [modules/controlplane, modules/runners, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} test -no-color"
 
   # The fresh install's steps (.github/workflows/fresh-install.yml), each against the account the

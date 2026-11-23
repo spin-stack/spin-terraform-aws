@@ -5,7 +5,7 @@
 # for, and which its role and boundary name in turn. Two names were two things to keep equal.
 
 variable "controlplane" {
-  description = "What this module needs of the control plane module's outputs, named one by one: its name, where the runners go, their document, and what a runner's machine runs at its first boot."
+  description = "What this module needs of the control plane module's outputs, named one by one: its name, where the runners go, their document, what a runner's machine runs at its first boot, and the key its disks are encrypted under."
   type = object({
     name                = string
     iam_name            = string
@@ -18,6 +18,7 @@ variable "controlplane" {
     boot_log_policy_arn = string
     standard_vcpus      = number
     boundary_arn        = string
+    disk_key_arn        = string
   })
 }
 

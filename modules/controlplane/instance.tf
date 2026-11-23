@@ -124,6 +124,7 @@ resource "aws_launch_template" "controlplane" {
       volume_type           = "gp3"
       volume_size           = var.root_volume_gb
       encrypted             = true
+      kms_key_id            = aws_kms_key.disks.arn
       delete_on_termination = true
     }
   }
