@@ -35,13 +35,12 @@ variables {
     boundary_arn        = "arn:aws:iam::123456789012:policy/spin-boundary"
   }
   runners = {
-    launch_template       = "spin-runner"
-    controlplane_role     = "spin-us-east-2-controlplane"
-    vcpus_max             = 48
-    max_hosts             = 1
-    spot                  = true
-    data_volume_gb        = 0
-    nested_virtualization = true
+    launch_template   = "spin-runner"
+    controlplane_role = "spin-us-east-2-controlplane"
+    vcpus_max         = 48
+    max_hosts         = 1
+    spot              = true
+    data_volume_gb    = 0
   }
 }
 
@@ -171,7 +170,7 @@ run "the_groups_are_the_control_planes_and_start_only_this_template" {
 run "the_quota_is_sized_by_the_largest_runner" {
   command = plan
   variables {
-    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 64, max_hosts = 2, spot = true, data_volume_gb = 0, nested_virtualization = true }
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 64, max_hosts = 2, spot = true, data_volume_gb = 0 }
   }
   assert {
     condition     = aws_servicequotas_service_quota.runners[0].value == 128
@@ -189,7 +188,7 @@ run "the_quota_is_sized_by_the_largest_runner" {
 run "the_quota_the_runners_need_is_asked_for" {
   command = plan
   variables {
-    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 2, spot = true, data_volume_gb = 0, nested_virtualization = true }
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 2, spot = true, data_volume_gb = 0 }
   }
   assert {
     condition = (
@@ -208,7 +207,7 @@ run "the_quota_the_runners_need_is_asked_for" {
 run "on_demand_runners_share_their_quota" {
   command = plan
   variables {
-    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = false, data_volume_gb = 0, nested_virtualization = true }
+    runners = { launch_template = "spin-runner", controlplane_role = "spin-us-east-2-controlplane", vcpus_max = 48, max_hosts = 1, spot = false, data_volume_gb = 0 }
   }
   assert {
     condition = (

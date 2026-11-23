@@ -376,13 +376,6 @@ variable "runner_vcpus" {
   }
 }
 
-variable "runner_nested_virtualization" {
-  description = "Enable KVM inside the instance. False for .metal types, which have it by being metal and refuse the option."
-  type        = bool
-  default     = true
-  nullable    = false
-}
-
 variable "runner_spot" {
   description = "Every host a spot instance. The policy a runner joins under (the control plane module's runner_policy) is what tells each one a stop is a reclaim."
   type        = bool

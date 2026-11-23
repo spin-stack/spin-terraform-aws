@@ -124,11 +124,10 @@ resource "aws_launch_template" "runner" {
     instance_metadata_tags = "disabled"
   }
 
-  dynamic "cpu_options" {
-    for_each = var.runners.nested_virtualization ? [1] : []
-    content {
-      nested_virtualization = "enabled"
-    }
+  # Never a .metal type instead: AWS gives bare metal no UEFI Secure Boot and no NitroTPM, so a
+  # metal runner has no attestation and the volume keys' policies refuse it (the control plane module's volume_keys.tf).
+  cpu_options {
+    nested_virtualization = "enabled"
   }
 
   block_device_mappings {
