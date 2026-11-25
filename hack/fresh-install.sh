@@ -19,7 +19,11 @@ cd "$(dirname "$0")/.."
 if [ -n "${FRESH_INSTALL_BEFORE:-}" ]; then
   case "${1:-}" in
     bootstrap | installation | delegate | wait-machines | sign-in | smoke | why)
-      exec bash "${FRESH_INSTALL_BEFORE}/hack/fresh-install.sh" "$@"
+      # Unset, or a commit that has this redirect too - the newest tag may be this commit - runs
+      # itself again, forever.
+      before=${FRESH_INSTALL_BEFORE}
+      unset FRESH_INSTALL_BEFORE
+      exec bash "${before}/hack/fresh-install.sh" "$@"
       ;;
   esac
 fi
@@ -282,7 +286,7 @@ keep() {
   as-admin
   local marker
   marker=$(openssl rand -hex 16)
-  spin workspace create upgrade-kept --wait
+  spin workspace create --name upgrade-kept --wait
   spin exec upgrade-kept -- sh -c "printf %s ${marker} > /root/upgrade-marker && sync"
   spin workspace suspend upgrade-kept
   printf '%s' "${marker}" > "${RUNNER_TEMP}/upgrade-marker"
@@ -407,7 +411,7 @@ host-check() {
   set -euo pipefail
   as-admin
   local runner b64 out="${RUNNER_TEMP}/host-check.out" failed
-  spin workspace create host-check --wait
+  spin workspace create --name host-check --wait
   runner=$(spin -o json admin runner list | jq -r '[.[] | select(.connected and (.workspaceCount // 0) > 0) | .id][0] // empty')
   if [ -z "${runner}" ]; then
     echo "::error::no connected runner holds a workspace: there is no machine to look at"
