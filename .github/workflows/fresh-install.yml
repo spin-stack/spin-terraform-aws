@@ -232,10 +232,6 @@ jobs:
         timeout-minutes: 20
         run: task fresh-install -- host-check
 
-      - name: Why
-        if: failure() && steps.install.outcome != 'skipped'
-        run: task fresh-install -- why
-
       # Everything below runs whatever happened above, on credentials of its own: the ones above may
       # have run out while a step waited.
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -244,6 +240,12 @@ jobs:
           role-to-assume: ${{ vars.FRESH_INSTALL_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 7200
+
+      # A cancelled run too: the removal below takes the boot logs with it, and a wait someone gave
+      # up on is the failure whose cause they are most likely to want.
+      - name: Why
+        if: (failure() || cancelled()) && steps.install.outcome != 'skipped'
+        run: task fresh-install -- why
 
       - name: Remove the delegation
         if: always() && steps.delegate.outcome == 'success'
