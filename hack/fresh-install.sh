@@ -412,7 +412,7 @@ host-check() {
   as-admin
   local runner b64 out="${RUNNER_TEMP}/host-check.out" failed
   spin workspace create --name host-check --wait
-  runner=$(spin -o json admin runner list | jq -r '[.[] | select(.connected and (.workspaceCount // 0) > 0) | .id][0] // empty')
+  runner=$(spin -o json admin runner list | jq -r '[.items[] | select(.connected and (.workspaceCount // 0) > 0) | .id][0] // empty')
   if [ -z "${runner}" ]; then
     echo "::error::no connected runner holds a workspace: there is no machine to look at"
     exit 1
