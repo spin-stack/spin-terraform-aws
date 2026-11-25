@@ -172,9 +172,11 @@ bootstrap() {
 
 installation() {
   cd examples/complete
+  local init
+  # Read first, so that an output that fails stops the step rather than running what is left.
+  init=$(tofu -chdir=../../bootstrap output -raw init)
   # Bootstrap's output is the whole init command, its backend's arguments included: split as words.
-  # shellcheck disable=SC2046
-  $(tofu -chdir=../../bootstrap output -raw init) -lockfile=readonly
+  ${init} -lockfile=readonly
   tofu apply -auto-approve
 }
 
@@ -305,6 +307,9 @@ upgrade() {
   } >> "${GITHUB_ENV:-/dev/stdout}"
   # Bootstrap's state is the file the commit that applied it left, and its output is the init.
   cp "${FRESH_INSTALL_BEFORE}/bootstrap/terraform.tfstate" bootstrap/
+  # This checkout's bootstrap was never initialised - its step ran in the commit before's - and
+  # reading an output takes the providers the lock file names.
+  tofu -chdir=bootstrap init -lockfile=readonly
   (installation)
   cd examples/complete
   local group status reason
