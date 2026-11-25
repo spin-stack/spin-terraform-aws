@@ -24,6 +24,19 @@ locals {
   internal_record_ttl = 10
 }
 
+# How long a name that is not there yet stays not there: the lesser of the SOA's TTL and its
+# minimum, 900 seconds as Route 53 makes a zone. A proxy that asked for cp.<zone> 14 seconds
+# before the control plane wrote it waited those 15 minutes (spin-terraform-aws run
+# 45691754153). The rest is the SOA Route 53 makes a private zone.
+resource "aws_route53_record" "internal_soa" {
+  zone_id         = aws_route53_zone.internal.zone_id
+  name            = aws_route53_zone.internal.name
+  type            = "SOA"
+  ttl             = local.internal_record_ttl
+  allow_overwrite = true
+  records         = ["${trimsuffix(aws_route53_zone.internal.primary_name_server, ".")}. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 ${local.internal_record_ttl}"]
+}
+
 # The domain's public zone: whoever registered it points its nameservers here (the name_servers
 # output). A new zone is new nameservers, and the domain resolves nothing until the registrar is
 # changed again - so it is replaced only by a destroy. force_destroy, for the same reason as the
