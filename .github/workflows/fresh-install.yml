@@ -143,12 +143,16 @@ jobs:
         timeout-minutes: 60
         run: task fresh-install:remove
 
+      # Each takes a minute or three: without a bound of its own, one that hangs holds the run for
+      # the job's four hours.
       - name: Bootstrap
         id: bootstrap
+        timeout-minutes: 15
         run: task fresh-install -- bootstrap
 
       - name: Install
         id: install
+        timeout-minutes: 30
         run: task fresh-install -- installation
 
       - name: Delegate the domain
