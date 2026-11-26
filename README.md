@@ -39,8 +39,8 @@ not expose what an installation needs to decide:
   machine starts on.
 - **`modules/runners`** - an autoscaling group of runners that join by themselves, spot by
   default, that the control plane sizes: none until a workspace waits for a host, and none again
-  once nothing has run for `runner_idle_minutes` (at once in the `quiet_hours`). It takes the
-  control plane module's outputs whole, its name among them.
+  once nothing has run for `runner_idle_minutes`, unless its host class keeps room free. It takes
+  the control plane module's outputs whole, its name among them.
 
 A variable of the root left unset is the module's own default: each defaults to null, which
 the modules read as their default, so a default is said once. `examples/complete` is an
@@ -400,11 +400,12 @@ first sign-in and this removal - in an account of its own, and says what that ac
   workspace is waiting for a host, and that the last one stopped an hour ago. The first create
   or start of the day waits in *Waiting for a host* for the few minutes a runner takes to boot
   and install; the control plane has asked the group for one, and places the workspace on it
-  when it registers. It goes from none to one, adds one while a workspace has waited longer than a
-  host takes to come, and gives a host back when it is spare: one holding nothing that only it
-  has, idle for `runner_idle_minutes` (at once during the quiet hours), is cordoned and that instance
-  removed, so the control plane and not the group chooses which. With every host spare, that is
-  back to none.
+  when it registers. It asks at once for every host the waiting workspaces need, and gives a host
+  back when it is spare: one holding nothing that only it has, idle for `runner_idle_minutes`, is
+  cordoned and that instance removed, so the control plane and not the group chooses which. With
+  every host spare, that is back to none - unless the host class keeps room free (its buffer,
+  Admin -> Runners), which it keeps none of in the class's quiet hours, read in `time_zone`. The
+  default class this module seeds keeps none.
 - **The control plane makes the groups, one per kind of runner.** A host class (Admin ->
   Runners) is what its group's machines are - instance types, vCPUs, spot or on-demand, how many
   at most - and the control plane makes the group `<name>-runners-<class>` from the runners

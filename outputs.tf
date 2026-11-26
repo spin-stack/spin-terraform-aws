@@ -50,7 +50,7 @@ locals {
       "   The first page asks you for a password of your own.",
       "",
       "4. The runners start at zero: the first workspace you create starts one, which takes a few",
-      "   minutes, and a group is emptied after ${module.controlplane.runner_idle_minutes} idle minutes${var.quiet_hours == null ? "" : " (or at once during ${var.quiet_hours} ${coalesce(var.time_zone, "UTC")})"}.",
+      "   minutes, and a runner is given back after ${module.controlplane.runner_idle_minutes} idle minutes unless its kind keeps room free.",
       "   The control plane makes a group per kind of runner (Admin -> Runners), the default's first:",
       "     ${format(local.status, local.default_runners)}",
       "",

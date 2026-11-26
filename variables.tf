@@ -98,14 +98,8 @@ variable "runner_idle_minutes" {
   default     = null
 }
 
-variable "quiet_hours" {
-  description = "HH:MM-HH:MM in time_zone when an idle fleet is emptied at once; none is none."
-  type        = string
-  default     = null
-}
-
 variable "time_zone" {
-  description = "The IANA zone quiet_hours are in; modules/controlplane's default is UTC."
+  description = "The IANA zone each host class's quiet hours are read in; modules/controlplane's default is UTC."
   type        = string
   default     = null
 }

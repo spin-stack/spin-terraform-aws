@@ -95,7 +95,6 @@ module "spin" {
   tags         = var.tags
 
   runner_idle_minutes = 60
-  quiet_hours         = "20:00-07:00"
   time_zone           = "America/Argentina/Buenos_Aires"
   max_runners         = 1
   runner_spot         = var.runner_spot

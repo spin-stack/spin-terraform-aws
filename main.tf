@@ -24,7 +24,6 @@ module "controlplane" {
   image_measurements  = var.image_measurements
   installation_config = var.installation_config
   runner_idle_minutes = var.runner_idle_minutes
-  quiet_hours         = var.quiet_hours
   time_zone           = var.time_zone
   decommission        = var.decommission
   runner_groups       = module.runners.runner_groups
