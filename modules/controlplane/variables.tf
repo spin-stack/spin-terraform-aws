@@ -240,17 +240,10 @@ variable "runner_idle_minutes" {
   }
 }
 
-variable "quiet_hours" {
-  description = "HH:MM-HH:MM in time_zone when an idle fleet is emptied at once rather than after runner_idle_minutes. A workspace asked for then still brings a runner up. Empty is none."
+variable "time_zone" {
+  description = "The IANA zone each host class's quiet hours are read in (Admin -> Runners). Empty is UTC."
   type        = string
   default     = ""
-  nullable    = false
-}
-
-variable "time_zone" {
-  description = "The IANA zone quiet_hours are in."
-  type        = string
-  default     = "UTC"
   nullable    = false
 }
 

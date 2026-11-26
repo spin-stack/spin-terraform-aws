@@ -231,7 +231,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | object\_lock\_days | The bucket's default Object Lock retention, in GOVERNANCE mode. A deleted object's bytes last this long, and the bucket's lifecycle (bucket.tf) removes them a day after. | `number` | `30` | no |
 | proxy\_allowed\_cidrs | Where users may reach the proxy on 443 from: the dashboard, workspaces and SSH. Anywhere by default; an office's or a VPN's ranges close the installation to everyone else. The runners reach it from inside the VPC whatever this says, and 80 stays open for the ACME challenge. | `list(string)` | ```[ "0.0.0.0/0" ]``` | no |
 | proxy\_instance\_type | The proxy's machine: Caddy and nothing else, the one address the internet reaches. | `string` | `"t8i.micro"` | no |
-| quiet\_hours | HH:MM-HH:MM in time\_zone when an idle fleet is emptied at once rather than after runner\_idle\_minutes. A workspace asked for then still brings a runner up. Empty is none. | `string` | `""` | no |
 | root\_volume\_gb | The control plane's disk: beside the read-only OS, /var takes the rest - the database, the logs' and metrics' stores and their caches. A new size is a new machine, replaced beside the old. | `number` | `40` | no |
 | runner\_data\_volume\_gb | An EBS volume for the runner's data, for an instance type with no local NVMe. Zero uses the instance store, which is the right disk for volumes' cache and costs nothing more. A machine's boot takes an empty EBS volume where it has one, and the instance store otherwise. | `number` | `0` | no |
 | runner\_drain\_seconds | How long a host the group is taking away is held while it empties itself: the termination hook's timeout. At least the pool token's --shutdown-grace; the hook is left to expire, so this is also how long each scale-in takes. | `number` | `150` | no |
@@ -244,7 +243,7 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | runner\_vcpus | How many vCPUs a runner may have, at least and at most: each type instance\_types matches within it is a pool the group may draw on. max is also what the quota is sized by (quota.tf). | `object({ min = number, max = number })` | ```{ "max": 48, "min": 32 }``` | no |
 | security\_emails | Who AWS emails when the control plane's role starts a machine itself (alarms.tf), and when the control plane is down and again when it is back (uptime.tf). Each address confirms each of the two topics once, and an unconfirmed one is told nothing. | `list(string)` | `[]` | no |
 | tags | Tags on everything this module creates. | `map(string)` | `{}` | no |
-| time\_zone | The IANA zone quiet\_hours are in. | `string` | `"UTC"` | no |
+| time\_zone | The IANA zone each host class's quiet hours are read in (Admin -> Runners). Empty is UTC. | `string` | `""` | no |
 | vpc\_cidr | The VPC's range, a /16. One /20 public subnet per availability zone is carved from its first half, and one /24 for the proxy per zone from x.x.136.0 on. | `string` | `"10.42.0.0/16"` | no |
 
 ## Outputs
