@@ -8,6 +8,3 @@ hack/fresh-install-remove.sh  # 300 lines; decides by jq
 hack/host-check.sh  # 56 lines
 hack/destroy-order.sh  # 53 lines
 hack/posture-test.sh  # 41 lines; decides by jq
-hack/fresh-install-watch.sh  # decides by jq
-hack/release.sh  # decides by jq
-hack/propose.sh  # decides by jq

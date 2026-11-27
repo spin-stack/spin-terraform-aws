@@ -1,6 +1,6 @@
 # Between fresh installs nothing of one should be in the account. This looks every three hours,
 # removes what it finds as a run removes it, and opens an issue for what it cannot
-# (hack/fresh-install-watch.sh). Looking costs a minute of a runner; removing, as long as it takes.
+# (spin-aws-dev fresh-install watch). Looking costs a minute of a runner; removing, as long as it takes.
 name: Fresh install watch
 
 on:
