@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # task lint's testidentity reads the branch's commits since origin/main, which a pull
+          # go tool task lint's testidentity reads the branch's commits since origin/main, which a pull
           # request's shallow checkout does not have.
           fetch-depth: 0
 

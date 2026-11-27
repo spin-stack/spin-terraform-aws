@@ -11,7 +11,7 @@
 #
 #   source = "github.com/spin-stack/spin-terraform-aws?ref=<release>"
 #
-# This is also what `task lint` validates the modules through.
+# This is also what `go tool task lint` validates the modules through.
 
 terraform {
   required_version = ">= 1.11"

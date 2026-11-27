@@ -1,6 +1,6 @@
 # An installation made from nothing, signed in to and removed, once a week: bootstrap/ and
 # examples/complete applied as the README says, in an account of their own, then everything
-# destroyed whatever happened. task lint plans nothing against an account, and an installation
+# destroyed whatever happened. go tool task lint plans nothing against an account, and an installation
 # that only ever updates never runs a first boot, an empty database, a first certificate or the
 # README's removal.
 #
