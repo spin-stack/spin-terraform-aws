@@ -31,8 +31,8 @@
 - name: trivy
   kind: download
   source: https://github.com/aquasecurity/trivy/releases/download/v{version}/trivy_{version}_Linux-64bit.tar.gz
-  version: 0.74.0
-  pin: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+  version: 0.76.2
+  pin: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
   track: github-release https://github.com/aquasecurity/trivy
   note: >-
     go tool task lint's scan for AWS misconfigurations. A new release can bring new checks, each
