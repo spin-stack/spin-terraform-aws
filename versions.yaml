@@ -1,5 +1,6 @@
-# What go-tools' common tasks read here. The tools this module's tasks install are pinned in
-# Taskfile.yml's vars, each with the digest of its release. It is go-tools' versions format:
+# Every tool this module's tasks install, and what go-tools' common tasks read here. The tools:*
+# tasks fetch each download with `versions fetch`, only as the bytes it pins: the digest in the
+# release's own checksums file, unless its note says otherwise. It is go-tools' versions format:
 # `go tool task versions` says what is behind.
 
 - name: actionlint
@@ -8,3 +9,94 @@
   version: v1.7.12
   track: github-release https://github.com/rhysd/actionlint
   note: go tool task lint:workflows, which go tool task lint runs. spin's version.
+
+- name: tofu
+  kind: download
+  source: https://github.com/opentofu/opentofu/releases/download/v{version}/tofu_{version}_linux_amd64.zip
+  version: 1.12.6
+  pin: 5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
+  track: github-release https://github.com/opentofu/opentofu
+  note: >-
+    go tool task lint formats, validates and tests every module with it, and the fresh install
+    applies them with it (fresh-install:tools). The lock files pin the providers, not this.
+
+- name: tflint
+  kind: download
+  source: https://github.com/terraform-linters/tflint/releases/download/v{version}/tflint_linux_amd64.zip
+  version: 0.64.0
+  pin: cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+  track: github-release https://github.com/terraform-linters/tflint
+  note: go tool task lint, with .tflint.hcl, whose plugins it pins on its own.
+
+- name: trivy
+  kind: download
+  source: https://github.com/aquasecurity/trivy/releases/download/v{version}/trivy_{version}_Linux-64bit.tar.gz
+  version: 0.74.0
+  pin: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+  track: github-release https://github.com/aquasecurity/trivy
+  note: >-
+    go tool task lint's scan for AWS misconfigurations. A new release can bring new checks, each
+    one fixed or ignored at its resource with the reason (#trivy:ignore).
+
+- name: terraform-docs
+  kind: download
+  source: https://github.com/terraform-docs/terraform-docs/releases/download/v{version}/terraform-docs-v{version}-linux-amd64.tar.gz
+  version: 0.24.0
+  pin: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+  track: github-release https://github.com/terraform-docs/terraform-docs
+  note: >-
+    go tool task docs writes each module's README with it, and lint holds them to it: a release
+    that writes them differently is go tool task docs, committed with the bump.
+
+- name: shellcheck
+  kind: download
+  source: https://github.com/koalaman/shellcheck/releases/download/v{version}/shellcheck-v{version}.linux.x86_64.tar.xz
+  version: 0.11.0
+  pin: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+  track: github-release https://github.com/koalaman/shellcheck
+  note: >-
+    go tool task lint, over the shell in hack/. Its release has no checksums file: the pin is the
+    archive's digest as first downloaded.
+
+- name: cosign
+  kind: download
+  source: https://github.com/sigstore/cosign/releases/download/v{version}/cosign-linux-amd64
+  version: 3.1.3
+  pin: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+  track: github-release https://github.com/sigstore/cosign
+  note: >-
+    What the fresh install checks spin's CLI by (fresh-install:tools). The release is the binary
+    itself, its digest the one in cosign_checksums.txt.
+
+- name: oras
+  kind: download
+  source: https://github.com/oras-project/oras/releases/download/v{version}/oras_{version}_linux_amd64.tar.gz
+  version: 1.3.4
+  pin: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+  track: github-release https://github.com/oras-project/oras
+  note: What the fresh install fetches spin's CLI with, from the release's public package (fresh-install:tools).
+
+- name: d2
+  kind: download
+  source: https://github.com/terrastruct/d2/releases/download/v{version}/d2-v{version}-linux-amd64.tar.gz
+  version: 0.9.0
+  pin: 5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9
+  track: github-release https://github.com/terrastruct/d2
+  note: >-
+    go tool task diagrams renders docs/diagrams/*.d2 with it, and lint holds the committed SVGs to
+    it byte for byte: a release that lays them out differently is go tool task diagrams, committed
+    with the bump. spin-stack/ami pins the same version, and these are its flags (D2_FLAGS). The release's own build
+    rather than its image: the image came from Docker Hub, which GitHub's runners could not reach
+    for a token on 2026-10-09.
+
+- name: svgo
+  kind: download
+  source: https://registry.npmjs.org/svgo/-/svgo-{version}.tgz
+  version: 4.1.0
+  pin: 6646ae27350d38dc2f08e708ee64b885b9746775ef7c8091f171d94052a333a6
+  track: github-release https://github.com/svg/svgo
+  note: >-
+    go tool task diagrams rewrites docs/diagrams/icons with it (docs/diagrams/svgo.config.mjs),
+    run by pnpm through Socket's firewall at this version: pnpm checks the package by the
+    registry's own integrity, which this pin is the same file's. An icon svgo rewrote comes out
+    the same, so a bump is go tool task diagrams and the icons it changes, committed with it.
