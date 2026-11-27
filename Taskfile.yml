@@ -13,8 +13,8 @@ vars:
   # Each tool's release file, as versions.yaml pins it: `versions fetch` puts it here only as the
   # bytes the pin says, and fetches nothing again while it still is.
   DOWNLOADS: '{{.ROOT_DIR}}/.tools/downloads'
-  # The command the release, the proposal and the fresh install's watch run (cmd/spin-aws-dev;
-  # spin-aws-dev --help), so what they decide is Go with a test.
+  # The command the release, the proposal, the fresh install's watch and lint's destroy order run
+  # (cmd/spin-aws-dev; spin-aws-dev --help), so what they decide is Go with a test.
   SPIN_AWS_DEV: '{{.ROOT_DIR}}/_output/bin/spin-aws-dev'
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners
@@ -133,7 +133,7 @@ tasks:
 
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
-    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:shellcheck]
+    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:shellcheck, bin]
     # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
@@ -155,14 +155,14 @@ tasks:
       # spin-aws-dev, and hack/enroll, which only the fresh install's smoke runs, with go run.
       - test -z "$(gofmt -l hack/enroll cmd)" || { gofmt -l hack/enroll cmd; echo 'gofmt -w hack/enroll cmd'; exit 1; }
       - go vet ./...
+      # The fresh install's posture filters among them (hack/posture), which only that run feeds a
+      # real account's answers.
       - go test ./...
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
-      # The fresh install's posture filters, which only that run feeds a real account's answers.
-      - bash hack/posture-test.sh
       - for: ['.', examples/complete, examples/minimal, bootstrap]
         cmd: "{{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} init -backend=false -lockfile=readonly -input=false -no-color >/dev/null && {{.TOOLS_BIN}}/tofu -chdir={{.ITEM}} validate -no-color"
       # The order a destroy has to happen in, which nothing else would see before the fresh install.
-      - bash hack/destroy-order.sh {{.TOOLS_BIN}}/tofu .
+      - '{{.SPIN_AWS_DEV}} destroy-order {{.TOOLS_BIN}}/tofu .'
       # What validate does not know (.tflint.hcl), against one configuration for every directory:
       # an absolute path, since a relative one is looked for in each directory it walks into.
       - "{{.TOOLS_BIN}}/tflint --init --config={{.ROOT_DIR}}/.tflint.hcl >/dev/null"
