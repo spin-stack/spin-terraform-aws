@@ -79,8 +79,8 @@
 - name: d2
   kind: download
   source: https://github.com/terrastruct/d2/releases/download/v{version}/d2-v{version}-linux-amd64.tar.gz
-  version: 0.9.0
-  pin: 5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9
+  version: 0.10.0
+  pin: 8d0431301a1c2cccb73e4895dc8144113b37fdc56d00c7666f6177b9ec90cd9a
   track: github-release https://github.com/terrastruct/d2
   note: >-
     go tool task diagrams renders docs/diagrams/*.d2 with it, and lint holds the committed SVGs to
