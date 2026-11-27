@@ -243,7 +243,6 @@ the installation's CA and secrets, and the document each machine starts on. The 
 | runner\_vcpus | How many vCPUs a runner may have, at least and at most: each type instance\_types matches within it is a pool the group may draw on. max is also what the quota is sized by (quota.tf). | `object({ min = number, max = number })` | ```{ "max": 48, "min": 32 }``` | no |
 | security\_emails | Who AWS emails when the control plane's role starts a machine itself (alarms.tf), and when the control plane is down and again when it is back (uptime.tf). Each address confirms each of the two topics once, and an unconfirmed one is told nothing. | `list(string)` | `[]` | no |
 | tags | Tags on everything this module creates. | `map(string)` | `{}` | no |
-| time\_zone | The IANA zone each host class's quiet hours are read in (Admin -> Runners). Empty is UTC. | `string` | `""` | no |
 | vpc\_cidr | The VPC's range, a /16. One /20 public subnet per availability zone is carved from its first half, and one /24 for the proxy per zone from x.x.136.0 on. | `string` | `"10.42.0.0/16"` | no |
 
 ## Outputs

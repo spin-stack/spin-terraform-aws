@@ -605,8 +605,8 @@ run "version_zero_is_refused" {
 
 # The runners' groups are the control plane's to make (spin's hostclass), from what this seeds: the
 # template by name, never an image; where and how its machines start; the default kind of runner
-# from the runner_* variables, beside the operator's own kinds; the most runners together; and the
-# zone a kind's quiet hours are read in, those hours being the kind's own.
+# from the runner_* variables, beside the operator's own kinds, as the operator wrote them; and the
+# most runners together.
 run "the_installation_is_told_how_to_make_its_runners_groups" {
   command = plan
   variables {
@@ -615,14 +615,13 @@ run "the_installation_is_told_how_to_make_its_runners_groups" {
     runner_rollout        = "rolling"
     runner_data_volume_gb = 200
     max_runners           = 4
-    time_zone             = "America/Argentina/Buenos_Aires"
     installation_config   = <<-EOT
       host_classes:
         - {name: default, vcpus: {min: 2, max: 4}}
         - name: gpu
           instance_types: ["g6.*"]
           vcpus: {min: 8, max: 16}
-          buffer: {workspaces: 1, size: {cpu: 4, memory_mb: 16384}, quiet_hours: "20:00-07:00"}
+          buffer: {workspaces: 1, size: {cpu: 4, memory_mb: 16384}}
     EOT
   }
 
@@ -653,11 +652,8 @@ run "the_installation_is_told_how_to_make_its_runners_groups" {
     error_message = "the default kind of runner is not this module's, or the operator's kinds are lost"
   }
   assert {
-    condition = (
-      local.installation.settings.autoscaling_time_zone == "America/Argentina/Buenos_Aires" &&
-      local.installation.host_classes[1].buffer.quiet_hours == "20:00-07:00"
-    )
-    error_message = "the installation is not told the zone its kinds' quiet hours are read in, or a kind's quiet hours are lost"
+    condition     = local.installation.host_classes[1].buffer == { workspaces = 1, size = { cpu = 4, memory_mb = 16384 } }
+    error_message = "an operator's kind reaches the installation without the room it keeps free"
   }
 }
 

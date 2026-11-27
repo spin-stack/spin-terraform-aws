@@ -98,12 +98,6 @@ variable "runner_idle_minutes" {
   default     = null
 }
 
-variable "time_zone" {
-  description = "The IANA zone each host class's quiet hours are read in; modules/controlplane's default is UTC."
-  type        = string
-  default     = null
-}
-
 variable "runner_instance_types" {
   description = "The types the runners' group may start, as names or patterns (c8id.*), one CPU generation; see modules/runners."
   type        = list(string)
