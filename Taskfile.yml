@@ -10,38 +10,16 @@ includes:
 
 vars:
   TOOLS_BIN: '{{.ROOT_DIR}}/.tools/bin'
-  # Each tool is a release archive checked against this digest: the one in the release's own
-  # checksums file.
-  TOFU_VERSION: 1.12.6
-  TOFU_SHA256: 5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
-  TFLINT_VERSION: 0.64.0
-  TFLINT_SHA256: cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
-  TRIVY_VERSION: 0.74.0
-  TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
-  TFDOCS_VERSION: 0.24.0
-  TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
-  # The shell in hack/. Its release has no checksums file: this is the archive's digest as first
-  # downloaded.
-  SHELLCHECK_VERSION: 0.11.0
-  SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
-  # What the fresh install fetches spin's CLI with, from the release's public package, and checks it
-  # by. Cosign's release is the binary itself, its digest the one in cosign_checksums.txt.
-  COSIGN_VERSION: 3.1.3
-  COSIGN_SHA256: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
-  ORAS_VERSION: 1.3.4
-  ORAS_SHA256: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
+  # Each tool's release file, as versions.yaml pins it: `versions fetch` puts it here only as the
+  # bytes the pin says, and fetches nothing again while it still is.
+  DOWNLOADS: '{{.ROOT_DIR}}/.tools/downloads'
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners
-  # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
-  # size. Its release's own build rather than its image: the image came from Docker Hub, which
-  # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
-  # release renders the committed SVGs byte for byte as that image did.
-  # docs/diagrams/icons are taken from the packages that repository pins (versions.yaml there:
-  # aws-architecture-icons 07312026, simple-icons 16.33.0), checked against its digests, then
-  # rewritten by svgo (docs/diagrams/svgo.config.mjs).
-  SVGO_VERSION: 4.1.0
-  D2_VERSION: 0.9.0
-  D2_SHA256: 5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9
+  # D2's flags as spin-stack/ami has them: one light theme, each diagram its own size. The release
+  # renders the committed SVGs byte for byte as the image it replaced did.
+  # docs/diagrams/icons are taken from the packages that repository pins (its versions.yaml's
+  # aws-architecture-icons and simple-icons), checked against its digests, then rewritten by svgo
+  # (docs/diagrams/svgo.config.mjs).
   D2_FLAGS: >-
     --layout elk --elk-nodeNodeBetweenLayers 56 --elk-edgeNodeBetweenLayers 20
     --elk-padding '[top=40,left=24,bottom=24,right=24]' --theme 0 --pad 16 --scale 1
@@ -50,89 +28,65 @@ tasks:
   tools:tofu:
     desc: Install the pinned OpenTofu.
     status:
-      - test -x {{.TOOLS_BIN}}/tofu && {{.TOOLS_BIN}}/tofu version | grep -q 'v{{.TOFU_VERSION}}$'
+      - test -x {{.TOOLS_BIN}}/tofu && {{.TOOLS_BIN}}/tofu version | grep -q "v$(versions version tofu)$"
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/tofu.zip https://github.com/opentofu/opentofu/releases/download/v{{.TOFU_VERSION}}/tofu_{{.TOFU_VERSION}}_linux_amd64.zip
-      - echo "{{.TOFU_SHA256}}  {{.TOOLS_BIN}}/tofu.zip" | sha256sum --check --quiet
-      - unzip -oq {{.TOOLS_BIN}}/tofu.zip tofu -d {{.TOOLS_BIN}}
-      - rm {{.TOOLS_BIN}}/tofu.zip
+      - f=$(versions fetch tofu {{.DOWNLOADS}}) && unzip -oq "$f" tofu -d {{.TOOLS_BIN}}
 
   tools:tflint:
     desc: Install the pinned TFLint.
     status:
-      - test -x {{.TOOLS_BIN}}/tflint && {{.TOOLS_BIN}}/tflint --version | grep -q 'version {{.TFLINT_VERSION}}$'
+      - test -x {{.TOOLS_BIN}}/tflint && {{.TOOLS_BIN}}/tflint --version | grep -q "version $(versions version tflint)$"
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/tflint.zip https://github.com/terraform-linters/tflint/releases/download/v{{.TFLINT_VERSION}}/tflint_linux_amd64.zip
-      - echo "{{.TFLINT_SHA256}}  {{.TOOLS_BIN}}/tflint.zip" | sha256sum --check --quiet
-      - unzip -oq {{.TOOLS_BIN}}/tflint.zip tflint -d {{.TOOLS_BIN}}
-      - rm {{.TOOLS_BIN}}/tflint.zip
+      - f=$(versions fetch tflint {{.DOWNLOADS}}) && unzip -oq "$f" tflint -d {{.TOOLS_BIN}}
 
   tools:trivy:
     desc: Install the pinned Trivy.
     status:
-      - "test -x {{.TOOLS_BIN}}/trivy && {{.TOOLS_BIN}}/trivy --version | grep -q 'Version: {{.TRIVY_VERSION}}$'"
+      - "test -x {{.TOOLS_BIN}}/trivy && {{.TOOLS_BIN}}/trivy --version | grep -q \"Version: $(versions version trivy)$\""
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v{{.TRIVY_VERSION}}/trivy_{{.TRIVY_VERSION}}_Linux-64bit.tar.gz
-      - echo "{{.TRIVY_SHA256}}  {{.TOOLS_BIN}}/trivy.tgz" | sha256sum --check --quiet
-      - tar -xzf {{.TOOLS_BIN}}/trivy.tgz -C {{.TOOLS_BIN}} trivy
-      - rm {{.TOOLS_BIN}}/trivy.tgz
+      - f=$(versions fetch trivy {{.DOWNLOADS}}) && tar -xzf "$f" -C {{.TOOLS_BIN}} trivy
 
   tools:terraform-docs:
     desc: Install the pinned terraform-docs.
     status:
-      - test -x {{.TOOLS_BIN}}/terraform-docs && {{.TOOLS_BIN}}/terraform-docs --version | grep -q 'v{{.TFDOCS_VERSION}} '
+      - test -x {{.TOOLS_BIN}}/terraform-docs && {{.TOOLS_BIN}}/terraform-docs --version | grep -q "v$(versions version terraform-docs) "
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/terraform-docs.tgz https://github.com/terraform-docs/terraform-docs/releases/download/v{{.TFDOCS_VERSION}}/terraform-docs-v{{.TFDOCS_VERSION}}-linux-amd64.tar.gz
-      - echo "{{.TFDOCS_SHA256}}  {{.TOOLS_BIN}}/terraform-docs.tgz" | sha256sum --check --quiet
-      - tar -xzf {{.TOOLS_BIN}}/terraform-docs.tgz -C {{.TOOLS_BIN}} terraform-docs
-      - rm {{.TOOLS_BIN}}/terraform-docs.tgz
+      - f=$(versions fetch terraform-docs {{.DOWNLOADS}}) && tar -xzf "$f" -C {{.TOOLS_BIN}} terraform-docs
 
   tools:shellcheck:
     desc: Install the pinned ShellCheck.
     status:
-      - "test -x {{.TOOLS_BIN}}/shellcheck && {{.TOOLS_BIN}}/shellcheck --version | grep -q '^version: {{.SHELLCHECK_VERSION}}$'"
+      - "test -x {{.TOOLS_BIN}}/shellcheck && {{.TOOLS_BIN}}/shellcheck --version | grep -q \"^version: $(versions version shellcheck)$\""
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/shellcheck.txz https://github.com/koalaman/shellcheck/releases/download/v{{.SHELLCHECK_VERSION}}/shellcheck-v{{.SHELLCHECK_VERSION}}.linux.x86_64.tar.xz
-      - echo "{{.SHELLCHECK_SHA256}}  {{.TOOLS_BIN}}/shellcheck.txz" | sha256sum --check --quiet
-      - tar -xJf {{.TOOLS_BIN}}/shellcheck.txz -C {{.TOOLS_BIN}} --strip-components=1 shellcheck-v{{.SHELLCHECK_VERSION}}/shellcheck
-      - rm {{.TOOLS_BIN}}/shellcheck.txz
+      - f=$(versions fetch shellcheck {{.DOWNLOADS}}) && tar -xJf "$f" -C {{.TOOLS_BIN}} --strip-components=1 --wildcards '*/shellcheck'
 
   tools:cosign:
     desc: Install the pinned cosign.
     status:
-      - test -x {{.TOOLS_BIN}}/cosign && {{.TOOLS_BIN}}/cosign version 2>&1 | grep -q 'GitVersion:.*v{{.COSIGN_VERSION}}$'
+      - test -x {{.TOOLS_BIN}}/cosign && {{.TOOLS_BIN}}/cosign version 2>&1 | grep -q "GitVersion:.*v$(versions version cosign)$"
     cmds:
-      - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/cosign.new https://github.com/sigstore/cosign/releases/download/v{{.COSIGN_VERSION}}/cosign-linux-amd64
-      - echo "{{.COSIGN_SHA256}}  {{.TOOLS_BIN}}/cosign.new" | sha256sum --check --quiet
-      - chmod +x {{.TOOLS_BIN}}/cosign.new && mv {{.TOOLS_BIN}}/cosign.new {{.TOOLS_BIN}}/cosign
+      - f=$(versions fetch cosign {{.DOWNLOADS}}) && install -D -m 755 "$f" {{.TOOLS_BIN}}/cosign
 
   tools:oras:
     desc: Install the pinned ORAS.
     status:
-      - "test -x {{.TOOLS_BIN}}/oras && {{.TOOLS_BIN}}/oras version | grep -q '^Version: *{{.ORAS_VERSION}}$'"
+      - "test -x {{.TOOLS_BIN}}/oras && {{.TOOLS_BIN}}/oras version | grep -q \"^Version: *$(versions version oras)$\""
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/oras.tgz https://github.com/oras-project/oras/releases/download/v{{.ORAS_VERSION}}/oras_{{.ORAS_VERSION}}_linux_amd64.tar.gz
-      - echo "{{.ORAS_SHA256}}  {{.TOOLS_BIN}}/oras.tgz" | sha256sum --check --quiet
-      - tar -xzf {{.TOOLS_BIN}}/oras.tgz -C {{.TOOLS_BIN}} oras
-      - rm {{.TOOLS_BIN}}/oras.tgz
+      - f=$(versions fetch oras {{.DOWNLOADS}}) && tar -xzf "$f" -C {{.TOOLS_BIN}} oras
 
   tools:d2:
     desc: Install the pinned D2.
     status:
-      - test -x {{.TOOLS_BIN}}/d2 && {{.TOOLS_BIN}}/d2 --version | grep -q '^v{{.D2_VERSION}}$'
+      - test -x {{.TOOLS_BIN}}/d2 && {{.TOOLS_BIN}}/d2 --version | grep -q "^v$(versions version d2)$"
     cmds:
       - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/d2.tgz https://github.com/terrastruct/d2/releases/download/v{{.D2_VERSION}}/d2-v{{.D2_VERSION}}-linux-amd64.tar.gz
-      - echo "{{.D2_SHA256}}  {{.TOOLS_BIN}}/d2.tgz" | sha256sum --check --quiet
-      - tar -xzf {{.TOOLS_BIN}}/d2.tgz -C {{.TOOLS_BIN}} --strip-components=2 d2-v{{.D2_VERSION}}/bin/d2
-      - rm {{.TOOLS_BIN}}/d2.tgz
+      - f=$(versions fetch d2 {{.DOWNLOADS}}) && tar -xzf "$f" -C {{.TOOLS_BIN}} --strip-components=2 --wildcards '*/bin/d2'
 
   docs:
     desc: Write each module's inputs and outputs into its README.
@@ -147,7 +101,7 @@ tasks:
     cmds:
       # D2 embeds each icon whole, base64 and once per use: as AWS and simple-icons ship them,
       # they made installation.svg 145 kB. An icon svgo has already rewritten comes out the same.
-      - sfw pnpm dlx svgo@{{.SVGO_VERSION}} -q --config docs/diagrams/svgo.config.mjs -f docs/diagrams/icons
+      - sfw pnpm dlx "svgo@$(versions version svgo)" -q --config docs/diagrams/svgo.config.mjs -f docs/diagrams/icons
       - >-
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
         {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
