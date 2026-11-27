@@ -95,7 +95,7 @@ module "spin" {
   tags         = var.tags
 
   runner_idle_minutes = 60
-  max_runners         = 1
+  max_runners         = 2
   runner_spot         = var.runner_spot
 }
 

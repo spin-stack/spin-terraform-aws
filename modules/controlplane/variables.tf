@@ -370,9 +370,9 @@ variable "runner_spot" {
 }
 
 variable "max_runners" {
-  description = "The most runners the group may have. How many it has is the control plane's to decide: none until a workspace waits for a host, and none again once nothing has run for the control plane module's runner_idle_minutes."
+  description = "The most runners the group may have. How many it has is the control plane's to decide: none until a workspace waits for a host, and none again once nothing has run for the control plane module's runner_idle_minutes. A runner full at the most waits every workspace after it until one stops; each one more is runner_vcpus' maximum more in the quota request_quota asks for."
   type        = number
-  default     = 1
+  default     = 2
   nullable    = false
   validation {
     condition     = var.max_runners >= 1

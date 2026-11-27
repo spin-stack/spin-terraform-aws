@@ -64,7 +64,8 @@ module's tests against its plan.
 - Room for runners. Each is a spot machine of 32 to 48 vCPUs with a local NVMe, of any type and
   size `runner_instance_types` matches (C8i, M8i and R8i by default: one generation, and their d
   variants while the data is on the instance store), in any zone of the region, and a new
-  account's spot vCPU quota may be lower than one of them
+  account's spot vCPU quota may be lower than one of them; `request_quota` asks AWS for what
+  `max_runners` of them take, 96 vCPUs with the defaults
   (Service Quotas → EC2 → "All Standard Spot Instance Requests"). The quota is the account's: a
   CI fleet in the same account and region draws on it too. How likely spot is to give and keep
   one in the region you chose, per zone, from 1 to 10 - below 7, widen `runner_vcpus`, give the
@@ -400,9 +401,13 @@ first sign-in and this removal - in an account of its own, and says what that ac
   workspace is waiting for a host, and that the last one stopped an hour ago. The first create
   or start of the day waits in *Waiting for a host* for the few minutes a runner takes to boot
   and install; the control plane has asked the group for one, and places the workspace on it
-  when it registers. It asks at once for every host the waiting workspaces need, and gives a host
-  back when it is spare: one holding nothing that only it has, idle for `runner_idle_minutes`, is
-  cordoned and that instance removed, so the control plane and not the group chooses which. With
+  when it registers. It asks at once for every host the waiting workspaces need, up to
+  `max_runners` (2 by default): at the most, a workspace waits until one on a full runner stops,
+  so the number trades that wait against the quota it asks for, and costs nothing while the
+  runners are back to none. Two also leaves a spot rebalance room to start the replacement while
+  one runner is up. It gives a host back when it is spare: one holding nothing that only it has,
+  idle for `runner_idle_minutes`, is cordoned and that instance removed, so the control plane and
+  not the group chooses which. With
   every host spare, that is back to none - unless the host class keeps room free (its buffer,
   Admin -> Runners). The default class this module seeds keeps none.
 - **The control plane makes the groups, one per kind of runner.** A host class (Admin ->

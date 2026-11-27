@@ -135,7 +135,7 @@ variable "request_quota" {
 }
 
 variable "max_runners" {
-  description = "The most runners the group may have; the control plane decides how many it has. modules/runners' default is 1."
+  description = "The most runners the group may have; the control plane decides how many it has. modules/controlplane's default is 2."
   type        = number
   default     = null
 }
