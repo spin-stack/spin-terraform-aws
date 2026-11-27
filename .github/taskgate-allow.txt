@@ -5,6 +5,3 @@
 # The list may shrink and may not grow: a line that matches nothing fails too.
 hack/fresh-install.sh  # 337 lines; decides by GITHUB_ENV, GITHUB_OUTPUT, jq
 hack/fresh-install-remove.sh  # 300 lines; decides by jq
-hack/host-check.sh  # 56 lines
-hack/destroy-order.sh  # 53 lines
-hack/posture-test.sh  # 41 lines; decides by jq

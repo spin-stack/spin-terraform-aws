@@ -1,8 +1,8 @@
-// spin-aws-dev releases this module, proposes it to the deployments made from it, and watches the
-// fresh install's account. It is the command the Taskfile runs for those steps, so what they decide
-// is Go with a test, and the only programs it runs are the ones that do the job: gh, git, tofu and
-// go-tools' release. Every verb that writes takes --dry-run, which reads as the verb does and says
-// each write instead of making it.
+// spin-aws-dev releases this module, proposes it to the deployments made from it, watches the
+// fresh install's account, and holds a destroy to its order. It is the command the Taskfile runs
+// for those steps, so what they decide is Go with a test, and the only programs it runs are the
+// ones that do the job: gh, git, tofu and go-tools' release. Every verb that writes takes
+// --dry-run, which reads as the verb does and says each write instead of making it.
 //
 // Exit status: 0 done, 1 done with something to act on or not done, or a program's own status when
 // a program it ran failed.
@@ -71,11 +71,11 @@ func run() error {
 func root() *cobra.Command {
 	c := &cobra.Command{
 		Use:               "spin-aws-dev",
-		Short:             "Release this module, propose it to a deployment, and watch the fresh install's account",
+		Short:             "Release this module, propose it to a deployment, watch the fresh install's account, and hold a destroy to its order",
 		SilenceUsage:      true,
 		SilenceErrors:     true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
-	c.AddCommand(releaseCmd(), proposeCmd(), freshInstallCmd())
+	c.AddCommand(releaseCmd(), proposeCmd(), freshInstallCmd(), destroyOrderCmd())
 	return c
 }
