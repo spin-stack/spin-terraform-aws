@@ -404,8 +404,7 @@ first sign-in and this removal - in an account of its own, and says what that ac
   back when it is spare: one holding nothing that only it has, idle for `runner_idle_minutes`, is
   cordoned and that instance removed, so the control plane and not the group chooses which. With
   every host spare, that is back to none - unless the host class keeps room free (its buffer,
-  Admin -> Runners), which it keeps none of in the class's quiet hours, read in `time_zone`. The
-  default class this module seeds keeps none.
+  Admin -> Runners). The default class this module seeds keeps none.
 - **The control plane makes the groups, one per kind of runner.** A host class (Admin ->
   Runners) is what its group's machines are - instance types, vCPUs, spot or on-demand, how many
   at most - and the control plane makes the group `<name>-runners-<class>` from the runners

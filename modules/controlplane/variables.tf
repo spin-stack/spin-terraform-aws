@@ -240,13 +240,6 @@ variable "runner_idle_minutes" {
   }
 }
 
-variable "time_zone" {
-  description = "The IANA zone each host class's quiet hours are read in (Admin -> Runners). Empty is UTC."
-  type        = string
-  default     = ""
-  nullable    = false
-}
-
 variable "tags" {
   description = "Tags on everything this module creates."
   type        = map(string)
