@@ -22,11 +22,6 @@ permissions:
   # Whether Gate passed on the commit.
   checks: read
 
-# go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
-# first under load: the run's own token, with only what its permissions grant.
-env:
-  GITHUB_TOKEN: ${{ github.token }}
-
 jobs:
   release:
     name: Release
@@ -45,9 +40,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous
+      # requests first under load. The token can write the repository's contents, so it is in the
+      # environment of the steps that run go tool task and of no action's.
       - name: Cut the next release
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: go tool task release:cut
 
       # Whatever the steps above did. A wake that fails is a hint lost, not a release lost: it
@@ -68,5 +67,6 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.wake.outputs.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           CONCLUSION: ${{ job.status }}
         run: go tool task ship-it:wake
