@@ -41,8 +41,8 @@
 - name: terraform-docs
   kind: download
   source: https://github.com/terraform-docs/terraform-docs/releases/download/v{version}/terraform-docs-v{version}-linux-amd64.tar.gz
-  version: 0.24.0
-  pin: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+  version: 0.25.1
+  pin: 246f1a3211c9dbbed4c4af82b856dbd40acda78816ac8cdb5203c2869b659c76
   track: github-release https://github.com/terraform-docs/terraform-docs
   note: >-
     go tool task docs writes each module's README with it, and lint holds them to it: a release
