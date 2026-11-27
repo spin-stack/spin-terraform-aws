@@ -10,3 +10,5 @@ terraform.tfvars
 *.tfstate.*.backup
 # bootstrap/'s values, the operator's as terraform.tfvars is.
 bootstrap/*.auto.tfvars
+# spin-aws-dev, built by `go tool task bin`.
+/_output/

@@ -13,6 +13,9 @@ vars:
   # Each tool's release file, as versions.yaml pins it: `versions fetch` puts it here only as the
   # bytes the pin says, and fetches nothing again while it still is.
   DOWNLOADS: '{{.ROOT_DIR}}/.tools/downloads'
+  # The command the release, the proposal and the fresh install's watch run (cmd/spin-aws-dev;
+  # spin-aws-dev --help), so what they decide is Go with a test.
+  SPIN_AWS_DEV: '{{.ROOT_DIR}}/_output/bin/spin-aws-dev'
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners
   # D2's flags as spin-stack/ami has them: one light theme, each diagram its own size. The release
@@ -25,6 +28,14 @@ vars:
     --elk-padding '[top=40,left=24,bottom=24,right=24]' --theme 0 --pad 16 --scale 1
 
 tasks:
+  bin:
+    desc: Build spin-aws-dev into _output/bin/.
+    # Once per run: a task that runs it and one that builds it again at once is "text file busy".
+    run: once
+    cmds:
+      # go run would flatten a verb's exit status to 1.
+      - go build -o {{.SPIN_AWS_DEV}} ./cmd/spin-aws-dev
+
   tools:tofu:
     desc: Install the pinned OpenTofu.
     status:
@@ -141,9 +152,10 @@ tasks:
       # this refuses those commits before they reach main.
       - testidentity -base origin/main
       - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
-      # The one Go program here, which only the fresh install's smoke runs, with go run.
-      - test -z "$(gofmt -l hack/enroll)" || { gofmt -l hack/enroll; echo 'gofmt -w hack/enroll'; exit 1; }
-      - go vet hack/enroll/main.go
+      # spin-aws-dev, and hack/enroll, which only the fresh install's smoke runs, with go run.
+      - test -z "$(gofmt -l hack/enroll cmd)" || { gofmt -l hack/enroll cmd; echo 'gofmt -w hack/enroll cmd'; exit 1; }
+      - go vet ./...
+      - go test ./...
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
       # The fresh install's posture filters, which only that run feeds a real account's answers.
       - bash hack/posture-test.sh
@@ -190,21 +202,24 @@ tasks:
 
   fresh-install:watch:
     desc: Remove what the fresh install left in the account, closing any issue once it is clean.
+    deps: [bin]
     cmds:
-      - bash hack/fresh-install-watch.sh
+      - '{{.SPIN_AWS_DEV}} fresh-install watch'
 
   fresh-install:watch:report:
     desc: Open an issue saying the watch did not finish, with what is still in the account.
+    deps: [bin]
     cmds:
-      - bash hack/fresh-install-watch.sh --report
+      - '{{.SPIN_AWS_DEV}} fresh-install watch --report'
 
   release:cut:
     desc: >-
       Cut this module's next release: GITHUB_SHA, once Gate passed on it, tagged v<YYYYMMDD>.<NN>,
       the next one today as go-tools' release names it, with its GitHub release and its notes in
       GITHUB_REPOSITORY, as GH_TOKEN (.github/workflows/release.yml).
+    deps: [bin]
     cmds:
-      - bash hack/release.sh
+      - '{{.SPIN_AWS_DEV}} release'
 
   # spin-stack/ship-it reads this module's releases and the pull request propose.yml opens for a
   # deployment. GitHub's schedule does not wake it (its */5 ran 3 of 576 in 48 h), so the run that
@@ -228,8 +243,8 @@ tasks:
     desc: >-
       Propose this commit to a deployment: a pull request in REPOSITORY moving it to this ref and
       the newest release in REGION, as the app GH_TOKEN and APP_SLUG name.
-    deps: [tools:tofu]
+    deps: [tools:tofu, bin]
     env:
       TOFU: "{{.TOOLS_BIN}}/tofu"
     cmds:
-      - bash hack/propose.sh
+      - '{{.SPIN_AWS_DEV}} propose'
