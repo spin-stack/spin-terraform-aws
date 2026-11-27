@@ -1,4 +1,6 @@
-github.com/spin-stack/go-tools v0.20261127.5 h1:xWpdyXkBEnWc3/w5z+D7F/FsaqABE7rgRInGpxuje6I=
-github.com/spin-stack/go-tools v0.20261127.5/go.mod h1:53OPE4ZN80sLk833EXfF/Nwp/PAgYsBskK6PKBTZtKs=
+github.com/spin-stack/go-tools v0.20261127.14 h1:mfRb3a/Q70/8exi6YsAnwQPPzrpLfGGcqwvFLAWu8OM=
+github.com/spin-stack/go-tools v0.20261127.14/go.mod h1:53OPE4ZN80sLk833EXfF/Nwp/PAgYsBskK6PKBTZtKs=
+github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
+github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.yaml.in/yaml/v3 v3.0.6 h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
 go.yaml.in/yaml/v3 v3.0.6/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
