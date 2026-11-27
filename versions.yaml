@@ -13,8 +13,8 @@
 - name: tofu
   kind: download
   source: https://github.com/opentofu/opentofu/releases/download/v{version}/tofu_{version}_linux_amd64.zip
-  version: 1.12.6
-  pin: 5dc43da4f750f33873dc25e94587128709e819e544b7be9016b255316153c3a8
+  version: 1.13.10
+  pin: c1f0d6b34d8328f963d3b1ad10896fae30a6c6890596190ffef477dab991090f
   track: github-release https://github.com/opentofu/opentofu
   note: >-
     go tool task lint formats, validates and tests every module with it, and the fresh install
