@@ -18,6 +18,9 @@ permissions:
 
 # As fresh-install.yml's: this removes that installation, and the removal refuses any other.
 env:
+  # go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+  # first under load.
+  GITHUB_TOKEN: ${{ github.token }}
   AWS_REGION: us-east-1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
@@ -39,20 +42,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
-
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-
-          version: 3.54.0
-
-          checksum: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb # task_linux_amd64.tar.gz
+          go-version-file: go.mod
 
       - name: Tools
-        run: task fresh-install:tools
+        run: go tool task fresh-install:tools
 
       # What the installation's variables want, for a destroy to plan: a run's own steps.
       - name: Release
-        run: task fresh-install -- release
+        run: go tool task fresh-install -- release
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -63,7 +63,7 @@ jobs:
       - name: Domain
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: task fresh-install -- domain
+        run: go tool task fresh-install -- domain
 
       - name: Watch
         timeout-minutes: 100
@@ -71,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: task fresh-install:watch
+        run: go tool task fresh-install:watch
 
       # Whatever stopped the job, its own timeout included, somebody hears of it.
       - name: Report
@@ -82,4 +82,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ALERT_ASSIGNEE: aledbf
-        run: task fresh-install:watch:report
+        run: go tool task fresh-install:watch:report

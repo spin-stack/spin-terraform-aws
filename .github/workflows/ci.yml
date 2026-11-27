@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+# first under load: the run's own token, with only what its permissions grant.
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   # The check main's ruleset requires, named Gate in every spin-stack repository: lint and test.
   gate:
@@ -21,24 +26,14 @@ jobs:
           # request's shallow checkout does not have.
           fetch-depth: 0
 
-      # For task lint's gates, run from spin-stack/go-tools: its toolchain, there being no go.mod
-      # here to name one, and no cache, there being no go.sum to key it.
+      # go tool task: go.mod's toolchain and go-tools.
       - name: Install Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.3
-          cache: false
-
-      - name: Install Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
-        with:
-          version: 3.54.0
-          checksum: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb # task_linux_amd64.tar.gz
+          go-version-file: go.mod
 
       # The pinned tools: format, validation, TFLint, Trivy, the modules' READMEs, and each module's
-      # tests against its plan - no account, no credentials. The token is the run's own, read-only:
-      # TFLint fetches its AWS ruleset from GitHub, which rate-limits an anonymous runner.
+      # tests against its plan - no account, no credentials. TFLint fetches its AWS ruleset from
+      # GitHub with the workflow's token too.
       - name: Lint and test
-        run: task lint
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        run: go tool task lint

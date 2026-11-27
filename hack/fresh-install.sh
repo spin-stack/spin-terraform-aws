@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The fresh install's steps (.github/workflows/fresh-install.yml), one a call: `task fresh-install
-# -- <step>`. In bash, and in a file shellcheck reads, as they were in the workflow: the Taskfile's
-# own shell has no umask, and a script there is one no linter reads. What a step hands the next -
-# a variable, a directory on PATH, an output - goes where GitHub reads it, or to stdout outside a
-# run. The removal is fresh-install-remove.sh's, which the run calls at both ends.
+# The fresh install's steps (.github/workflows/fresh-install.yml), one a call: `go tool task
+# fresh-install -- <step>`. In bash, and in a file shellcheck reads, as they were in the workflow:
+# the Taskfile's own shell has no umask, and a script there is one no linter reads. What a step
+# hands the next - a variable, a directory on PATH, an output - goes where GitHub reads it, or to
+# stdout outside a run. The removal is fresh-install-remove.sh's, which the run calls at both ends.
 #
 # Each step runs as GitHub ran it: errexit, and pipefail and nounset where the step asked them.
 # TF_VAR_spin_version and TF_VAR_domain are the run's, from the steps release and domain.

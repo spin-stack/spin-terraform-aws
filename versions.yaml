@@ -1,0 +1,10 @@
+# What go-tools' common tasks read here. The tools this module's tasks install are pinned in
+# Taskfile.yml's vars, each with the digest of its release. It is go-tools' versions format:
+# `go tool task versions` says what is behind.
+
+- name: actionlint
+  kind: module
+  source: github.com/rhysd/actionlint/cmd/actionlint
+  version: v1.7.12
+  track: github-release https://github.com/rhysd/actionlint
+  note: go tool task lint:workflows, which go tool task lint runs. spin's version.

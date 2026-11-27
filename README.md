@@ -45,9 +45,9 @@ not expose what an installation needs to decide:
 A variable of the root left unset is the module's own default: each defaults to null, which
 the modules read as their default, so a default is said once. `examples/complete` is an
 installation, `examples/minimal` the least one is (a release and a domain), and each module's
-inputs and outputs are in its own README. `task lint` validates both examples, lints with TFLint,
-scans with Trivy - each finding this installation decides against is ignored at its resource, with
-the reason - checks those READMEs against the code (`task docs` writes them), and runs each
+inputs and outputs are in its own README. `go tool task lint` validates both examples, lints with
+TFLint, scans with Trivy - each finding this installation decides against is ignored at its resource, with
+the reason - checks those READMEs against the code (`go tool task docs` writes them), and runs each
 module's tests against its plan.
 
 ## Before you start
@@ -387,7 +387,7 @@ first sign-in and this removal - in an account of its own, and says what that ac
   over its last minute. Metrics are pushed every 60 seconds, a point a minute per series.
 - **Each promise is a test.** `tofu test` in each module plans it with no account and asserts
   the above - the user data, the documents, the secrets, the ingress rules, IMDSv2, encryption,
-  the bucket's lock and policy, the roles and their boundary - and `task lint` runs it with the
+  the bucket's lock and policy, the roles and their boundary - and `go tool task lint` runs it with the
   format check and validation, in CI on every push.
 - **The bucket answers object requests only through that endpoint.** A runner's credential is
   minted by the control plane for an hour and scoped to its volumes; copied off the machine,

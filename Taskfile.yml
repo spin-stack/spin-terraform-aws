@@ -1,5 +1,13 @@
 version: '3'
 
+includes:
+  common:
+    taskfile: '{{.GO_TOOLS_TASKS}}'
+    flatten: true
+    vars:
+      RELEASE:
+        map: {elsewhere: release.yml}
+
 vars:
   TOOLS_BIN: '{{.ROOT_DIR}}/.tools/bin'
   # Each tool is a release archive checked against this digest: the one in the release's own
@@ -12,11 +20,8 @@ vars:
   TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
   TFDOCS_VERSION: 0.24.0
   TFDOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
-  # The version spin's versions.yaml pins: nothing else reads a workflow before GitHub runs it.
-  ACTIONLINT_VERSION: 1.7.12
-  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-  # The shell in hack/ and in each workflow's steps (actionlint asks it). Its release has no
-  # checksums file: this is the archive's digest as first downloaded.
+  # The shell in hack/. Its release has no checksums file: this is the archive's digest as first
+  # downloaded.
   SHELLCHECK_VERSION: 0.11.0
   SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
   # What the fresh install fetches spin's CLI with, from the release's public package, and checks it
@@ -27,11 +32,6 @@ vars:
   ORAS_SHA256: f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454
   # The modules whose inputs and outputs terraform-docs writes into their README.
   DOCUMENTED: modules/controlplane modules/runners
-  # spin-stack/go-tools' gates, by commit: this repository has no go.mod to pin them as tools.
-  GO_TOOLS_VERSION: dfcf2c10f30b2b2c65cea37558cbf12881f8fde9
-  # testidentity's own: the commit that has it. taskgate at that commit also reads the scripts a
-  # task runs, which six of hack/'s fail - work of its own before GO_TOOLS_VERSION moves there.
-  TESTIDENTITY_VERSION: 1c6d5ec38bf52276bef65e89d94dc1865f73924c
   # D2, the version spin-stack/ami pins, and its flags there: one light theme, each diagram its own
   # size. Its release's own build rather than its image: the image came from Docker Hub, which
   # GitHub's runners could not reach for a token on 2026-10-09, and failed every lint with it. The
@@ -91,17 +91,6 @@ tasks:
       - tar -xzf {{.TOOLS_BIN}}/terraform-docs.tgz -C {{.TOOLS_BIN}} terraform-docs
       - rm {{.TOOLS_BIN}}/terraform-docs.tgz
 
-  tools:actionlint:
-    desc: Install the pinned actionlint.
-    status:
-      - test -x {{.TOOLS_BIN}}/actionlint && {{.TOOLS_BIN}}/actionlint -version | grep -q '^{{.ACTIONLINT_VERSION}}$'
-    cmds:
-      - mkdir -p {{.TOOLS_BIN}}
-      - curl -fsSLo {{.TOOLS_BIN}}/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v{{.ACTIONLINT_VERSION}}/actionlint_{{.ACTIONLINT_VERSION}}_linux_amd64.tar.gz
-      - echo "{{.ACTIONLINT_SHA256}}  {{.TOOLS_BIN}}/actionlint.tgz" | sha256sum --check --quiet
-      - tar -xzf {{.TOOLS_BIN}}/actionlint.tgz -C {{.TOOLS_BIN}} actionlint
-      - rm {{.TOOLS_BIN}}/actionlint.tgz
-
   tools:shellcheck:
     desc: Install the pinned ShellCheck.
     status:
@@ -158,7 +147,7 @@ tasks:
     cmds:
       # D2 embeds each icon whole, base64 and once per use: as AWS and simple-icons ship them,
       # they made installation.svg 145 kB. An icon svgo has already rewritten comes out the same.
-      - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} pnpm dlx svgo@{{.SVGO_VERSION}} -q --config docs/diagrams/svgo.config.mjs -f docs/diagrams/icons
+      - sfw pnpm dlx svgo@{{.SVGO_VERSION}} -q --config docs/diagrams/svgo.config.mjs -f docs/diagrams/icons
       - >-
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
         {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "${d%.d2}.svg" >/dev/null || exit 1; done
@@ -179,7 +168,7 @@ tasks:
 
   lint:
     desc: Format-check, validate, lint and scan the modules, the examples and bootstrap, and hold each module to its tests.
-    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:actionlint, tools:shellcheck]
+    deps: [tools:tofu, tools:tflint, tools:trivy, tools:terraform-docs, tools:shellcheck]
     # Nothing else parses these, and nothing runs them but an apply against an account - so a
     # module that stopped validating is found by the operator it was written for. The provider
     # is the one each lock file pins, cached under .tools so a second run downloads nothing.
@@ -188,17 +177,17 @@ tasks:
     cmds:
       - mkdir -p {{.ROOT_DIR}}/.tools/tofu-plugins
       - "{{.TOOLS_BIN}}/tofu fmt -recursive -check -diff"
-      # The pinned shellcheck, named: given none, actionlint takes whichever is on PATH, or skips.
-      - "{{.TOOLS_BIN}}/actionlint -shellcheck={{.TOOLS_BIN}}/shellcheck"
-      # Every workflow step one task, so what CI does is what a task here does; and no package
-      # installed but by pnpm through Socket's firewall.
-      - go run github.com/spin-stack/go-tools/cmd/taskgate@{{.GO_TOOLS_VERSION}}
-      - go run github.com/spin-stack/go-tools/cmd/sfw@{{.GO_TOOLS_VERSION}} check
+      - task: lint:workflows
+      # Every workflow step one task, so what CI does is what a task here does, and go-tools'
+      # common tasks as every repository has them; and no package installed but by pnpm through
+      # Socket's firewall. The scripts that are programs are listed, as work owed.
+      - taskgate -common -allow .github/taskgate-allow.txt -task {{.TASK_EXE}}
+      - sfw check
       # A test that writes git's author into the checkout makes every commit after it the test's;
       # this refuses those commits before they reach main.
-      - go run github.com/spin-stack/go-tools/cmd/testidentity@{{.TESTIDENTITY_VERSION}} -base origin/main
+      - testidentity -base origin/main
       - "{{.TOOLS_BIN}}/shellcheck hack/*.sh"
-      # The one Go program here, which only the fresh install's smoke runs: a file, with no module.
+      # The one Go program here, which only the fresh install's smoke runs, with go run.
       - test -z "$(gofmt -l hack/enroll)" || { gofmt -l hack/enroll; echo 'gofmt -w hack/enroll'; exit 1; }
       - go vet hack/enroll/main.go
       - bash hack/security-group-descriptions.sh $(find modules -name '*.tf')
@@ -255,11 +244,11 @@ tasks:
     cmds:
       - bash hack/fresh-install-watch.sh --report
 
-  release:
+  release:cut:
     desc: >-
       Cut this module's next release: GITHUB_SHA, once Gate passed on it, tagged v<YYYYMMDD>.<NN>,
-      the next one today, with its GitHub release in GITHUB_REPOSITORY, as GH_TOKEN
-      (.github/workflows/release.yml).
+      the next one today as go-tools' release names it, with its GitHub release and its notes in
+      GITHUB_REPOSITORY, as GH_TOKEN (.github/workflows/release.yml).
     cmds:
       - bash hack/release.sh
 

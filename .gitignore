@@ -1,4 +1,4 @@
-# Pinned tools, installed by `task tools:tofu`, and each directory's provider cache.
+# Pinned tools, installed by `go tool task tools:tofu`, and each directory's provider cache.
 .tools/
 **/.terraform/
 # An installation's own values, which are the operator's (terraform.tfvars.example is the form).
