@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # This module's next release (.github/workflows/release.yml, which says why): GITHUB_SHA tagged as
 # the next v<YYYYMMDD>.<NN> today, in UTC, with its GitHub release, as GH_TOKEN in
-# GITHUB_REPOSITORY. A file shellcheck reads, as the workflow's step was.
+# GITHUB_REPOSITORY. A file shellcheck reads, as the workflow's step was. Run by go tool task release:cut.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -17,13 +17,11 @@ if [ "${gate}" != success ]; then
   exit 1
 fi
 
-# Named as spin names its own (hack/releaseversion there): one past today's highest, two digits
-# at least, and only a tag spelled exactly so is counted - a candidate's suffix (-rc1) does not use
-# up its number. Every tag there is, from the remote, not what the checkout happened to fetch.
-day=$(date -u +%Y%m%d)
-last=$(git ls-remote --tags --refs origin "refs/tags/v${day}.*" | sed -E 's|.*refs/tags/||' |
-  { grep -E "^v${day}\.(0[1-9]|[1-9][0-9]+)$" || true; } | sed -E "s/^v${day}\.//" | sort -n | tail -1)
-version=$(printf 'v%s.%02d' "${day}" "$((10#${last:-0} + 1))")
+# Named as every spin-stack release is, by go-tools' release (on PATH under go tool task): the
+# next v<YYYYMMDD>.<NN> today, counted from every tag there is, so all of them are fetched first.
+# It refuses a commit a release names already.
+git fetch --quiet --tags origin
+version=$(release "${sha}")
 
 # The one before, by the same order, for what changed since: ship-it's (edit.Newer) - the day,
 # then the number, a longer number the later.

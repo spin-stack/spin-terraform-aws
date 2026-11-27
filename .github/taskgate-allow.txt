@@ -1,0 +1,13 @@
+# What taskgate allows on purpose (taskgate -allow, from task lint). Each line is a key and its
+# why: here, a script a task runs that is a program - over forty lines of shell, or deciding
+# anything by GITHUB_OUTPUT, GITHUB_ENV or jq - by its path. Each is work owed: what decides
+# becomes Go with a test, what drives a script short enough to read (spin-terraform-aws#154).
+# The list may shrink and may not grow: a line that matches nothing fails too.
+hack/fresh-install.sh  # 337 lines; decides by GITHUB_ENV, GITHUB_OUTPUT, jq
+hack/fresh-install-remove.sh  # 300 lines; decides by jq
+hack/host-check.sh  # 56 lines
+hack/destroy-order.sh  # 53 lines
+hack/posture-test.sh  # 41 lines; decides by jq
+hack/fresh-install-watch.sh  # decides by jq
+hack/release.sh  # decides by jq
+hack/propose.sh  # decides by jq

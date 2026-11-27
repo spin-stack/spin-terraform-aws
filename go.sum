@@ -1,0 +1,4 @@
+github.com/spin-stack/go-tools v0.20261127.5 h1:xWpdyXkBEnWc3/w5z+D7F/FsaqABE7rgRInGpxuje6I=
+github.com/spin-stack/go-tools v0.20261127.5/go.mod h1:53OPE4ZN80sLk833EXfF/Nwp/PAgYsBskK6PKBTZtKs=
+go.yaml.in/yaml/v3 v3.0.6 h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
+go.yaml.in/yaml/v3 v3.0.6/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=

@@ -59,6 +59,9 @@ permissions:
 # installation lives, and an install from nothing beside it would share its region's quotas and
 # hide a dependency on what it left there.
 env:
+  # go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+  # first under load.
+  GITHUB_TOKEN: ${{ github.token }}
   AWS_REGION: us-east-1
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
@@ -89,35 +92,32 @@ jobs:
           # The upgrade starts from the module's newest tag, and reads the catalog's branch.
           fetch-depth: 0
 
-      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
-
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-
-          version: 3.54.0
-
-          checksum: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb # task_linux_amd64.tar.gz
+          go-version-file: go.mod
 
       - name: Tools
-        run: task fresh-install:tools
+        run: go tool task fresh-install:tools
 
       # The newest release this commit can install in the region: an image of every role and its
       # measurements. None is a failure: main installs nothing. spin-stack/ami's release publishes
       # in the regions its release.yml names, which must include this one.
       - name: Release
-        run: task fresh-install -- release
+        run: go tool task fresh-install -- release
 
       # The upgrade starts from the release before, with the module as it was when that one was
       # published: the steps below run that commit's own until Upgrade.
       - name: Previous
         if: env.UPGRADE == 'true'
-        run: task fresh-install -- previous
+        run: go tool task fresh-install -- previous
 
       # The CLI of the release installed, from its public package, checked as docs/releases.md in
       # spin checks a file: signed by release.yml at main, and its provenance naming this release.
       # Before anything is made, so a release whose CLI does not check costs no installation.
       - name: CLI
         id: cli
-        run: task fresh-install -- cli
+        run: go tool task fresh-install -- cli
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -129,43 +129,43 @@ jobs:
       # after it, so the newest one there is last week's. Reading it never stops an install.
       - name: Cost
         continue-on-error: true
-        run: task fresh-install -- cost
+        run: go tool task fresh-install -- cost
 
       - name: Domain
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: task fresh-install -- domain
+        run: go tool task fresh-install -- domain
 
       # What a run before this one left - cancelled, or its removal refused - removed before anything
       # is made, by the removal that runs at the end: bootstrap's apply refuses a bucket or an alias
       # that is already there. One that cannot finish stops the run with nothing of its own made.
       - name: Sweep
         timeout-minutes: 60
-        run: task fresh-install:remove
+        run: go tool task fresh-install:remove
 
       # Each takes a minute or three: without a bound of its own, one that hangs holds the run for
       # the job's four hours.
       - name: Bootstrap
         id: bootstrap
         timeout-minutes: 15
-        run: task fresh-install -- bootstrap
+        run: go tool task fresh-install -- bootstrap
 
       - name: Install
         id: install
         timeout-minutes: 30
-        run: task fresh-install -- installation
+        run: go tool task fresh-install -- installation
 
       - name: Delegate the domain
         id: delegate
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: task fresh-install -- delegate
+        run: go tool task fresh-install -- delegate
 
       # The launch hook puts a machine in service only once its boot says it is up. A first install
       # has no refresh, so update_status has nothing to say until a second apply.
       - name: Wait for the machines
         timeout-minutes: 30
-        run: task fresh-install -- wait-machines
+        run: go tool task fresh-install -- wait-machines
 
       # The first sign-in as a person makes it: the one-time password from SSM, over the proxy's
       # certificate, to the control plane. Retried while the delegation spreads and the certificate
@@ -173,7 +173,7 @@ jobs:
       # smoke: a session is the person, every procedure an API key's scopes would name included.
       - name: First sign-in
         timeout-minutes: 30
-        run: task fresh-install -- sign-in
+        run: go tool task fresh-install -- sign-in
 
       # The contract as a person meets it, with a key of their own, added with a passkey made for the
       # run (hack/enroll), and `spin smoke` - a workspace made, run in, kept from the cloud's
@@ -182,7 +182,7 @@ jobs:
       - name: Smoke
         if: steps.cli.outputs.smoke == 'true'
         timeout-minutes: 30
-        run: task fresh-install -- smoke
+        run: go tool task fresh-install -- smoke
 
       # What AWS says of what the run made, which no plan can: each instance's metadata options and
       # boot mode, its volumes, what the runner's role may do and what CloudTrail saw it do. On an
@@ -190,12 +190,12 @@ jobs:
       - name: Posture
         if: steps.cli.outputs.smoke == 'true' && env.UPGRADE != 'true'
         timeout-minutes: 10
-        run: task fresh-install -- posture
+        run: go tool task fresh-install -- posture
 
       - name: Keep a workspace
         if: env.UPGRADE == 'true'
         timeout-minutes: 30
-        run: task fresh-install -- keep
+        run: go tool task fresh-install -- keep
 
       # A refresh replaces the control plane and the proxy beside themselves; the control plane's is
       # a database handover, which update_status follows.
@@ -203,26 +203,26 @@ jobs:
         id: upgrade
         if: env.UPGRADE == 'true'
         timeout-minutes: 60
-        run: task fresh-install -- upgrade
+        run: go tool task fresh-install -- upgrade
 
       - name: CLI after the upgrade
         if: env.UPGRADE == 'true'
-        run: task fresh-install -- cli
+        run: go tool task fresh-install -- cli
 
       - name: Smoke after the upgrade
         if: env.UPGRADE == 'true'
         timeout-minutes: 30
-        run: task fresh-install -- smoke
+        run: go tool task fresh-install -- smoke
 
       - name: The kept workspace
         if: env.UPGRADE == 'true'
         timeout-minutes: 30
-        run: task fresh-install -- kept
+        run: go tool task fresh-install -- kept
 
       - name: Posture after the upgrade
         if: env.UPGRADE == 'true'
         timeout-minutes: 10
-        run: task fresh-install -- posture
+        run: go tool task fresh-install -- posture
 
       # A runner from inside, through an incident's root shell, while a workspace runs on it: what
       # keeps each machine's QEMU, and the egress namespace, from the host's role (hack/host-check.sh).
@@ -230,7 +230,7 @@ jobs:
       - name: Host check
         if: steps.cli.outputs.smoke == 'true'
         timeout-minutes: 20
-        run: task fresh-install -- host-check
+        run: go tool task fresh-install -- host-check
 
       # Everything below runs whatever happened above, on credentials of its own: the ones above may
       # have run out while a step waited.
@@ -245,13 +245,13 @@ jobs:
       # up on is the failure whose cause they are most likely to want.
       - name: Why
         if: (failure() || cancelled()) && steps.install.outcome != 'skipped'
-        run: task fresh-install -- why
+        run: go tool task fresh-install -- why
 
       - name: Remove the delegation
         if: always() && steps.delegate.outcome == 'success'
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: task fresh-install -- undelegate
+        run: go tool task fresh-install -- undelegate
 
       # The removal the run began with (Sweep), on what this one made: the installation as the
       # README removes it, what still carries its tag, and bootstrap once the installation's state
@@ -259,4 +259,4 @@ jobs:
       - name: Remove everything
         if: always() && steps.bootstrap.outcome != 'skipped'
         timeout-minutes: 60
-        run: task fresh-install:remove
+        run: go tool task fresh-install:remove
