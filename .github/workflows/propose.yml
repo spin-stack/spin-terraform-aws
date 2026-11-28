@@ -33,7 +33,7 @@ concurrency:
 permissions:
   contents: read
 
-# go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+# go-tools' task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
 # first under load: the run's own token, with only what its permissions grant.
 env:
   GITHUB_TOKEN: ${{ github.token }}
@@ -62,12 +62,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install go-tools' task
+        uses: spin-stack/go-tools@116dfa6befab594f25ad4553e375061e3fa80f27 # v20261128.01
+
       - name: Propose this commit
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           REPOSITORY: spin-stack/${{ inputs.repository }}
-        run: go tool task propose
+        run: task propose
 
       # ship-it's deploy step reads the pull request this opened. Whatever the steps above did: a
       # wake that fails is a hint lost, not a proposal lost, so it never fails the run.
@@ -88,4 +91,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.wake.outputs.token }}
           CONCLUSION: ${{ job.status }}
-        run: go tool task ship-it:wake
+        run: task ship-it:wake

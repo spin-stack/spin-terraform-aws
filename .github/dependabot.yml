@@ -4,8 +4,8 @@
 # moves: main's ruleset merges a branch only up to date with it, and "Update branch" or
 # `@dependabot rebase` brings one up when it is merged.
 #
-# The Go modules go.mod pins (go-tools, which brings go tool task), the actions the workflows run,
-# each by its commit, and the providers each root and module locks. What an installation runs -
+# The Go modules go.mod pins, the actions the workflows run, each by its commit (go-tools' among
+# them, which installs task), and the providers each root and module locks. What an installation runs -
 # spin's release, its image - is the deployment's, proposed by propose.yml.
 version: 2
 updates:
@@ -20,8 +20,6 @@ updates:
     # A release a week old has had a week for anybody to find it was not what it said.
     cooldown:
       default-days: 7
-      # go-tools is ours: a release of it reaches every repository the week it is made, not a week later.
-      exclude: ["github.com/spin-stack/go-tools"]
     groups:
       go:
         patterns: ["*"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The fresh install's steps (.github/workflows/fresh-install.yml), one a call: `go tool task
+# The fresh install's steps (.github/workflows/fresh-install.yml), one a call: `task
 # fresh-install -- <step>`. In bash, and in a file shellcheck reads, as they were in the workflow:
 # the Taskfile's own shell has no umask, and a script there is one no linter reads. What a step
 # hands the next - a variable, a directory on PATH, an output - goes where GitHub reads it, or to

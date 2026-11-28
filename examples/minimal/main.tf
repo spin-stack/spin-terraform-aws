@@ -1,6 +1,6 @@
 # The least an installation is: a release and a domain, every other decision the modules' default.
 # examples/complete is the same with a state bucket, an encrypted state and the choices an
-# installation usually makes; this one is what `go tool task lint` holds the defaults to - that
+# installation usually makes; this one is what `task lint` holds the defaults to - that
 # nothing else is required.
 
 terraform {

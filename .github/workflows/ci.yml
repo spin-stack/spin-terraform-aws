@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+# go-tools' task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
 # first under load: the run's own token, with only what its permissions grant.
 env:
   GITHUB_TOKEN: ${{ github.token }}
@@ -22,18 +22,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # go tool task lint's testidentity reads the branch's commits since origin/main, which a pull
+          # task lint's testidentity reads the branch's commits since origin/main, which a pull
           # request's shallow checkout does not have.
           fetch-depth: 0
 
-      # go tool task: go.mod's toolchain and go-tools.
+      # go vet, go test and spin-aws-dev: go.mod's toolchain.
       - name: Install Go
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
 
+      - name: Install go-tools' task
+        uses: spin-stack/go-tools@116dfa6befab594f25ad4553e375061e3fa80f27 # v20261128.01
+
       # The pinned tools: format, validation, TFLint, Trivy, the modules' READMEs, and each module's
       # tests against its plan - no account, no credentials. TFLint fetches its AWS ruleset from
       # GitHub with the workflow's token too.
       - name: Lint and test
-        run: go tool task lint
+        run: task lint

@@ -18,7 +18,7 @@ func releaseCmd() *cobra.Command {
 		Short: "Cut this module's next release: GITHUB_SHA, once Gate passed on it, as the next v<YYYYMMDD>.<NN>",
 		Long: `Tag GITHUB_SHA as the next v<YYYYMMDD>.<NN> today, in UTC, with its GitHub release in
 GITHUB_REPOSITORY, as GH_TOKEN (.github/workflows/release.yml says why). Only a commit Gate passed
-on is released, and go-tools' release, on go tool task's PATH, names it and refuses a commit a
+on is released, and go-tools' release, on go-tools' task's PATH, names it and refuses a commit a
 release names already.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {

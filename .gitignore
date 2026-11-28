@@ -1,4 +1,4 @@
-# Pinned tools, installed by `go tool task tools:tofu`, and each directory's provider cache.
+# Pinned tools, installed by `task tools:tofu`, and each directory's provider cache.
 .tools/
 **/.terraform/
 # An installation's own values, which are the operator's (terraform.tfvars.example is the form).
@@ -10,5 +10,5 @@ terraform.tfvars
 *.tfstate.*.backup
 # bootstrap/'s values, the operator's as terraform.tfvars is.
 bootstrap/*.auto.tfvars
-# spin-aws-dev, built by `go tool task bin`.
+# spin-aws-dev, built by `task bin`.
 /_output/
