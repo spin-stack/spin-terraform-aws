@@ -18,7 +18,7 @@ permissions:
 
 # As fresh-install.yml's: this removes that installation, and the removal refuses any other.
 env:
-  # go tool task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
+  # go-tools' task downloads Task and go-tools' release from GitHub, which sheds anonymous requests
   # first under load.
   GITHUB_TOKEN: ${{ github.token }}
   AWS_REGION: us-east-1
@@ -47,12 +47,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install go-tools' task
+        uses: spin-stack/go-tools@116dfa6befab594f25ad4553e375061e3fa80f27 # v20261128.01
+
       - name: Tools
-        run: go tool task fresh-install:tools
+        run: task fresh-install:tools
 
       # What the installation's variables want, for a destroy to plan: a run's own steps.
       - name: Release
-        run: go tool task fresh-install -- release
+        run: task fresh-install -- release
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -63,7 +66,7 @@ jobs:
       - name: Domain
         env:
           ZONE_ID: ${{ vars.FRESH_INSTALL_ZONE_ID }}
-        run: go tool task fresh-install -- domain
+        run: task fresh-install -- domain
 
       - name: Watch
         timeout-minutes: 100
@@ -71,7 +74,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: go tool task fresh-install:watch
+        run: task fresh-install:watch
 
       # Whatever stopped the job, its own timeout included, somebody hears of it.
       - name: Report
@@ -82,4 +85,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ALERT_ASSIGNEE: aledbf
-        run: go tool task fresh-install:watch:report
+        run: task fresh-install:watch:report

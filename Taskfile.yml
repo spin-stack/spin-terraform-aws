@@ -128,7 +128,7 @@ tasks:
         tmp=$(mktemp -d); trap 'rm -rf $tmp' EXIT;
         for d in docs/diagrams/*.d2; do case $d in */_*) continue;; esac;
         {{.TOOLS_BIN}}/d2 {{.D2_FLAGS}} "$d" "$tmp/$(basename ${d%.d2}).svg" >/dev/null || exit 1;
-        cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: go tool task diagrams"; exit 1; };
+        cmp -s "$tmp/$(basename ${d%.d2}).svg" "${d%.d2}.svg" || { echo "${d%.d2}.svg is not what $d renders to: task diagrams"; exit 1; };
         [ "$(wc -c <"${d%.d2}.svg")" -lt 100000 ] || { echo "${d%.d2}.svg is 100 kB or more"; exit 1; }; done
 
   lint:
@@ -171,7 +171,7 @@ tasks:
       # resource with the reason (#trivy:ignore), so a new one fails here.
       - "{{.TOOLS_BIN}}/trivy config --quiet --exit-code 1 --cache-dir {{.ROOT_DIR}}/.tools/trivy-cache --skip-dirs .tools ."
       - for: {var: DOCUMENTED, split: ' '}
-        cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml --output-check {{.ITEM}} >/dev/null || { echo '{{.ITEM}}/README.md is not what its variables and outputs say: go tool task docs'; exit 1; }"
+        cmd: "{{.TOOLS_BIN}}/terraform-docs -c .terraform-docs.yml --output-check {{.ITEM}} >/dev/null || { echo '{{.ITEM}}/README.md is not what its variables and outputs say: task docs'; exit 1; }"
       - task: diagrams:check
       # What each module promises about who reaches what - the proxy the only machine the
       # internet reaches, no role able to write IAM or read another's secrets, every disk
@@ -191,7 +191,7 @@ tasks:
 
   fresh-install:
     desc: >-
-      Run one step of the fresh install: go tool task fresh-install -- release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|host-check|why.
+      Run one step of the fresh install: task fresh-install -- release|cli|cost|domain|bootstrap|installation|delegate|undelegate|wait-machines|sign-in|smoke|posture|host-check|why.
     cmds:
       - bash hack/fresh-install.sh {{.CLI_ARGS}}
 

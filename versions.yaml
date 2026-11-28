@@ -1,14 +1,14 @@
 # Every tool this module's tasks install, and what go-tools' common tasks read here. The tools:*
 # tasks fetch each download with `versions fetch`, only as the bytes it pins: the digest in the
 # release's own checksums file, unless its note says otherwise. It is go-tools' versions format:
-# `go tool task versions` says what is behind.
+# `task versions` says what is behind.
 
 - name: actionlint
   kind: module
   source: github.com/rhysd/actionlint/cmd/actionlint
   version: v1.7.12
   track: github-release https://github.com/rhysd/actionlint
-  note: go tool task lint:workflows, which go tool task lint runs. spin's version.
+  note: task lint:workflows, which task lint runs. spin's version.
 
 - name: tofu
   kind: download
@@ -17,7 +17,7 @@
   pin: c1f0d6b34d8328f963d3b1ad10896fae30a6c6890596190ffef477dab991090f
   track: github-release https://github.com/opentofu/opentofu
   note: >-
-    go tool task lint formats, validates and tests every module with it, and the fresh install
+    task lint formats, validates and tests every module with it, and the fresh install
     applies them with it (fresh-install:tools). The lock files pin the providers, not this.
 
 - name: tflint
@@ -26,7 +26,7 @@
   version: 0.66.0
   pin: 22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e
   track: github-release https://github.com/terraform-linters/tflint
-  note: go tool task lint, with .tflint.hcl, whose plugins it pins on its own.
+  note: task lint, with .tflint.hcl, whose plugins it pins on its own.
 
 - name: trivy
   kind: download
@@ -35,7 +35,7 @@
   pin: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
   track: github-release https://github.com/aquasecurity/trivy
   note: >-
-    go tool task lint's scan for AWS misconfigurations. A new release can bring new checks, each
+    task lint's scan for AWS misconfigurations. A new release can bring new checks, each
     one fixed or ignored at its resource with the reason (#trivy:ignore).
 
 - name: terraform-docs
@@ -45,8 +45,8 @@
   pin: 246f1a3211c9dbbed4c4af82b856dbd40acda78816ac8cdb5203c2869b659c76
   track: github-release https://github.com/terraform-docs/terraform-docs
   note: >-
-    go tool task docs writes each module's README with it, and lint holds them to it: a release
-    that writes them differently is go tool task docs, committed with the bump.
+    task docs writes each module's README with it, and lint holds them to it: a release
+    that writes them differently is task docs, committed with the bump.
 
 - name: shellcheck
   kind: download
@@ -55,7 +55,7 @@
   pin: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
   track: github-release https://github.com/koalaman/shellcheck
   note: >-
-    go tool task lint, over the shell in hack/. Its release has no checksums file: the pin is the
+    task lint, over the shell in hack/. Its release has no checksums file: the pin is the
     archive's digest as first downloaded.
 
 - name: cosign
@@ -83,8 +83,8 @@
   pin: 8d0431301a1c2cccb73e4895dc8144113b37fdc56d00c7666f6177b9ec90cd9a
   track: github-release https://github.com/terrastruct/d2
   note: >-
-    go tool task diagrams renders docs/diagrams/*.d2 with it, and lint holds the committed SVGs to
-    it byte for byte: a release that lays them out differently is go tool task diagrams, committed
+    task diagrams renders docs/diagrams/*.d2 with it, and lint holds the committed SVGs to
+    it byte for byte: a release that lays them out differently is task diagrams, committed
     with the bump. spin-stack/ami pins the same version, and these are its flags (D2_FLAGS). The release's own build
     rather than its image: the image came from Docker Hub, which GitHub's runners could not reach
     for a token on 2026-10-09.
@@ -96,7 +96,7 @@
   pin: 6646ae27350d38dc2f08e708ee64b885b9746775ef7c8091f171d94052a333a6
   track: github-release https://github.com/svg/svgo
   note: >-
-    go tool task diagrams rewrites docs/diagrams/icons with it (docs/diagrams/svgo.config.mjs),
+    task diagrams rewrites docs/diagrams/icons with it (docs/diagrams/svgo.config.mjs),
     run by pnpm through Socket's firewall at this version: pnpm checks the package by the
     registry's own integrity, which this pin is the same file's. An icon svgo rewrote comes out
-    the same, so a bump is go tool task diagrams and the icons it changes, committed with it.
+    the same, so a bump is task diagrams and the icons it changes, committed with it.

@@ -1,6 +1,6 @@
 # Each module's inputs and outputs, generated from their descriptions into its README between the
-# markers, and checked by `go tool task lint`: a variable added, renamed or described anew is a
-# README that no longer matches until `go tool task docs` writes it again. The prose around the
+# markers, and checked by `task lint`: a variable added, renamed or described anew is a
+# README that no longer matches until `task docs` writes it again. The prose around the
 # markers is the module's.
 formatter: markdown table
 
