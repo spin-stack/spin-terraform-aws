@@ -508,7 +508,7 @@ run "the_operators_file_is_the_installations" {
   variables {
     installation_config = <<-EOT
       settings:
-        default_network_tags: [web]
+        default_network_policies: [web]
       network_policies:
         - name: web
           allowPorts: [80, 443]
@@ -519,7 +519,7 @@ run "the_operators_file_is_the_installations" {
     condition = (
       local.installation.network_policies[0].name == "web" &&
       local.installation.network_policies[0].allowPorts == [80, 443] &&
-      local.installation.settings.default_network_tags == ["web"] &&
+      local.installation.settings.default_network_policies == ["web"] &&
       local.installation.settings.telemetry_collector == "cp.spin.internal:4317" &&
       local.installation.base_domain == "example.com"
     )
